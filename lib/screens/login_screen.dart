@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'managerScreens/manager_screen.dart';
-import 'dispatchScreens/dispatch_main_screen.dart';
-import 'driver_screen.dart';
+import 'manager/manager_screen.dart';
+import 'dispatch/dispatch_main_screen.dart';
+import 'driver/driver_screen.dart';
 import 'dart:math' as math;
 
 class LoginScreen extends StatefulWidget {

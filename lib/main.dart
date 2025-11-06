@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'screens/dispatchScreens/dispatch_main_screen.dart';
+import 'screens/dispatch/dispatch_main_screen.dart';
 import 'screens/managerScreens/manager_screen.dart';
-import 'screens/driver_screen.dart';
+import 'screens/driver/driver_screen.dart';
 import 'screens/login_screen.dart';
 
 void main() async {
