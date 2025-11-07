@@ -1,30 +1,58 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'screens/dispatch/dispatch_main_screen.dart';
-import 'screens/managerScreens/manager_screen.dart';
-import 'screens/driver/driver_screen.dart';
+
+// Ekranlar
 import 'screens/login_screen.dart';
+import 'screens/manager/manager_screen.dart';
+import 'screens/dispatch/dispatch_main_screen.dart';
+import 'screens/driver/driver_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Truck',
+      title: 'Truck Management System',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(primarySwatch: Colors.blueGrey),
       initialRoute: '/',
-      routes: {
-        '/': (context) => LoginScreen(),
-        '/manager': (context) => ManagerScreen(),
-        '/dispatch': (context) => DispatchMainScreen(),
-        '/driver': (context) => const DriverScreen(driverId: "driver1"),
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case '/':
+            return MaterialPageRoute(builder: (_) => const LoginScreen());
+
+          case '/manager':
+            return MaterialPageRoute(builder: (_) => ManagerScreen());
+
+          case '/dispatch':
+            return MaterialPageRoute(builder: (_) => DispatchMainScreen());
+
+          case '/driver':
+          // 🔹 Login ekranından gelen driverId parametresini al
+            final args = settings.arguments as Map<String, dynamic>?;
+            final driverId = args?['driverId'] ?? '';
+
+            return MaterialPageRoute(
+              builder: (_) => DriverScreen(driverId: driverId),
+            );
+
+          default:
+            return MaterialPageRoute(
+              builder: (_) => const Scaffold(
+                body: Center(
+                  child: Text("404 - Sayfa bulunamadı"),
+                ),
+              ),
+            );
+        }
       },
     );
   }

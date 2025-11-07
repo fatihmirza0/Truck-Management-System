@@ -24,14 +24,6 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
         backgroundColor: Colors.white,
         elevation: 1,
         centerTitle: true,
-        leading: const Padding(
-          padding: EdgeInsets.only(left: 12),
-          child: Icon(
-            Icons.local_shipping_outlined,
-            color: Color(0xFF1E2A3A),
-            size: 26,
-          ),
-        ),
         title: const Column(
           children: [
             Text(
@@ -54,6 +46,47 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
+            tooltip: "Çıkış Yap",
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  title: const Text("Çıkış Yap"),
+                  content: const Text("Oturumdan çıkmak istediğinize emin misiniz?"),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text("İptal"),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx); // dialogu kapat
+                        Navigator.pushNamedAndRemoveUntil(
+                          context,
+                          '/',
+                              (route) => false,
+                        );
+                      },
+                      child: const Text("Evet, Çıkış Yap"),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
+
       ),
 
       body: _pages[_currentIndex],
