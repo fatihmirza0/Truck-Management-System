@@ -1,5 +1,3 @@
-// lib/screens/manager/add_user_page.dart
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -10,42 +8,19 @@ class AddUserPage extends StatefulWidget {
   State<AddUserPage> createState() => _AddUserPageState();
 }
 
-class _AddUserPageState extends State<AddUserPage>
-    with SingleTickerProviderStateMixin {
+class _AddUserPageState extends State<AddUserPage> {
+  final _formKey = GlobalKey<FormState>();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _plateController = TextEditingController();
+
   String _selectedRole = 'driver';
   bool _isLoading = false;
 
-  late AnimationController _animationController;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _scaleAnimation =
-        Tween<double>(begin: 1, end: 1.03).animate(CurvedAnimation(
-          parent: _animationController,
-          curve: Curves.easeOut,
-        ));
-  }
-
   Future<void> _addUser() async {
-    final name = _nameController.text.trim();
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
-
-    if (name.isEmpty || email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Lütfen tüm alanları doldurun")),
-      );
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
@@ -59,37 +34,36 @@ class _AddUserPageState extends State<AddUserPage>
           '${_selectedRole}${(snapshot.size + 1).toString().padLeft(3, '0')}';
 
       await FirebaseFirestore.instance.collection('users').add({
-        'name': name,
-        'email': email,
-        'password': password,
+        'name': _nameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'password': _passwordController.text.trim(),
+        'phone': _phoneController.text.trim(),
         'roleId': _selectedRole,
         if (_selectedRole == 'driver') 'driverId': newId,
+        if (_selectedRole == 'driver')
+          'plateNumber': _plateController.text.trim().toUpperCase(),
         'createdAt': Timestamp.now(),
       });
 
-      _nameController.clear();
-      _emailController.clear();
-      _passwordController.clear();
-
-      await _animationController.forward();
-      await Future.delayed(const Duration(milliseconds: 150));
-      await _animationController.reverse();
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: _selectedRole == 'driver'
-              ? Colors.blueAccent
-              : Colors.orangeAccent,
-          content: Row(
+          backgroundColor:
+          _selectedRole == 'driver' ? Colors.blue[700] : Colors.orange[700],
+          content: const Row(
             children: [
-              const Icon(Icons.check_circle, color: Colors.white),
-              const SizedBox(width: 8),
-              Text("$name başarıyla eklendi",
-                  style: const TextStyle(color: Colors.white)),
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 8),
+              Text("Kullanıcı başarıyla eklendi"),
             ],
           ),
         ),
       );
+
+      _nameController.clear();
+      _emailController.clear();
+      _passwordController.clear();
+      _phoneController.clear();
+      _plateController.clear();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Hata: ${e.toString()}")),
@@ -100,39 +74,31 @@ class _AddUserPageState extends State<AddUserPage>
   }
 
   Widget _buildTextField(
-      TextEditingController controller, String label, IconData icon,
-      {bool isPassword = false}) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: TextField(
-        controller: controller,
-        obscureText: isPassword,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon, color: Colors.grey[700]),
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: Colors.grey.shade200),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(
-                color: _selectedRole == 'driver'
-                    ? Colors.blueAccent
-                    : Colors.orangeAccent,
-                width: 2),
+      TextEditingController controller,
+      String label, {
+        bool isPassword = false,
+        TextInputType? keyboardType,
+        String? Function(String?)? validator,
+      }) {
+    return TextFormField(
+      controller: controller,
+      obscureText: isPassword,
+      keyboardType: keyboardType,
+      validator: validator,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(fontWeight: FontWeight.w500),
+        filled: true,
+        fillColor: Colors.grey[50],
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderSide: BorderSide(
+            color: _selectedRole == 'driver'
+                ? Colors.blueAccent
+                : Colors.orangeAccent,
+            width: 2,
           ),
         ),
       ),
@@ -141,139 +107,156 @@ class _AddUserPageState extends State<AddUserPage>
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = _selectedRole == 'driver'
-        ? const Color(0xFF007AFF)
-        : const Color(0xFFFF9500);
+    final primaryColor =
+    _selectedRole == 'driver' ? Colors.blueAccent : Colors.orangeAccent;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.7),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withOpacity(0.3)),
-                boxShadow: [
-                  BoxShadow(
-                    color: primaryColor.withOpacity(0.2),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  Icon(
-                    _selectedRole == 'driver'
-                        ? Icons.local_shipping
-                        : Icons.support_agent,
-                    color: primaryColor,
-                    size: 60,
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    "Yeni Kullanıcı Ekle",
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Alanlar
-                  _buildTextField(_nameController, "İsim", Icons.person),
-                  const SizedBox(height: 14),
-                  _buildTextField(_emailController, "E-posta", Icons.email),
-                  const SizedBox(height: 14),
-                  _buildTextField(
-                      _passwordController, "Şifre", Icons.lock,
-                      isPassword: true),
-                  const SizedBox(height: 24),
-
-                  // Rol seçimi
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    return Scaffold(
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding:
+                  const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        ChoiceChip(
-                          label: const Text("Şoför"),
-                          selected: _selectedRole == 'driver',
-                          selectedColor: Colors.blueAccent.withOpacity(0.2),
-                          onSelected: (_) {
-                            setState(() => _selectedRole = 'driver');
-                          },
-                          labelStyle: TextStyle(
-                            color: _selectedRole == 'driver'
-                                ? Colors.blueAccent
-                                : Colors.black87,
+                        Icon(
+                          _selectedRole == 'driver'
+                              ? Icons.local_shipping
+                              : Icons.support_agent,
+                          color: primaryColor,
+                          size: 48,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Kullanıcı Bilgileri",
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[800],
                           ),
                         ),
-                        ChoiceChip(
-                          label: const Text("Dispatch"),
-                          selected: _selectedRole == 'dispatch',
-                          selectedColor: Colors.orangeAccent.withOpacity(0.2),
-                          onSelected: (_) {
-                            setState(() => _selectedRole = 'dispatch');
+                        const Divider(height: 32),
+
+                        _buildTextField(
+                          _nameController,
+                          "İsim",
+                          validator: (val) =>
+                          val == null || val.isEmpty ? "Zorunlu alan" : null,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTextField(
+                          _emailController,
+                          "E-posta",
+                          keyboardType: TextInputType.emailAddress,
+                          validator: (val) {
+                            if (val == null || val.isEmpty) return "Zorunlu alan";
+                            if (!val.contains('@')) return "Geçerli e-posta girin";
+                            return null;
                           },
-                          labelStyle: TextStyle(
-                            color: _selectedRole == 'dispatch'
-                                ? Colors.orangeAccent
-                                : Colors.black87,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTextField(
+                          _passwordController,
+                          "Şifre",
+                          isPassword: true,
+                          validator: (val) =>
+                          val == null || val.length < 6 ? "En az 6 karakter" : null,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTextField(
+                          _phoneController,
+                          "Telefon Numarası",
+                          keyboardType: TextInputType.phone,
+                          validator: (val) =>
+                          val == null || val.length < 10 ? "Geçersiz numara" : null,
+                        ),
+                        if (_selectedRole == 'driver') ...[
+                          const SizedBox(height: 16),
+                          _buildTextField(
+                            _plateController,
+                            "Plaka No",
+                            validator: (val) => val == null || val.isEmpty
+                                ? "Zorunlu alan"
+                                : null,
+                          ),
+                        ],
+
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ChoiceChip(
+                              label: const Text("Şoför"),
+                              selected: _selectedRole == 'driver',
+                              onSelected: (_) =>
+                                  setState(() => _selectedRole = 'driver'),
+                              selectedColor: Colors.blue.shade50,
+                              labelStyle: TextStyle(
+                                color: _selectedRole == 'driver'
+                                    ? Colors.blueAccent
+                                    : Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            ChoiceChip(
+                              label: const Text("Dispatch"),
+                              selected: _selectedRole == 'dispatch',
+                              onSelected: (_) =>
+                                  setState(() => _selectedRole = 'dispatch'),
+                              selectedColor: Colors.orange.shade50,
+                              labelStyle: TextStyle(
+                                color: _selectedRole == 'dispatch'
+                                    ? Colors.orangeAccent
+                                    : Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 32),
+
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: ElevatedButton.icon(
+                            onPressed: _isLoading ? null : _addUser,
+                            icon: _isLoading
+                                ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                                : const Icon(Icons.person_add_alt_1),
+                            label: const Text(
+                              "Kullanıcıyı Ekle",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryColor,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 28),
-
-                  // Gradient buton
-                  GestureDetector(
-                    onTap: _isLoading ? null : _addUser,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 250),
-                      width: double.infinity,
-                      height: 50,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: _selectedRole == 'driver'
-                              ? [Colors.blueAccent, Colors.lightBlue]
-                              : [Colors.orangeAccent, Colors.deepOrange],
-                        ),
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: primaryColor.withOpacity(0.4),
-                            blurRadius: 15,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: _isLoading
-                          ? const CircularProgressIndicator(
-                          color: Colors.white)
-                          : const Text(
-                        "Kullanıcıyı Ekle",
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
