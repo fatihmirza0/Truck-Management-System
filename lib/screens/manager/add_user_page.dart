@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class AddUserPage extends StatefulWidget {
   const AddUserPage({super.key});
@@ -31,23 +32,32 @@ class _AddUserPageState extends State<AddUserPage> {
     setState(() => _isLoading = true);
 
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .where('roleId', isEqualTo: _selectedRole)
-          .get();
+      // Firebase Auth'ta kullanıcı oluştur
+      final userCredential =
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
 
-      final newId =
-          '${_selectedRole}${(snapshot.size + 1).toString().padLeft(3, '0')}';
+      final uid = userCredential.user!.uid;
 
-      await FirebaseFirestore.instance.collection('users').add({
+      // Rol bazlı benzersiz ID
+      final roleBasedId = _selectedRole == 'driver'
+          ? 'driver${DateTime.now().millisecondsSinceEpoch}'
+          : _selectedRole == 'dispatch'
+          ? 'dispatch${DateTime.now().millisecondsSinceEpoch}'
+          : null;
+
+      // Firestore'da kullanıcı dokümanı oluştur (UID ile)
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'name': _nameController.text.trim(),
         'email': _emailController.text.trim(),
-        'password': _passwordController.text.trim(),
         'phone': _phoneController.text.trim(),
         'roleId': _selectedRole,
-        if (_selectedRole == 'driver') 'driverId': newId,
+        if (_selectedRole == 'driver') 'driverId': roleBasedId,
         if (_selectedRole == 'driver')
           'plateNumber': _plateController.text.trim().toUpperCase(),
+        if (_selectedRole == 'dispatch') 'dispatchId': roleBasedId,
         'createdAt': Timestamp.now(),
       });
 
@@ -70,6 +80,12 @@ class _AddUserPageState extends State<AddUserPage> {
       _passwordController.clear();
       _phoneController.clear();
       _plateController.clear();
+    } on FirebaseAuthException catch (e) {
+      String msg = "Hata: ${e.message}";
+      if (e.code == 'email-already-in-use') msg = "Bu e-posta zaten kullanılıyor";
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg)),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Hata: ${e.toString()}")),
@@ -79,9 +95,6 @@ class _AddUserPageState extends State<AddUserPage> {
     }
   }
 
-  // --------------------------
-  // ortak textfield widget
-  // --------------------------
   Widget _buildTextField(
       TextEditingController controller,
       String label, {
@@ -114,79 +127,6 @@ class _AddUserPageState extends State<AddUserPage> {
     );
   }
 
-  // --------------------------
-  // Desktop Layout
-  // --------------------------
-  Widget _buildDesktopLayout() {
-    final primaryColor = _selectedRole == 'driver'
-        ? Colors.blueAccent
-        : Colors.orangeAccent;
-
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600), // Daha dar, mobil hissi verir
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Icon(
-                _selectedRole == 'driver'
-                    ? Icons.local_shipping
-                    : Icons.support_agent,
-                color: primaryColor,
-                size: 70,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                "Kullanıcı Oluştur",
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                "Yeni kullanıcı bilgilerini girerek sisteme ekleyin.",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 24),
-              _buildForm(primaryColor), // Form alt alta gelecek
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // --------------------------
-  // Mobile Layout
-  // --------------------------
-  Widget _buildMobileLayout() {
-    final primaryColor = _selectedRole == 'driver'
-        ? Colors.blueAccent
-        : Colors.orangeAccent;
-
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: _buildForm(primaryColor),
-      ),
-    );
-  }
-
-  // --------------------------
-  // Ortak form
-  // --------------------------
   Widget _buildForm(Color primaryColor) {
     return Form(
       key: _formKey,
@@ -195,12 +135,9 @@ class _AddUserPageState extends State<AddUserPage> {
           _buildTextField(
             _nameController,
             "İsim",
-            validator: (val) => val == null || val.isEmpty
-                ? "Zorunlu alan"
-                : null,
+            validator: (val) => val == null || val.isEmpty ? "Zorunlu alan" : null,
           ),
           const SizedBox(height: 16),
-
           _buildTextField(
             _emailController,
             "E-posta",
@@ -212,57 +149,45 @@ class _AddUserPageState extends State<AddUserPage> {
             },
           ),
           const SizedBox(height: 16),
-
           _buildTextField(
             _passwordController,
             "Şifre",
             isPassword: true,
-            validator: (val) =>
-            val == null || val.length < 6 ? "En az 6 karakter" : null,
+            validator: (val) => val == null || val.length < 6 ? "En az 6 karakter" : null,
           ),
           const SizedBox(height: 16),
-
           _buildTextField(
             _phoneController,
             "Telefon Numarası",
             keyboardType: TextInputType.phone,
-            validator: (val) =>
-            val == null || val.length < 10 ? "Geçersiz numara" : null,
+            validator: (val) => val == null || val.length < 10 ? "Geçersiz numara" : null,
           ),
-
           if (_selectedRole == 'driver') ...[
             const SizedBox(height: 16),
             _buildTextField(
               _plateController,
               "Plaka No",
-              validator: (val) =>
-              val == null || val.isEmpty ? "Zorunlu alan" : null,
+              validator: (val) => val == null || val.isEmpty ? "Zorunlu alan" : null,
             ),
           ],
-
           const SizedBox(height: 24),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               ChoiceChip(
                 label: const Text("Şoför"),
                 selected: _selectedRole == 'driver',
-                onSelected: (_) =>
-                    setState(() => _selectedRole = 'driver'),
+                onSelected: (_) => setState(() => _selectedRole = 'driver'),
               ),
               const SizedBox(width: 12),
               ChoiceChip(
                 label: const Text("Dispatch"),
                 selected: _selectedRole == 'dispatch',
-                onSelected: (_) =>
-                    setState(() => _selectedRole = 'dispatch'),
+                onSelected: (_) => setState(() => _selectedRole = 'dispatch'),
               ),
             ],
           ),
-
           const SizedBox(height: 28),
-
           SizedBox(
             width: double.infinity,
             height: 48,
@@ -292,6 +217,62 @@ class _AddUserPageState extends State<AddUserPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout() {
+    final primaryColor = _selectedRole == 'driver' ? Colors.blueAccent : Colors.orangeAccent;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                _selectedRole == 'driver' ? Icons.local_shipping : Icons.support_agent,
+                color: primaryColor,
+                size: 70,
+              ),
+              const SizedBox(height: 20),
+              Text(
+                "Kullanıcı Oluştur",
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                "Yeni kullanıcı bilgilerini girerek sisteme ekleyin.",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 24),
+              _buildForm(primaryColor),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileLayout() {
+    final primaryColor = _selectedRole == 'driver' ? Colors.blueAccent : Colors.orangeAccent;
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: _buildForm(primaryColor),
       ),
     );
   }

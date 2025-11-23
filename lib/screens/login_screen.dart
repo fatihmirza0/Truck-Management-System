@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math' as math;
 
 class LoginScreen extends StatefulWidget {
@@ -13,6 +14,7 @@ class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
+
   bool isLoading = false;
   String? errorMessage;
   bool _isPasswordVisible = false;
@@ -37,46 +39,74 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> login() async {
+    final email = emailController.text.trim();
+    final password = passwordController.text.trim();
+
+    // 1️⃣ Ön validasyon
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() => errorMessage = "Geçerli bir e-posta girin");
+      return;
+    }
+    if (password.isEmpty || password.length < 6) {
+      setState(() => errorMessage = "Şifre en az 6 karakter olmalı");
+      return;
+    }
+
     setState(() {
       isLoading = true;
       errorMessage = null;
     });
 
     try {
-      final query = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: emailController.text.trim())
-          .where('password', isEqualTo: passwordController.text.trim())
-          .limit(1)
-          .get();
+      // 2️⃣ Firebase Auth ile giriş
+      final userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
 
-      if (query.docs.isEmpty) {
-        setState(() {
-          errorMessage = "Geçersiz e-posta veya şifre";
-          isLoading = false;
-        });
+      final uid = userCredential.user!.uid;
+
+      // 3️⃣ Firestore’dan kullanıcı verilerini çek
+      final userDoc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+
+      if (!userDoc.exists) {
+        setState(() => errorMessage = "Kullanıcı verisi bulunamadı");
         return;
       }
 
-      final userData = query.docs.first.data();
-      final roleId = userData['roleId'];
+      final data = userDoc.data()!;
+      final roleId = data['roleId'] ?? '';
+      final driverId = data['driverId'] ?? '';
 
+      // 4️⃣ Kullanıcı rolüne göre yönlendirme
       if (roleId == 'manager') {
         Navigator.pushReplacementNamed(context, '/manager');
       } else if (roleId == 'dispatch') {
         Navigator.pushReplacementNamed(context, '/dispatch');
       } else if (roleId == 'driver') {
-        final driverId = userData['driverId'];
-        Navigator.pushReplacementNamed(
-          context,
-          '/driver',
-          arguments: {'driverId': driverId ?? ''},
-        );
+        Navigator.pushReplacementNamed(context, '/driver', arguments: {
+          'driverId': driverId,
+        });
       } else {
         setState(() => errorMessage = "Bilinmeyen kullanıcı tipi");
       }
+    } on FirebaseAuthException catch (e) {
+      print("Hata kodu: ${e.code}, mesaj: ${e.message}"); // ← burada kontrol et
+      switch (e.code) {
+        case 'user-not-found':
+          setState(() => errorMessage = "Kayıtlı olmayan e-posta");
+          break;
+        case 'invalid-credential':
+          setState(() => errorMessage = "Yanlış şifre");
+          break;
+        case 'invalid-email':
+          setState(() => errorMessage = "Geçersiz e-posta formatı");
+          break;
+        default:
+          setState(() => errorMessage = "Hata: ${e.message}");
+      }
     } catch (e) {
-      setState(() => errorMessage = "Hata: $e");
+      // Diğer beklenmedik hatalar
+      setState(() => errorMessage = "Beklenmeyen hata: ${e.toString()}");
     } finally {
       setState(() => isLoading = false);
     }
@@ -84,148 +114,184 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = Colors.blueGrey.shade800;
-    final secondaryColor = Colors.blueGrey.shade400;
+    final width = MediaQuery.of(context).size.width;
+    final isDesktop = width >= 900;
+    final primaryColor = Colors.blueGrey.shade900;
 
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Colors.blueGrey.shade900, Colors.blueGrey.shade600],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+            colors: [
+              Colors.blueGrey.shade900,
+              Colors.blueGrey.shade700,
+              Colors.blueGrey.shade600
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
         ),
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 40),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // 🔹 Logo + Başlık
-                Transform.rotate(
-                  angle: -math.pi / 12,
-                  child: Icon(
-                    Icons.local_shipping_rounded,
-                    color: Colors.white,
-                    size: 90,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  "Truck Management System",
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  "Kurumsal Araç Takip ve Görev Yönetimi",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70, fontSize: 14),
-                ),
-                const SizedBox(height: 50),
-
-                // 🔹 Giriş Kartı
-                Card(
-                  color: Colors.white,
-                  elevation: 12,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Padding(
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-                    child: Column(
-                      children: [
-                        TextField(
-                          controller: emailController,
-                          decoration: const InputDecoration(
-                            labelText: "E-posta",
-                            prefixIcon: Icon(Icons.email_outlined),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        TextField(
-                          controller: passwordController,
-                          obscureText: !_isPasswordVisible,
-                          decoration: InputDecoration(
-                            labelText: "Şifre",
-                            prefixIcon: const Icon(Icons.lock_outline),
-                            border: const OutlineInputBorder(),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _isPasswordVisible
-                                    ? Icons.visibility_off
-                                    : Icons.visibility,
-                                color: Colors.grey[700],
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _isPasswordVisible = !_isPasswordVisible;
-                                });
-                              },
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 30),
-
-                        // 🔹 Buton veya animasyon
-                        isLoading
-                            ? RotationTransition(
-                          turns: Tween(begin: 0.0, end: 1.0)
-                              .animate(_animationController),
-                          child: Icon(
-                            Icons.local_shipping_rounded,
-                            size: 50,
-                            color: secondaryColor,
-                          ),
-                        )
-                            : SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: ElevatedButton(
-                            onPressed: login,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: primaryColor,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+            padding: EdgeInsets.symmetric(
+              horizontal: isDesktop ? 40 : 20,
+              vertical: isDesktop ? 40 : 20,
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 950),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (isDesktop)
+                    Expanded(
+                      flex: 1,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 40),
+                        child: Column(
+                          children: [
+                            Transform.rotate(
+                              angle: -math.pi / 12,
+                              child: const Icon(
+                                Icons.local_shipping_rounded,
+                                color: Colors.white,
+                                size: 115,
                               ),
                             ),
-                            child: const Text(
-                              "Giriş Yap",
+                            const SizedBox(height: 20),
+                            Text(
+                              "Truck Management System",
+                              textAlign: TextAlign.center,
                               style: TextStyle(
-                                  fontSize: 18, color: Colors.white),
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                letterSpacing: 0.5,
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 10),
+                            Text(
+                              "Kurumsal Araç Takip ve Görev Yönetimi",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
                         ),
-
-                        const SizedBox(height: 12),
-
-                        if (errorMessage != null)
-                          Text(
-                            errorMessage!,
-                            style: const TextStyle(
-                                color: Colors.red, fontWeight: FontWeight.w500),
-                            textAlign: TextAlign.center,
-                          ),
-                      ],
+                      ),
+                    ),
+                  Expanded(
+                    flex: isDesktop ? 1 : 2,
+                    child: Card(
+                      color: Colors.white,
+                      elevation: 16,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 28, vertical: 38),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (!isDesktop) ...[
+                              Transform.rotate(
+                                angle: -math.pi / 12,
+                                child: Icon(
+                                  Icons.local_shipping_rounded,
+                                  color: primaryColor,
+                                  size: 80,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                "Truck Management System",
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: primaryColor,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                            ],
+                            TextField(
+                              controller: emailController,
+                              decoration: InputDecoration(
+                                labelText: "E-posta",
+                                prefixIcon: const Icon(Icons.email_outlined),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            TextField(
+                              controller: passwordController,
+                              obscureText: !_isPasswordVisible,
+                              decoration: InputDecoration(
+                                labelText: "Şifre",
+                                prefixIcon: const Icon(Icons.lock_outline),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _isPasswordVisible
+                                        ? Icons.visibility_off
+                                        : Icons.visibility,
+                                  ),
+                                  onPressed: () => setState(() =>
+                                      _isPasswordVisible = !_isPasswordVisible),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 30),
+                            isLoading
+                                ? RotationTransition(
+                                    turns: Tween(begin: 0.0, end: 1.0)
+                                        .animate(_animationController),
+                                    child: Icon(
+                                      Icons.local_shipping_rounded,
+                                      size: 55,
+                                      color: primaryColor,
+                                    ),
+                                  )
+                                : SizedBox(
+                                    width: double.infinity,
+                                    height: 52,
+                                    child: ElevatedButton(
+                                      onPressed: login,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: primaryColor,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        "Giriş Yap",
+                                        style: TextStyle(
+                                            fontSize: 18, color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                            const SizedBox(height: 20),
+                            if (errorMessage != null)
+                              Text(
+                                errorMessage!,
+                                style: const TextStyle(
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.w500),
+                                textAlign: TextAlign.center,
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 40),
-
-                Text(
-                  "© 2025 Truck Management System",
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

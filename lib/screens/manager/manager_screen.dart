@@ -1,5 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import '../login_screen.dart';
 import 'jobs_page.dart';
 import 'add_user_page.dart';
 import 'users_page.dart';
@@ -18,8 +21,8 @@ class _ManagerScreenState extends State<ManagerScreen>
 
   bool get isDesktop =>
       defaultTargetPlatform == TargetPlatform.windows ||
-          defaultTargetPlatform == TargetPlatform.macOS ||
-          defaultTargetPlatform == TargetPlatform.linux;
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.linux;
 
   final List<Widget> _pages = const [
     JobsPage(),
@@ -83,17 +86,50 @@ class _ManagerScreenState extends State<ManagerScreen>
           IconButton(
             icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
             tooltip: "Çıkış Yap",
-            onPressed: () {},
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text("Çıkış Yap"),
+                  content: const Text("Çıkış yapmak istediğinize emin misiniz?"),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text("İptal"),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text("Evet"),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirm != null && confirm) {
+                try {
+                  await FirebaseAuth.instance.signOut();
+
+                  if (context.mounted) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                          (route) => false,
+                    );
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Çıkış yapılamadı: ${e.toString()}")),
+                  );
+                }
+              }
+            },
           ),
           const SizedBox(width: 8),
         ],
       ),
-
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 400),
         child: _pages[_selectedIndex],
       ),
-
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         selectedItemColor: const Color(0xFF1E2A3A),
@@ -142,12 +178,12 @@ class _ManagerScreenState extends State<ManagerScreen>
                 _buildMenuItem(Icons.group_add, "Personel Ekle", 1),
                 _buildMenuItem(Icons.people_alt, "Kullanıcılar", 2),
                 const Spacer(),
-                TextButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.logout, color: Colors.redAccent),
-                  label: const Text("Çıkış Yap",
-                      style: TextStyle(color: Colors.redAccent)),
-                ),
+                // TextButton.icon(
+                //   onPressed: () {},
+                //   icon: const Icon(Icons.logout, color: Colors.redAccent),
+                //   label: const Text("Çıkış Yap",
+                //       style: TextStyle(color: Colors.redAccent)),
+                // ),
                 const SizedBox(height: 20),
               ],
             ),
@@ -179,8 +215,9 @@ class _ManagerScreenState extends State<ManagerScreen>
         child: Row(
           children: [
             Icon(icon,
-                color:
-                isSelected ? const Color(0xFF1E2A3A) : Colors.grey.shade700),
+                color: isSelected
+                    ? const Color(0xFF1E2A3A)
+                    : Colors.grey.shade700),
             const SizedBox(width: 12),
             Text(
               title,
@@ -188,7 +225,7 @@ class _ManagerScreenState extends State<ManagerScreen>
                 fontSize: 15,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                 color:
-                isSelected ? const Color(0xFF1E2A3A) : Colors.grey.shade700,
+                    isSelected ? const Color(0xFF1E2A3A) : Colors.grey.shade700,
               ),
             ),
           ],
