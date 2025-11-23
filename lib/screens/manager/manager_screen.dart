@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'jobs_page.dart';
 import 'add_user_page.dart';
 import 'users_page.dart';
@@ -15,6 +16,17 @@ class _ManagerScreenState extends State<ManagerScreen>
   int _selectedIndex = 0;
   late AnimationController _fadeController;
 
+  bool get isDesktop =>
+      defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.macOS ||
+          defaultTargetPlatform == TargetPlatform.linux;
+
+  final List<Widget> _pages = const [
+    JobsPage(),
+    AddUserPage(),
+    UsersPage(),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -30,14 +42,15 @@ class _ManagerScreenState extends State<ManagerScreen>
     super.dispose();
   }
 
-  final List<Widget> _pages = const [
-    JobsPage(),
-    AddUserPage(),
-    UsersPage(),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    return isDesktop ? _buildDesktopLayout() : _buildMobileLayout();
+  }
+
+  // -------------------------------
+  //  📱 MOBİL LAYOUT
+  // -------------------------------
+  Widget _buildMobileLayout() {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FA),
       appBar: AppBar(
@@ -70,48 +83,17 @@ class _ManagerScreenState extends State<ManagerScreen>
           IconButton(
             icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
             tooltip: "Çıkış Yap",
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  title: const Text("Çıkış Yap"),
-                  content:
-                      const Text("Oturumdan çıkmak istediğinize emin misiniz?"),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text("İptal"),
-                    ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent,
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: () {
-                        Navigator.pop(ctx); // dialogu kapat
-                        Navigator.pushNamedAndRemoveUntil(
-                          context,
-                          '/',
-                          (route) => false,
-                        );
-                      },
-                      child: const Text("Evet, Çıkış Yap"),
-                    ),
-                  ],
-                ),
-              );
-            },
+            onPressed: () {},
           ),
           const SizedBox(width: 8),
         ],
       ),
+
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 400),
         child: _pages[_selectedIndex],
       ),
+
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         selectedItemColor: const Color(0xFF1E2A3A),
@@ -128,6 +110,89 @@ class _ManagerScreenState extends State<ManagerScreen>
           BottomNavigationBarItem(
               icon: Icon(Icons.people_alt), label: "Kullanıcılar"),
         ],
+      ),
+    );
+  }
+
+  // -------------------------------
+  //  🖥️ DESKTOP (WINDOWS) LAYOUT
+  // -------------------------------
+  Widget _buildDesktopLayout() {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF7F8FA),
+      body: Row(
+        children: [
+          // Sol Menü
+          Container(
+            width: 220,
+            color: Colors.white,
+            child: Column(
+              children: [
+                const SizedBox(height: 40),
+                const Text(
+                  "Truck Management System",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E2A3A),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _buildMenuItem(Icons.assignment, "İş Yönetimi", 0),
+                _buildMenuItem(Icons.group_add, "Personel Ekle", 1),
+                _buildMenuItem(Icons.people_alt, "Kullanıcılar", 2),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.logout, color: Colors.redAccent),
+                  label: const Text("Çıkış Yap",
+                      style: TextStyle(color: Colors.redAccent)),
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+
+          // Sağ sayfa alanı
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              child: _pages[_selectedIndex],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMenuItem(IconData icon, String title, int index) {
+    bool isSelected = index == _selectedIndex;
+
+    return InkWell(
+      onTap: () {
+        setState(() => _selectedIndex = index);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        color: isSelected ? const Color(0xFFE9EEF5) : Colors.transparent,
+        child: Row(
+          children: [
+            Icon(icon,
+                color:
+                isSelected ? const Color(0xFF1E2A3A) : Colors.grey.shade700),
+            const SizedBox(width: 12),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                color:
+                isSelected ? const Color(0xFF1E2A3A) : Colors.grey.shade700,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

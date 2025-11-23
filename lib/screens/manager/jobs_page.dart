@@ -45,7 +45,7 @@ class _JobsPageState extends State<JobsPage>
     );
   }
 
-  // 🔹 Status'a göre iş listesini getir
+  // 🔹 Status'a göre iş listeleme
   Stream<QuerySnapshot> _getJobsByStatus(String status) {
     return FirebaseFirestore.instance
         .collection('jobs')
@@ -53,64 +53,80 @@ class _JobsPageState extends State<JobsPage>
         .snapshots();
   }
 
-  // 🔹 İş Listesi
+  // 🔹 Responsive liste
   Widget _buildJobList(Stream<QuerySnapshot> stream, bool showActions) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: stream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth > 600;
 
-        final jobs = snapshot.data?.docs ?? [];
+        return StreamBuilder<QuerySnapshot>(
+          stream: stream,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-        if (jobs.isEmpty) {
-          return const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.inbox_outlined, size: 75, color: Colors.grey),
-                SizedBox(height: 12),
-                Text(
-                  "Bu kategoriye ait iş bulunmuyor.",
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-              ],
-            ),
-          );
-        }
+            final jobs = snapshot.data?.docs ?? [];
 
-        return ListView.builder(
-          itemCount: jobs.length,
-          itemBuilder: (context, i) {
-            final job = jobs[i].data() as Map<String, dynamic>;
-            final jobId = jobs[i].id;
-
-            return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              elevation: 3,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ListTile(
-                leading: const Icon(Icons.local_shipping_outlined,
-                    color: Colors.blueAccent),
-                title: Text(
-                  "Yük: ${job['cargoInfo'] ?? 'Bilinmiyor'}",
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            if (jobs.isEmpty) {
+              return const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text("Şoför: ${job['assignedTo'] ?? '-'}"),
-                    Text("Dispatch: ${job['assignedBy'] ?? '-'}"),
+                    Icon(Icons.inbox_outlined, size: 75, color: Colors.grey),
+                    SizedBox(height: 12),
+                    Text(
+                      "Bu kategoriye ait iş bulunmuyor.",
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
                   ],
                 ),
-                trailing: null, // ❌ Kart üzerinde artık onay/red yok
-                onTap: () =>
-                    _showJobDetails(context, job, showActions, jobId), // 👇 Detay ekranına geçiş
-              ),
+              );
+            }
+
+            return ListView.builder(
+              itemCount: jobs.length,
+              itemBuilder: (context, i) {
+                final job = jobs[i].data() as Map<String, dynamic>;
+                final jobId = jobs[i].id;
+
+                return Container(
+                  width: isDesktop ? 800 : double.infinity,
+                  alignment:
+                      isDesktop ? Alignment.center : Alignment.centerLeft,
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Card(
+                    elevation: 3,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ListTile(
+                      leading: const Icon(Icons.local_shipping_outlined,
+                          color: Colors.blueAccent),
+                      title: Text(
+                        "Yük: ${job['cargoInfo'] ?? 'Bilinmiyor'}",
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("Şoför: ${job['assignedTo'] ?? '-'}"),
+                          Text("Dispatch: ${job['assignedBy'] ?? '-'}"),
+                        ],
+                      ),
+                      onTap: () => _showJobDetails(
+                        context,
+                        job,
+                        showActions,
+                        jobId,
+                        isDesktop,
+                      ),
+                    ),
+                  ),
+                );
+              },
             );
           },
         );
@@ -118,60 +134,74 @@ class _JobsPageState extends State<JobsPage>
     );
   }
 
-  // 🔹 İş Detayları (Dialog)
-  void _showJobDetails(BuildContext context, Map<String, dynamic> job,
-      bool showActions, String jobId) {
+  // 🔹 Responsive detay dialog
+  void _showJobDetails(
+    BuildContext context,
+    Map<String, dynamic> job,
+    bool showActions,
+    String jobId,
+    bool isDesktop,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text("İş Detayları"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("📦 Yük: ${job['cargoInfo'] ?? '-'}"),
-            Text("🚚 Şoför: ${job['assignedTo'] ?? '-'}"),
-            Text("🗺️ Yükleme Limanı: ${job['loadPort'] ?? '-'}"),
-            Text("📍 Varış Limanı: ${job['unloadPort'] ?? '-'}"),
-            Text("👤 Dispatch: ${job['assignedBy'] ?? '-'}"),
-          ],
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: isDesktop ? 200 : 20,
+          vertical: isDesktop ? 100 : 20,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          "İş Detayları",
+          style: TextStyle(
+            fontSize: isDesktop ? 24 : 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: SizedBox(
+          width: isDesktop ? 600 : null,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("📦 Yük: ${job['cargoInfo'] ?? '-'}"),
+              Text("🚚 Şoför: ${job['assignedTo'] ?? '-'}"),
+              Text("🗺️ Yükleme Limanı: ${job['loadPort'] ?? '-'}"),
+              Text("📍 Varış Limanı: ${job['unloadPort'] ?? '-'}"),
+              Text("👤 Dispatch: ${job['assignedBy'] ?? '-'}"),
+            ],
+          ),
         ),
         actions: showActions
             ? [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _approveJob(jobId, context);
-            },
-            child: const Text(
-              "Onayla",
-              style: TextStyle(color: Colors.green),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _rejectJob(jobId, context);
-            },
-            child: const Text(
-              "Reddet",
-              style: TextStyle(color: Colors.redAccent),
-            ),
-          ),
-        ]
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _approveJob(jobId, context);
+                  },
+                  child: const Text("Onayla",
+                      style: TextStyle(color: Colors.green)),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _rejectJob(jobId, context);
+                  },
+                  child: const Text("Reddet",
+                      style: TextStyle(color: Colors.redAccent)),
+                ),
+              ]
             : [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Kapat"),
-          ),
-        ],
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Kapat"),
+                ),
+              ],
       ),
     );
   }
 
-  // 🔹 Ekran Yapısı
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -196,7 +226,7 @@ class _JobsPageState extends State<JobsPage>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildJobList(_getJobsByStatus('pending'), true), // Bekleyen → Onay/Red aktif
+          _buildJobList(_getJobsByStatus('pending'), true),
           _buildJobList(_getJobsByStatus('approved'), false),
           _buildJobList(_getJobsByStatus('completed'), false),
         ],

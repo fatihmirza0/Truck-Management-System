@@ -83,4 +83,5 @@ class DefaultFirebaseOptions {
     authDomain: 'truck-dispatch-system.firebaseapp.com',
     storageBucket: 'truck-dispatch-system.firebasestorage.app',
   );
+
 }

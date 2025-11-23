@@ -28,11 +28,10 @@ class _UserDetailPageState extends State<UserDetailPage> {
     plateController = TextEditingController(text: widget.data['plateNumber'] ?? '');
   }
 
+  // ---------------- SAVE & DELETE ----------------
+
   Future<void> _saveChanges() async {
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.userId)
-        .update({
+    await FirebaseFirestore.instance.collection('users').doc(widget.userId).update({
       'name': nameController.text.trim(),
       'email': emailController.text.trim(),
       'phone': phoneController.text.trim(),
@@ -41,11 +40,11 @@ class _UserDetailPageState extends State<UserDetailPage> {
 
     setState(() => isEditing = false);
 
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Bilgiler başarıyla güncellendi.")),
-      );
-    }
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Bilgiler başarıyla güncellendi.")),
+    );
   }
 
   Future<void> _deleteUser() async {
@@ -70,12 +69,13 @@ class _UserDetailPageState extends State<UserDetailPage> {
 
     if (confirm == true) {
       await FirebaseFirestore.instance.collection('users').doc(widget.userId).delete();
-      if (context.mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Kullanıcı başarıyla silindi.")),
-        );
-      }
+
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Kullanıcı başarıyla silindi.")),
+      );
     }
   }
 
@@ -89,8 +89,12 @@ class _UserDetailPageState extends State<UserDetailPage> {
     });
   }
 
+  // ---------------- UI ----------------
+
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width > 800;
+
     return Scaffold(
       backgroundColor: const Color(0xfff5f6fa),
       appBar: AppBar(
@@ -98,6 +102,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0.8,
+        centerTitle: true,
         actions: [
           if (!isEditing)
             IconButton(
@@ -112,23 +117,35 @@ class _UserDetailPageState extends State<UserDetailPage> {
           ),
         ],
       ),
+
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
+          constraints: BoxConstraints(
+            maxWidth: isDesktop ? 700 : 600,
+          ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            padding: EdgeInsets.symmetric(
+              horizontal: isDesktop ? 32 : 20,
+              vertical: isDesktop ? 36 : 24,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _sectionTitle("Kullanıcı Bilgileri"),
                 const SizedBox(height: 12),
+
+                // Fields
                 _buildField("İsim", nameController, editable: isEditing),
                 _buildField("E-posta", emailController, editable: isEditing),
                 _buildField("Telefon", phoneController, editable: isEditing),
                 _buildField("Plaka", plateController, editable: isEditing),
                 _buildText("Rol", widget.data['roleId'] == 'driver' ? "Şoför" : "Dispatch"),
+
                 const SizedBox(height: 28),
+
+                // Action Buttons
                 if (isEditing) _buildActionButtons(),
+
                 if (!isEditing)
                   const Padding(
                     padding: EdgeInsets.only(top: 8),
@@ -145,6 +162,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
     );
   }
 
+  // ---------------- COMPONENTS ----------------
+
   Widget _sectionTitle(String title) {
     return Text(
       title,
@@ -156,8 +175,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
     );
   }
 
-  Widget _buildField(String label, TextEditingController controller,
-      {bool editable = false}) {
+  Widget _buildField(String label, TextEditingController controller, {bool editable = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: editable
@@ -165,41 +183,29 @@ class _UserDetailPageState extends State<UserDetailPage> {
         controller: controller,
         decoration: InputDecoration(
           labelText: label,
-          contentPadding:
-          const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide:
-            const BorderSide(color: Color(0xffd1d5db), width: 1.2),
-          ),
           filled: true,
           fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
         ),
       )
           : Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-                color: Colors.black54),
-          ),
+          Text(label,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black54)),
           const SizedBox(height: 4),
           Container(
             width: double.infinity,
-            padding:
-            const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
             decoration: BoxDecoration(
               color: Colors.white,
-              border: Border.all(color: const Color(0xffe5e7eb)),
               borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xffe5e7eb)),
             ),
-            child: Text(
-              controller.text.isNotEmpty ? controller.text : "-",
-              style: const TextStyle(fontSize: 15),
-            ),
+            child: Text(controller.text.isNotEmpty ? controller.text : "-", style: const TextStyle(fontSize: 15)),
           ),
         ],
       ),
@@ -207,32 +213,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
   }
 
   Widget _buildText(String label, String? value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-                color: Colors.black54),
-          ),
-          const SizedBox(height: 4),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: const Color(0xffe5e7eb)),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(value ?? "-", style: const TextStyle(fontSize: 15)),
-          ),
-        ],
-      ),
-    );
+    return _buildField(label, TextEditingController(text: value ?? "-"), editable: false);
   }
 
   Widget _buildActionButtons() {
@@ -241,15 +222,12 @@ class _UserDetailPageState extends State<UserDetailPage> {
         Expanded(
           child: ElevatedButton.icon(
             onPressed: _saveChanges,
-            icon: const Icon(Icons.save_outlined, size: 20),
+            icon: const Icon(Icons.save_outlined),
             label: const Text("Kaydet"),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xff2563eb),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
             ),
           ),
         ),
@@ -257,14 +235,11 @@ class _UserDetailPageState extends State<UserDetailPage> {
         Expanded(
           child: OutlinedButton.icon(
             onPressed: _cancelEdit,
-            icon: const Icon(Icons.close_outlined, size: 20),
+            icon: const Icon(Icons.close_outlined),
             label: const Text("İptal"),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
               side: const BorderSide(color: Color(0xff94a3b8)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
             ),
           ),
         ),
@@ -272,19 +247,3 @@ class _UserDetailPageState extends State<UserDetailPage> {
     );
   }
 }
-/*        child: AppBar(
-          elevation: 0,
-          automaticallyImplyLeading: false,
-          bottom: TabBar(
-            controller: _tabController,
-            indicatorColor: Colors.blueAccent,
-            labelColor: Colors.blueAccent,
-            unselectedLabelColor: Colors.grey,
-            tabs: const [
-              Tab(text: "Bekleyen"),
-              Tab(text: "Onaylanan"),
-              Tab(text: "Tamamlanan"),
-            ],
-          ),
-        ),
-*/
