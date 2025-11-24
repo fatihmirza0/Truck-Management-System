@@ -21,10 +21,7 @@ class _AddUserPageState extends State<AddUserPage> {
   String _selectedRole = 'driver';
   bool _isLoading = false;
 
-  bool get isDesktop =>
-      defaultTargetPlatform == TargetPlatform.windows ||
-          defaultTargetPlatform == TargetPlatform.macOS ||
-          defaultTargetPlatform == TargetPlatform.linux;
+  bool get isDesktop => MediaQuery.of(context).size.width > 900;
 
   Future<void> _addUser() async {
     if (!_formKey.currentState!.validate()) return;
@@ -32,7 +29,6 @@ class _AddUserPageState extends State<AddUserPage> {
     setState(() => _isLoading = true);
 
     try {
-      // Firebase Auth'ta kullanıcı oluştur
       final userCredential =
       await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
@@ -40,15 +36,10 @@ class _AddUserPageState extends State<AddUserPage> {
       );
 
       final uid = userCredential.user!.uid;
-
-      // Rol bazlı benzersiz ID
       final roleBasedId = _selectedRole == 'driver'
           ? 'driver${DateTime.now().millisecondsSinceEpoch}'
-          : _selectedRole == 'dispatch'
-          ? 'dispatch${DateTime.now().millisecondsSinceEpoch}'
-          : null;
+          : 'dispatch${DateTime.now().millisecondsSinceEpoch}';
 
-      // Firestore'da kullanıcı dokümanı oluştur (UID ile)
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'name': _nameController.text.trim(),
         'email': _emailController.text.trim(),
@@ -62,16 +53,9 @@ class _AddUserPageState extends State<AddUserPage> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor:
-          _selectedRole == 'driver' ? Colors.blue[700] : Colors.orange[700],
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 8),
-              Text("Kullanıcı başarıyla eklendi"),
-            ],
-          ),
+        const SnackBar(
+          content: Text("Kullanıcı başarıyla eklendi"),
+          backgroundColor: Colors.green,
         ),
       );
 
@@ -80,12 +64,6 @@ class _AddUserPageState extends State<AddUserPage> {
       _passwordController.clear();
       _phoneController.clear();
       _plateController.clear();
-    } on FirebaseAuthException catch (e) {
-      String msg = "Hata: ${e.message}";
-      if (e.code == 'email-already-in-use') msg = "Bu e-posta zaten kullanılıyor";
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg)),
-      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Hata: ${e.toString()}")),
@@ -95,52 +73,43 @@ class _AddUserPageState extends State<AddUserPage> {
     }
   }
 
-  Widget _buildTextField(
-      TextEditingController controller,
-      String label, {
-        bool isPassword = false,
-        TextInputType? keyboardType,
-        String? Function(String?)? validator,
-      }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: isPassword,
-      keyboardType: keyboardType,
-      validator: validator,
-      decoration: InputDecoration(
-        labelText: label,
-        filled: true,
-        fillColor: Colors.grey[50],
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(
-            color: _selectedRole == 'driver'
-                ? Colors.blueAccent
-                : Colors.orangeAccent,
-            width: 2,
-          ),
-        ),
+  InputDecoration _inputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.grey),
+      filled: true,
+      fillColor: Colors.grey[100],
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey.shade300, width: 1),
       ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey.shade300, width: 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Colors.blueAccent, width: 2),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     );
   }
 
-  Widget _buildForm(Color primaryColor) {
+  Widget _buildForm() {
     return Form(
       key: _formKey,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildTextField(
-            _nameController,
-            "İsim",
+          TextFormField(
+            controller: _nameController,
+            decoration: _inputDecoration("İsim"),
             validator: (val) => val == null || val.isEmpty ? "Zorunlu alan" : null,
           ),
           const SizedBox(height: 16),
-          _buildTextField(
-            _emailController,
-            "E-posta",
+          TextFormField(
+            controller: _emailController,
+            decoration: _inputDecoration("E-posta"),
             keyboardType: TextInputType.emailAddress,
             validator: (val) {
               if (val == null || val.isEmpty) return "Zorunlu alan";
@@ -149,70 +118,73 @@ class _AddUserPageState extends State<AddUserPage> {
             },
           ),
           const SizedBox(height: 16),
-          _buildTextField(
-            _passwordController,
-            "Şifre",
-            isPassword: true,
-            validator: (val) => val == null || val.length < 6 ? "En az 6 karakter" : null,
+          TextFormField(
+            controller: _passwordController,
+            decoration: _inputDecoration("Şifre"),
+            obscureText: true,
+            validator: (val) =>
+            val == null || val.length < 6 ? "En az 6 karakter" : null,
           ),
           const SizedBox(height: 16),
-          _buildTextField(
-            _phoneController,
-            "Telefon Numarası",
+          TextFormField(
+            controller: _phoneController,
+            decoration: _inputDecoration("Telefon Numarası"),
             keyboardType: TextInputType.phone,
-            validator: (val) => val == null || val.length < 10 ? "Geçersiz numara" : null,
+            validator: (val) =>
+            val == null || val.length < 10 ? "Geçersiz numara" : null,
           ),
           if (_selectedRole == 'driver') ...[
             const SizedBox(height: 16),
-            _buildTextField(
-              _plateController,
-              "Plaka No",
+            TextFormField(
+              controller: _plateController,
+              decoration: _inputDecoration("Plaka No"),
               validator: (val) => val == null || val.isEmpty ? "Zorunlu alan" : null,
             ),
           ],
           const SizedBox(height: 24),
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               ChoiceChip(
                 label: const Text("Şoför"),
                 selected: _selectedRole == 'driver',
+                selectedColor: Colors.grey[300],
+                backgroundColor: Colors.grey[200],
                 onSelected: (_) => setState(() => _selectedRole = 'driver'),
               ),
               const SizedBox(width: 12),
               ChoiceChip(
                 label: const Text("Dispatch"),
                 selected: _selectedRole == 'dispatch',
+                selectedColor: Colors.grey[300],
+                backgroundColor: Colors.grey[200],
                 onSelected: (_) => setState(() => _selectedRole = 'dispatch'),
               ),
             ],
           ),
           const SizedBox(height: 28),
           SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton.icon(
+            width: 180,
+            height: 44,
+            child: ElevatedButton(
               onPressed: _isLoading ? null : _addUser,
-              icon: _isLoading
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              child: _isLoading
                   ? const SizedBox(
-                height: 18,
                 width: 18,
+                height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: Colors.white,
                 ),
               )
-                  : const Icon(Icons.person_add_alt_1),
-              label: const Text(
-                "Kullanıcıyı Ekle",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryColor,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                  : const Text(
+                "Kullanıcı Ekle",
+                style: TextStyle(fontWeight: FontWeight.bold,color: Colors.white),
               ),
             ),
           ),
@@ -222,60 +194,71 @@ class _AddUserPageState extends State<AddUserPage> {
   }
 
   Widget _buildDesktopLayout() {
-    final primaryColor = _selectedRole == 'driver' ? Colors.blueAccent : Colors.orangeAccent;
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Icon(
-                _selectedRole == 'driver' ? Icons.local_shipping : Icons.support_agent,
-                color: primaryColor,
-                size: 70,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                "Kullanıcı Oluştur",
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 40),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Yeni Kullanıcı Oluştur",
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                "Yeni kullanıcı bilgilerini girerek sisteme ekleyin.",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 14,
+                const SizedBox(height: 8),
+                Text(
+                  "Yeni kullanıcı bilgilerini girerek sisteme ekleyin.",
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              _buildForm(primaryColor),
-            ],
+                const SizedBox(height: 24),
+                _buildForm(),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
   Widget _buildMobileLayout() {
-    final primaryColor = _selectedRole == 'driver' ? Colors.blueAccent : Colors.orangeAccent;
     return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: _buildForm(primaryColor),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Yeni Kullanıcı Oluştur",
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Yeni kullanıcı bilgilerini girerek sisteme ekleyin.",
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 24),
+          _buildForm(),
+        ],
       ),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {

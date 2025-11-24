@@ -57,3 +57,9 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+/*
+--- Dispatch ve Driver Id'ler gerekli yerlerde çekilmeli aktif olarak çalışmıyor.
+--- managerId KISMINA manager name eklenecek.
+--- dispatch paneli ve manager panelinin desktop uı'ına güncelleme gelmeli.
+--- Reports Screen eklenmeli.
+*/

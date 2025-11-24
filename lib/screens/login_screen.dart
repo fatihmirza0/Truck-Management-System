@@ -90,13 +90,12 @@ class _LoginScreenState extends State<LoginScreen>
         setState(() => errorMessage = "Bilinmeyen kullanıcı tipi");
       }
     } on FirebaseAuthException catch (e) {
-      print("Hata kodu: ${e.code}, mesaj: ${e.message}"); // ← burada kontrol et
       switch (e.code) {
         case 'user-not-found':
           setState(() => errorMessage = "Kayıtlı olmayan e-posta");
           break;
         case 'invalid-credential':
-          setState(() => errorMessage = "Yanlış şifre");
+          setState(() => errorMessage = "Geçersiz e-posta veya şifre");
           break;
         case 'invalid-email':
           setState(() => errorMessage = "Geçersiz e-posta formatı");

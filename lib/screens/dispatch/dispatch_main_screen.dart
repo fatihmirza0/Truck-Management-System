@@ -20,74 +20,74 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 1,
-        centerTitle: true,
-        title: const Column(
-          children: [
-            Text(
-              "Truck Management System",
-              style: TextStyle(
-                color: Color(0xFF1E2A3A),
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.3,
-              ),
-            ),
-            SizedBox(height: 4),
-            Text(
-              "Dispatch Paneli",
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-            tooltip: "Çıkış Yap",
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  title: const Text("Çıkış Yap"),
-                  content: const Text("Oturumdan çıkmak istediğinize emin misiniz?"),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text("İptal"),
-                    ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent,
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: () {
-                        Navigator.pop(ctx); // dialogu kapat
-                        Navigator.pushNamedAndRemoveUntil(
-                          context,
-                          '/',
-                              (route) => false,
-                        );
-                      },
-                      child: const Text("Evet, Çıkış Yap"),
-                    ),
-                  ],
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 1,
+          centerTitle: true,
+          title: const Column(
+            children: [
+              Text(
+                "Truck Management System",
+                style: TextStyle(
+                  color: Color(0xFF1E2A3A),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3,
                 ),
-              );
-            },
+              ),
+              SizedBox(height: 4),
+              Text(
+                "Dispatch Paneli",
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-        ],
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
+              tooltip: "Çıkış Yap",
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    title: const Text("Çıkış Yap"),
+                    content: const Text("Oturumdan çıkmak istediğinize emin misiniz?"),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text("İptal"),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx); // dialogu kapat
+                          Navigator.pushNamedAndRemoveUntil(
+                            context,
+                            '/',
+                                (route) => false,
+                          );
+                        },
+                        child: const Text("Evet, Çıkış Yap"),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 8),
+          ],
 
-      ),
+        ),
 
       body: _pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(

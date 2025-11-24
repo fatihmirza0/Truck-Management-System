@@ -18,6 +18,7 @@ dependencies:
   firebase_auth: ^6.1.2
   cloud_firestore: ^6.1.0
   firebase_storage: ^13.0.4
+  google_fonts: ^6.3.2
 
   # Windows için desktop SDK
 #  firebase_core_desktop:

@@ -28,8 +28,17 @@ class _UserDetailPageState extends State<UserDetailPage> {
     plateController = TextEditingController(text: widget.data['plateNumber'] ?? '');
   }
 
-  // ---------------- SAVE & DELETE ----------------
+  void _cancelEdit() {
+    setState(() {
+      isEditing = false;
+      nameController.text = widget.data['name'] ?? '';
+      emailController.text = widget.data['email'] ?? '';
+      phoneController.text = widget.data['phone'] ?? '';
+      plateController.text = widget.data['plateNumber'] ?? '';
+    });
+  }
 
+  // SAVE & DELETE METHODS (Firebase Firestore)
   Future<void> _saveChanges() async {
     await FirebaseFirestore.instance.collection('users').doc(widget.userId).update({
       'name': nameController.text.trim(),
@@ -37,11 +46,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
       'phone': phoneController.text.trim(),
       'plateNumber': plateController.text.trim(),
     });
-
     setState(() => isEditing = false);
-
     if (!mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Bilgiler başarıyla güncellendi.")),
     );
@@ -54,10 +60,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
         title: const Text("Kullanıcıyı Sil"),
         content: const Text("Bu kullanıcıyı silmek istediğinize emin misiniz?"),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("İptal"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("İptal")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
             onPressed: () => Navigator.pop(context, true),
@@ -66,111 +69,34 @@ class _UserDetailPageState extends State<UserDetailPage> {
         ],
       ),
     );
-
     if (confirm == true) {
       await FirebaseFirestore.instance.collection('users').doc(widget.userId).delete();
-
       if (!mounted) return;
       Navigator.pop(context);
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Kullanıcı başarıyla silindi.")),
       );
     }
   }
 
-  void _cancelEdit() {
-    setState(() {
-      isEditing = false;
-      nameController.text = widget.data['name'] ?? '';
-      emailController.text = widget.data['email'] ?? '';
-      phoneController.text = widget.data['phone'] ?? '';
-      plateController.text = widget.data['plateNumber'] ?? '';
-    });
-  }
-
-  // ---------------- UI ----------------
-
-  @override
-  Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width > 800;
-
-    return Scaffold(
-      backgroundColor: const Color(0xfff5f6fa),
-      appBar: AppBar(
-        title: const Text("Kullanıcı Detayı"),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0.8,
-        centerTitle: true,
-        actions: [
-          if (!isEditing)
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: "Düzenle",
-              onPressed: () => setState(() => isEditing = true),
-            ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-            tooltip: "Sil",
-            onPressed: _deleteUser,
-          ),
-        ],
+  InputDecoration _inputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.grey),
+      filled: true,
+      fillColor: Colors.grey[100],
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey.shade300, width: 1),
       ),
-
-      body: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: isDesktop ? 700 : 600,
-          ),
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: isDesktop ? 32 : 20,
-              vertical: isDesktop ? 36 : 24,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _sectionTitle("Kullanıcı Bilgileri"),
-                const SizedBox(height: 12),
-
-                // Fields
-                _buildField("İsim", nameController, editable: isEditing),
-                _buildField("E-posta", emailController, editable: isEditing),
-                _buildField("Telefon", phoneController, editable: isEditing),
-                _buildField("Plaka", plateController, editable: isEditing),
-                _buildText("Rol", widget.data['roleId'] == 'driver' ? "Şoför" : "Dispatch"),
-
-                const SizedBox(height: 28),
-
-                // Action Buttons
-                if (isEditing) _buildActionButtons(),
-
-                if (!isEditing)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text(
-                      "Not: Düzenleme yapmak için sağ üstteki kalem ikonuna tıklayın.",
-                      style: TextStyle(color: Colors.black54, fontSize: 13),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey.shade300, width: 1),
       ),
-    );
-  }
-
-  // ---------------- COMPONENTS ----------------
-
-  Widget _sectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontWeight: FontWeight.w600,
-        fontSize: 18,
-        color: Color(0xff1e293b),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Colors.blueAccent, width: 2),
       ),
     );
   }
@@ -181,21 +107,12 @@ class _UserDetailPageState extends State<UserDetailPage> {
       child: editable
           ? TextField(
         controller: controller,
-        decoration: InputDecoration(
-          labelText: label,
-          filled: true,
-          fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
+        decoration: _inputDecoration(label),
       )
           : Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black54)),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black54)),
           const SizedBox(height: 4),
           Container(
             width: double.infinity,
@@ -210,10 +127,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
         ],
       ),
     );
-  }
-
-  Widget _buildText(String label, String? value) {
-    return _buildField(label, TextEditingController(text: value ?? "-"), editable: false);
   }
 
   Widget _buildActionButtons() {
@@ -244,6 +157,55 @@ class _UserDetailPageState extends State<UserDetailPage> {
           ),
         ),
       ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width > 800;
+
+    return Scaffold(
+      backgroundColor: const Color(0xfff5f6fa),
+      appBar: AppBar(
+        title: const Text("Kullanıcı Detayı"),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 0.5,
+        centerTitle: true,
+        actions: [
+          if (!isEditing)
+            IconButton(icon: const Icon(Icons.edit_outlined), tooltip: "Düzenle", onPressed: () => setState(() => isEditing = true)),
+          IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), tooltip: "Sil", onPressed: _deleteUser),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(horizontal: isDesktop ? 48 : 24, vertical: isDesktop ? 36 : 20),
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: isDesktop ? 500 : double.infinity),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Kullanıcı Bilgileri", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 20, color: Colors.black87)),
+                const SizedBox(height: 12),
+                _buildField("İsim", nameController, editable: isEditing),
+                _buildField("E-posta", emailController, editable: isEditing),
+                _buildField("Telefon", phoneController, editable: isEditing),
+                _buildField("Plaka", plateController, editable: isEditing),
+                _buildField("Rol", TextEditingController(text: widget.data['roleId'] == 'driver' ? "Şoför" : "Dispatch")),
+                const SizedBox(height: 28),
+                if (isEditing) _buildActionButtons(),
+                if (!isEditing)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text("Not: Düzenleme yapmak için sağ üstteki kalem ikonuna tıklayın.", style: TextStyle(color: Colors.black54, fontSize: 13)),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

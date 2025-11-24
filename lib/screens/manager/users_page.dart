@@ -16,9 +16,6 @@ class _UsersPageState extends State<UsersPage> {
   bool isDesktop(BuildContext context) =>
       MediaQuery.of(context).size.width >= 900;
 
-  // ------------------------------
-  // FİLTRELEME
-  // ------------------------------
   void _clearSearch() {
     setState(() {
       searchQuery = '';
@@ -26,11 +23,7 @@ class _UsersPageState extends State<UsersPage> {
     });
   }
 
-  // ------------------------------
-  // USER CARD WIDGET
-  // ------------------------------
-  Widget _userCard(
-      Map<String, dynamic> data, String id, String role, BuildContext context) {
+  Widget _userCard(Map<String, dynamic> data, String id, BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: () {
@@ -42,43 +35,37 @@ class _UsersPageState extends State<UsersPage> {
         );
       },
       child: Container(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border.all(color: const Color(0xffe2e8f0)),
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
           boxShadow: [
             BoxShadow(
-              color: Colors.black12.withOpacity(0.04),
+              color: Colors.black12.withOpacity(0.03),
               blurRadius: 4,
               offset: const Offset(0, 2),
-            )
+            ),
           ],
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ICON BOX
             Container(
               width: 44,
-              height: 22,
+              height: 44,
               decoration: BoxDecoration(
-                color: role == 'driver'
-                    ? Colors.blue.shade50
-                    : Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(8),
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                role == 'driver'
+                data['roleId'] == 'driver'
                     ? Icons.local_shipping_outlined
                     : Icons.support_agent_outlined,
-                color: role == 'driver' ? Colors.blueAccent : Colors.orange,
+                color: Colors.grey.shade600,
               ),
             ),
-
             const SizedBox(width: 14),
-
-            // TEXT DATA
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -86,14 +73,9 @@ class _UsersPageState extends State<UsersPage> {
                   Text(
                     data['name'] ?? '-',
                     style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xff1e293b),
-                    ),
+                        fontSize: 16, fontWeight: FontWeight.w600),
                   ),
-                  const SizedBox(height: 3),
-
-                  // EMAIL
+                  const SizedBox(height: 4),
                   Row(
                     children: [
                       Icon(Icons.email_outlined,
@@ -109,10 +91,7 @@ class _UsersPageState extends State<UsersPage> {
                       ),
                     ],
                   ),
-
-                  const SizedBox(height: 3),
-
-                  // PHONE + PLATE
+                  const SizedBox(height: 4),
                   Row(
                     children: [
                       Icon(Icons.phone_outlined,
@@ -144,17 +123,13 @@ class _UsersPageState extends State<UsersPage> {
                 ],
               ),
             ),
-
-            const Icon(Icons.chevron_right, color: Colors.grey, size: 22)
+            const Icon(Icons.chevron_right, color: Colors.grey, size: 22),
           ],
         ),
       ),
     );
   }
 
-  // ------------------------------
-  // USER LIST BUILDER (RESPONSIVE)
-  // ------------------------------
   Widget _buildUserList(BuildContext context, String role) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
@@ -162,9 +137,7 @@ class _UsersPageState extends State<UsersPage> {
           .where('roleId', isEqualTo: role)
           .snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
 
         var docs = snap.data!.docs.where((d) {
           final data = d.data();
@@ -175,10 +148,8 @@ class _UsersPageState extends State<UsersPage> {
 
         if (docs.isEmpty) {
           return const Center(
-            child: Text(
-              "Kayıt bulunamadı.",
-              style: TextStyle(fontSize: 16, color: Colors.black54),
-            ),
+            child: Text("Kayıt bulunamadı.",
+                style: TextStyle(fontSize: 16, color: Colors.black54)),
           );
         }
 
@@ -186,15 +157,15 @@ class _UsersPageState extends State<UsersPage> {
           return GridView.builder(
             padding: const EdgeInsets.all(20),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, // geniş ekranda 2 kolon
+              crossAxisCount: 3,
               crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
+              mainAxisSpacing: 8,
               childAspectRatio: 2.4,
             ),
             itemCount: docs.length,
             itemBuilder: (_, i) {
               final doc = docs[i];
-              return _userCard(doc.data(), doc.id, role, context);
+              return _userCard(doc.data(), doc.id, context);
             },
           );
         } else {
@@ -204,7 +175,7 @@ class _UsersPageState extends State<UsersPage> {
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (_, i) {
               final doc = docs[i];
-              return _userCard(doc.data(), doc.id, role, context);
+              return _userCard(doc.data(), doc.id, context);
             },
           );
         }
@@ -212,54 +183,51 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
-  // ------------------------------
-  // BUILD
-  // ------------------------------
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
       child: Column(
         children: [
-          // ------------------ SEARCH BAR ------------------
+          // ---------------- SEARCH BAR ----------------
           Container(
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black12.withOpacity(0.03),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _searchController,
-                    onChanged: (v) {
-                      setState(() {
-                        searchQuery = v.trim().toLowerCase();
-                      });
-                    },
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.search),
+                    onChanged: (v) =>
+                        setState(() => searchQuery = v.trim().toLowerCase()),
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search, color: Colors.grey),
                       hintText: "İsim veya plaka ara...",
-                      filled: true,
-                      fillColor: const Color(0xfff1f5f9),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xffd1d5db)),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          vertical: 0, horizontal: 12),
+                      border: InputBorder.none,
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
                 IconButton(
                   tooltip: "Temizle",
                   icon: const Icon(Icons.clear),
                   onPressed: _clearSearch,
-                )
+                ),
               ],
             ),
           ),
 
-          // ------------------ TABS ------------------
+          // ---------------- TABS ----------------
           Container(
             color: Colors.white,
             child: const TabBar(
@@ -274,7 +242,7 @@ class _UsersPageState extends State<UsersPage> {
             ),
           ),
 
-          // ------------------ CONTENT ------------------
+          // ---------------- CONTENT ----------------
           Expanded(
             child: Container(
               color: const Color(0xfff5f6fa),
