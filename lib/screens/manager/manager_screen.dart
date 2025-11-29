@@ -1,6 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Eğer kullanmıyorsan silebilirsin
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
 import '../login_screen.dart';
 import 'jobs_page.dart';
 import 'add_user_page.dart';
@@ -9,23 +10,56 @@ import 'users_page.dart';
 class ManagerScreen extends StatefulWidget {
   const ManagerScreen({super.key});
 
+  static const Color accent = Color(0xFF2563EB);
+  static const Color bg = Color(0xFFF3F4F6);
+  static const Color sidebar = Color(0xFF111827);
+
   @override
   State<ManagerScreen> createState() => _ManagerScreenState();
 }
 
 class _ManagerScreenState extends State<ManagerScreen> {
-  int _selectedIndex = 0;
+  int _index = 0;
   String? managerId;
 
-  bool get isDesktop => MediaQuery.of(context).size.width > 900;
+  bool get isDesktop => MediaQuery.of(context).size.width >= 900;
 
   @override
   void initState() {
     super.initState();
-    final user = FirebaseAuth.instance.currentUser;
-    managerId = user?.uid;
+    managerId = FirebaseAuth.instance.currentUser?.uid;
   }
 
+  // ------------------------------------------------------------
+  // SAYFALAR
+  // ------------------------------------------------------------
+  List<Widget> get _pages => [
+    JobsPage(managerId: managerId!),
+    const AddUserPage(),
+    const UsersPage(),
+  ];
+
+  List<String> get _titles => [
+    "İş Yönetimi",
+    "Personel Ekle",
+    "Kullanıcılar",
+  ];
+
+  List<String> get _subTitles => [
+    "Görevler",
+    "Yeni Kullanıcı",
+    "Kullanıcı Listesi",
+  ];
+
+  List<IconData> get _icons => [
+    Icons.dashboard_customize,
+    Icons.person_add,
+    Icons.people_alt,
+  ];
+
+  // ------------------------------------------------------------
+  // BUILD
+  // ------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     if (managerId == null) {
@@ -34,214 +68,332 @@ class _ManagerScreenState extends State<ManagerScreen> {
       );
     }
 
-    return isDesktop ? _desktop() : _mobile();
+    return isDesktop ? _desktopLayout() : _mobileLayout();
   }
 
-  //-------------------------------------
-  // 📱 MOBILE LAYOUT
-  //-------------------------------------
-  Widget _mobile() {
-    final pages = [
-      JobsPage(managerId: managerId!),
-      const AddUserPage(),
-      const UsersPage(),
-    ];
-
+  // ------------------------------------------------------------
+  // 📱 MOBILE UI (DispatchMainScreen ile aynı stil)
+  // ------------------------------------------------------------
+  Widget _mobileLayout() {
     return Scaffold(
+      backgroundColor: ManagerScreen.bg,
       appBar: AppBar(
-        centerTitle: true,
-        elevation: 1,
         backgroundColor: Colors.white,
-        title: const Column(
+        elevation: 0.6,
+        centerTitle: true,
+        title: Column(
           children: [
             Text(
-              "Truck Management System",
+              "Truck Management",
               style: TextStyle(
-                color: Color(0xFF1E2A3A),
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.3,
+                color: Colors.grey.shade900,
+                fontWeight: FontWeight.w700,
+                fontSize: 17,
               ),
             ),
-            SizedBox(height: 4),
-            Text(
+            const SizedBox(height: 3),
+            const Text(
               "Yönetim Paneli",
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
-              ),
+              style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
           ],
         ),
         actions: [
-          _buildLogoutButton(isDesktop: false), // Mobilde sadece ikon
+          _logoutButton(isDesktop: false),
         ],
-        iconTheme: const IconThemeData(color: Colors.grey),
       ),
-      body: pages[_selectedIndex],
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        child: _pages[_index],
+      ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (i) => setState(() => _selectedIndex = i),
-        selectedItemColor: Colors.blueAccent,
-        unselectedItemColor: Colors.grey[600],
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.assignment), label: "İşler"),
-          BottomNavigationBarItem(icon: Icon(Icons.person_add), label: "Ekle"),
-          BottomNavigationBarItem(icon: Icon(Icons.people), label: "Kullanıcılar"),
-        ],
-        type: BottomNavigationBarType.fixed,
+        currentIndex: _index,
+        onTap: (i) => setState(() => _index = i),
+        selectedItemColor: ManagerScreen.accent,
+        unselectedItemColor: Colors.grey,
         backgroundColor: Colors.white,
-        elevation: 4,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_customize_outlined),
+            activeIcon: Icon(Icons.dashboard_customize),
+            label: "İşler",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_add_outlined),
+            activeIcon: Icon(Icons.person_add),
+            label: "Ekle",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.people_alt_outlined),
+            activeIcon: Icon(Icons.people_alt),
+            label: "Kullanıcılar",
+          ),
+        ],
       ),
     );
   }
 
-  //-------------------------------------
-  // 🖥️ DESKTOP LAYOUT
-  //-------------------------------------
-  Widget _desktop() {
-    final pages = [
-      JobsPage(managerId: managerId!),
-      const AddUserPage(),
-      const UsersPage(),
-    ];
-
+  // ------------------------------------------------------------
+  // 🖥️ DESKTOP UI (DispatchMainScreen ile birebir pattern)
+  // ------------------------------------------------------------
+  Widget _desktopLayout() {
     return Scaffold(
+      backgroundColor: ManagerScreen.bg,
       body: Row(
         children: [
-          // Sidebar
+          // ==== LEFT SIDEBAR ====
           Container(
-            width: 240,
-            color: const Color(0xFF1E2A3A),
+            width: 250,
+            decoration: const BoxDecoration(
+              color: ManagerScreen.sidebar,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black45,
+                  blurRadius: 12,
+                  offset: Offset(0, 3),
+                ),
+              ],
+            ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 40),
-                const Text(
-                  "Yönetim Paneli",
-                  style: TextStyle(color: Colors.white, fontSize: 18),
+
+                // Logo / Title
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 22),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.manage_accounts,
+                          color: Colors.white, size: 26),
+                      SizedBox(width: 10),
+                      Text(
+                        "Yönetim Paneli",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 22),
+                  child: Text(
+                    "Truck Management System",
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 30),
-                _menuItem("İş Yönetimi", Icons.assignment, 0),
-                _menuItem("Personel Ekle", Icons.group_add, 1),
-                _menuItem("Kullanıcılar", Icons.people, 2),
+
+                // Menu
+                _menuItem("İş Yönetimi", Icons.dashboard_customize_outlined, 0),
+                _menuItem("Personel Ekle", Icons.person_add_outlined, 1),
+                _menuItem("Kullanıcılar", Icons.people_alt_outlined, 2),
+
                 const Spacer(),
-                _buildLogoutButton(isDesktop: true), // Desktop uyumlu
-                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20, left: 60),
+                  child: _logoutButton(isDesktop: true),
+                ),
               ],
             ),
           ),
+
+          // ==== MAIN CONTENT ====
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              color: const Color(0xFFF7F8FA),
-              child: pages[_selectedIndex],
+            child: Column(
+              children: [
+                // Top bar (title + chip)
+                Container(
+                  height: 68,
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 28, vertical: 8),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        _titles[_index],
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF111827),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: ManagerScreen.accent.withOpacity(0.10),
+                          borderRadius: BorderRadius.circular(50),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _icons[_index],
+                              size: 16,
+                              color: ManagerScreen.accent,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _subTitles[_index],
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: ManagerScreen.accent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Page body
+                Expanded(
+                  child: Container(
+                    color: ManagerScreen.bg,
+                    padding: const EdgeInsets.all(24),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 250),
+                      child: _pages[_index],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          )
+          ),
         ],
       ),
     );
   }
 
-  //-------------------------------------
-  // MENU ITEM
-  //-------------------------------------
-  Widget _menuItem(String label, IconData icon, int index) {
-    bool selected = _selectedIndex == index;
+  // ------------------------------------------------------------
+  // SIDEBAR MENU ITEM
+  // ------------------------------------------------------------
+  Widget _menuItem(String text, IconData icon, int idx) {
+    final selected = _index == idx;
 
     return InkWell(
-      onTap: () => setState(() => _selectedIndex = index),
+      onTap: () => setState(() => _index = idx),
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: selected ? Colors.white.withOpacity(0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          color: selected ? Colors.white.withOpacity(0.08) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
           children: [
-            Icon(icon, color: Colors.white.withOpacity(selected ? 1 : 0.7)),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 4,
+              height: 24,
+              decoration: BoxDecoration(
+                color: selected ? ManagerScreen.accent : Colors.transparent,
+                borderRadius: BorderRadius.circular(100),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Icon(
+              icon,
+              color: Colors.white.withOpacity(selected ? 1 : 0.7),
+              size: 20,
+            ),
             const SizedBox(width: 12),
             Text(
-              label,
+              text,
               style: TextStyle(
-                color: Colors.white.withOpacity(selected ? 1 : 0.7),
-                fontSize: 15,
+                color: Colors.white.withOpacity(selected ? 1 : 0.8),
+                fontSize: 14.5,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
               ),
-            )
+            ),
           ],
         ),
       ),
     );
   }
 
-  //-------------------------------------
-  // LOGOUT BUTTON
-  //-------------------------------------
-  Widget _buildLogoutButton({required bool isDesktop}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: _logoutDialog,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.logout, color: Colors.redAccent),
-                if (isDesktop) ...[
-                  const SizedBox(width: 10),
-                  const Text(
-                    "Çıkış",
-                    style: TextStyle(
-                      color: Colors.redAccent,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+  // ------------------------------------------------------------
+  // LOGOUT BUTTON (mobil + desktop)
+  // ------------------------------------------------------------
+  Widget _logoutButton({required bool isDesktop}) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(90),
+      onTap: _confirmLogout,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color:
+          isDesktop ? Colors.white.withOpacity(0.06) : Colors.transparent,
+          borderRadius: BorderRadius.circular(90),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.logout, color: Colors.redAccent),
+            if (isDesktop) ...[
+              const SizedBox(width: 10),
+              const Text(
+                "Çıkış",
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
   }
 
-  //-------------------------------------
-  // LOGOUT DIALOG
-  //-------------------------------------
-  void _logoutDialog() async {
-    final shouldLogout = await showDialog<bool>(
+  // ------------------------------------------------------------
+  // LOGOUT CONFIRMATION
+  // ------------------------------------------------------------
+  Future<void> _confirmLogout() async {
+    final res = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Çıkış Yap"),
-        content: const Text("Çıkış yapmak istediğinize emin misiniz?"),
+      builder: (_) => AlertDialog(
+        title: const Text("Oturumu Kapat"),
+        content: const Text("Hesabınızdan çıkış yapmak istiyor musunuz?"),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text("İptal"),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              "Evet",
-              style: TextStyle(color: Colors.redAccent),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
             ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Çıkış Yap"),
           ),
         ],
       ),
     );
 
-    if (shouldLogout == true) {
+    if (res == true) {
       await FirebaseAuth.instance.signOut();
-      if (context.mounted) {
+      if (mounted) {
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const LoginScreen()),

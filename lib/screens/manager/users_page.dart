@@ -10,231 +10,233 @@ class UsersPage extends StatefulWidget {
 }
 
 class _UsersPageState extends State<UsersPage> {
-  String searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
+  String search = "";
 
-  bool isDesktop(BuildContext context) =>
-      MediaQuery.of(context).size.width >= 900;
+  bool get isDesktop => MediaQuery.of(context).size.width > 900;
 
-  void _clearSearch() {
+  static const Color accent = Color(0xFF2563EB);
+
+  void _clear() {
     setState(() {
-      searchQuery = '';
+      search = "";
       _searchController.clear();
     });
   }
 
-  Widget _userCard(Map<String, dynamic> data, String id, BuildContext context) {
+  // ---------------------------------------------------------------------------
+  // USER CARD (Modern & Premium)
+  // ---------------------------------------------------------------------------
+  Widget _userCard(Map<String, dynamic> u, String id) {
+    final isDriver = u['roleId'] == 'driver';
+
     return InkWell(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => UserDetailPage(userId: id, data: data),
+            builder: (_) => UserDetailPage(userId: id, data: u),
           ),
         );
       },
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black12.withOpacity(0.03),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
           ],
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Avatar
             Container(
-              width: 44,
-              height: 44,
+              width: 50,
+              height: 50,
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(12),
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
-                data['roleId'] == 'driver'
-                    ? Icons.local_shipping_outlined
-                    : Icons.support_agent_outlined,
-                color: Colors.grey.shade600,
+                isDriver ? Icons.local_shipping : Icons.support_agent,
+                size: 26,
+                color: Colors.grey.shade700,
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 16),
+
+            // Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    data['name'] ?? '-',
+                    u['name'] ?? "-",
                     style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black87,
+                    ),
                   ),
                   const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(Icons.email_outlined,
-                          size: 14, color: Colors.grey.shade600),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          data['email'] ?? '-',
-                          style: const TextStyle(
-                              fontSize: 13, color: Colors.black54),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(Icons.phone_outlined,
-                          size: 14, color: Colors.grey.shade600),
-                      const SizedBox(width: 4),
-                      Text(
-                        data['phone'] ?? '-',
-                        style: const TextStyle(
-                            fontSize: 13, color: Colors.black54),
-                      ),
-                      if ((data['plateNumber'] ?? '').isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 12),
-                          child: Row(
-                            children: [
-                              Icon(Icons.directions_car_outlined,
-                                  size: 14, color: Colors.grey.shade600),
-                              const SizedBox(width: 4),
-                              Text(
-                                data['plateNumber'],
-                                style: const TextStyle(
-                                    fontSize: 13, color: Colors.black54),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
+                  _infoRow(Icons.email_outlined, u['email']),
+                  const SizedBox(height: 3),
+                  _infoRow(Icons.phone_outlined, u['phone']),
+                  if (isDriver && (u['plateNumber'] ?? "").isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: _infoRow(Icons.directions_car, u['plateNumber']),
+                    ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, color: Colors.grey, size: 22),
+
+            const Icon(Icons.chevron_right, color: Colors.grey),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildUserList(BuildContext context, String role) {
+  // Mini info row
+  Widget _infoRow(IconData icon, String? text) {
+    return Row(
+      children: [
+        Icon(icon, size: 15, color: Colors.grey.shade600),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(
+            text ?? "-",
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // USER LIST
+  // ---------------------------------------------------------------------------
+  Widget _list(String role) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
           .collection('users')
           .where('roleId', isEqualTo: role)
           .snapshots(),
-      builder: (context, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+      builder: (_, snap) {
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-        var docs = snap.data!.docs.where((d) {
-          final data = d.data();
-          final name = (data['name'] ?? '').toLowerCase();
-          final plate = (data['plateNumber'] ?? '').toLowerCase();
-          return name.contains(searchQuery) || plate.contains(searchQuery);
+        final data = snap.data!.docs.where((d) {
+          final u = d.data();
+          final name = (u['name'] ?? "").toLowerCase();
+          final plate = (u['plateNumber'] ?? "").toLowerCase();
+          return name.contains(search) || plate.contains(search);
         }).toList();
 
-        if (docs.isEmpty) {
+        if (data.isEmpty) {
           return const Center(
-            child: Text("Kayıt bulunamadı.",
-                style: TextStyle(fontSize: 16, color: Colors.black54)),
+            child: Text("Kayıt bulunamadı",
+                style: TextStyle(color: Colors.black54, fontSize: 16)),
           );
         }
 
-        if (isDesktop(context)) {
-          return GridView.builder(
-            padding: const EdgeInsets.all(20),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 8,
-              childAspectRatio: 2.4,
-            ),
-            itemCount: docs.length,
-            itemBuilder: (_, i) {
-              final doc = docs[i];
-              return _userCard(doc.data(), doc.id, context);
-            },
-          );
-        } else {
-          return ListView.separated(
-            padding: const EdgeInsets.all(20),
-            itemCount: docs.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (_, i) {
-              final doc = docs[i];
-              return _userCard(doc.data(), doc.id, context);
-            },
-          );
-        }
+        return isDesktop
+            ? GridView.builder(
+          padding: const EdgeInsets.all(24),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 20,
+            mainAxisSpacing: 18,
+            childAspectRatio: 2.7,
+          ),
+          itemCount: data.length,
+          itemBuilder: (_, i) =>
+              _userCard(data[i].data(), data[i].id),
+        )
+            : ListView.separated(
+          padding: const EdgeInsets.all(20),
+          itemCount: data.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (_, i) =>
+              _userCard(data[i].data(), data[i].id),
+        );
       },
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // BUILD
+  // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
       child: Column(
         children: [
-          // ---------------- SEARCH BAR ----------------
+          const SizedBox(height: 10),
+
+          // -------------------------------------------------------------------
+          // SEARCH BAR (Premium)
+          // -------------------------------------------------------------------
           Container(
-            margin: const EdgeInsets.all(16),
+            margin: const EdgeInsets.symmetric(horizontal: 20),
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black12.withOpacity(0.03),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4))
               ],
             ),
             child: Row(
               children: [
+                const Icon(Icons.search, color: Colors.grey),
+                const SizedBox(width: 10),
                 Expanded(
                   child: TextField(
                     controller: _searchController,
                     onChanged: (v) =>
-                        setState(() => searchQuery = v.trim().toLowerCase()),
+                        setState(() => search = v.toLowerCase().trim()),
                     decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search, color: Colors.grey),
-                      hintText: "İsim veya plaka ara...",
+                      hintText: "İsim veya plaka ile ara...",
                       border: InputBorder.none,
                     ),
                   ),
                 ),
-                IconButton(
-                  tooltip: "Temizle",
-                  icon: const Icon(Icons.clear),
-                  onPressed: _clearSearch,
-                ),
+                if (search.isNotEmpty)
+                  IconButton(
+                      onPressed: _clear,
+                      icon: const Icon(Icons.close, color: Colors.grey))
               ],
             ),
           ),
 
-          // ---------------- TABS ----------------
+          const SizedBox(height: 16),
+
+          // -------------------------------------------------------------------
+          // TABS
+          // -------------------------------------------------------------------
           Container(
-            color: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             child: const TabBar(
-              indicatorColor: Color(0xff2563eb),
-              labelColor: Color(0xff2563eb),
+              indicatorColor: accent,
+              labelColor: accent,
               unselectedLabelColor: Colors.grey,
-              labelStyle: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              labelStyle:
+              TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
               tabs: [
                 Tab(text: "Şoförler"),
                 Tab(text: "Dispatch"),
@@ -242,14 +244,18 @@ class _UsersPageState extends State<UsersPage> {
             ),
           ),
 
-          // ---------------- CONTENT ----------------
+          const SizedBox(height: 10),
+
+          // -------------------------------------------------------------------
+          // CONTENT
+          // -------------------------------------------------------------------
           Expanded(
             child: Container(
-              color: const Color(0xfff5f6fa),
+              color: const Color(0xFFF5F6FA),
               child: TabBarView(
                 children: [
-                  _buildUserList(context, 'driver'),
-                  _buildUserList(context, 'dispatch'),
+                  _list("driver"),
+                  _list("dispatch"),
                 ],
               ),
             ),
