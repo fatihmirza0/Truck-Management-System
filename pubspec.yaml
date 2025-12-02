@@ -19,6 +19,10 @@ dependencies:
   cloud_firestore: ^6.1.0
   firebase_storage: ^13.0.4
   google_fonts: ^6.3.2
+  url_launcher: ^6.3.2
+  image_picker: ^1.2.1
+  open_filex: ^4.7.0
+  lottie: ^3.3.2
 
   # Windows için desktop SDK
 #  firebase_core_desktop:
