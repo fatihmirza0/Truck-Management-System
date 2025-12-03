@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_downloader/flutter_downloader.dart';
 import 'firebase_options.dart';
 
 // Ekranlar
@@ -11,6 +12,10 @@ import 'screens/driver/driver_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await FlutterDownloader.initialize(
+    debug: true,
+    ignoreSsl: true,
+  );
   runApp(const MyApp());
 }
 
@@ -57,9 +62,3 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-/*
---- Dispatch ve Driver Id'ler gerekli yerlerde çekilmeli aktif olarak çalışmıyor.
---- managerId KISMINA manager name eklenecek.
---- dispatch paneli ve manager panelinin desktop uı'ına güncelleme gelmeli.
---- Reports Screen eklenmeli.
-*/

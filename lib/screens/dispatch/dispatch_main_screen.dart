@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'create_job_page.dart';
 import 'add_driver_page.dart';
-import 'dispatch_jobs_page.dart';
+import 'dispatch_wait_reject_page.dart';
+import 'dispatch_active_completed_page.dart';
 
 class DispatchMainScreen extends StatefulWidget {
   const DispatchMainScreen({super.key});
@@ -15,44 +17,82 @@ class DispatchMainScreen extends StatefulWidget {
 class _DispatchMainScreenState extends State<DispatchMainScreen> {
   int _index = 0;
 
-  bool get isDesktop =>
-      MediaQuery.of(context).size.width >= 900;
+  bool get isDesktop => MediaQuery.of(context).size.width >= 900;
 
   static const Color bg = Color(0xFFF3F4F6);
   static const Color sidebar = Color(0xFF111827);
   static const Color accent = Color(0xFF2563EB);
 
+  String? dispatchId;
+  bool loading = true;
+
+  // ---------------------------------------------------------------------------
+  // DISPATCH ID YÜKLE
+  // ---------------------------------------------------------------------------
   @override
-  Widget build(BuildContext context) {
-    return isDesktop ? _desktop() : _mobile();
+  void initState() {
+    super.initState();
+    _loadDispatchId();
   }
 
-  // PAGES
+  Future<void> _loadDispatchId() async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    final snap = await FirebaseFirestore.instance
+        .collection("users")
+        .doc(uid)
+        .get();
+
+    dispatchId = snap.data()?["dispatchId"];
+
+    setState(() => loading = false);
+  }
+
+  // ---------------------------------------------------------------------------
+  // SAYFALAR
+  // ---------------------------------------------------------------------------
   List<Widget> get pages => [
     const CreateJobPage(),
     const AddDriverPage(),
-    DispatchJobsPage(
-      uid: FirebaseAuth.instance.currentUser!.uid,
-    ),
+    DispatchWaitRejectPage(dispatchId: dispatchId!),
+    DispatchActiveCompletedPage(dispatchId: dispatchId!),
   ];
 
   List<String> get titles => [
     "Yeni İş Oluştur",
     "Şoför Ekle",
-    "Benim İşlerim",
+    "Bekleyen & Reddedilen",
+    "Aktif & Tamamlanan",
   ];
 
   List<String> get subTitles => [
     "Görev",
     "Personel",
-    "İş Listesi",
+    "İş Durumu",
+    "İş Durumu",
   ];
 
   List<IconData> get icons => [
     Icons.assignment,
     Icons.person_add,
-    Icons.list_alt,
+    Icons.watch_later_outlined,
+    Icons.check_circle_outline,
   ];
+
+  // ---------------------------------------------------------------------------
+  // BUILD
+  // ---------------------------------------------------------------------------
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const Scaffold(
+        backgroundColor: bg,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return isDesktop ? _desktop() : _mobile();
+  }
 
   // ---------------------------------------------------------------------------
   // 📱 MOBILE UI
@@ -98,21 +138,26 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
         unselectedItemColor: Colors.grey,
         backgroundColor: Colors.white,
         type: BottomNavigationBarType.fixed,
-        items: [
+        items: const [
           BottomNavigationBarItem(
-            icon: const Icon(Icons.assignment_outlined),
-            activeIcon: const Icon(Icons.assignment),
+            icon: Icon(Icons.assignment_outlined),
+            activeIcon: Icon(Icons.assignment),
             label: "İş",
           ),
           BottomNavigationBarItem(
-            icon: const Icon(Icons.person_add_outlined),
-            activeIcon: const Icon(Icons.person_add),
+            icon: Icon(Icons.person_add_outlined),
+            activeIcon: Icon(Icons.person_add),
             label: "Şoför",
           ),
           BottomNavigationBarItem(
-            icon: const Icon(Icons.list_alt_outlined),
-            activeIcon: const Icon(Icons.list_alt),
-            label: "Benim İşlerim",
+            icon: Icon(Icons.watch_later_outlined),
+            activeIcon: Icon(Icons.watch_later),
+            label: "Bekleyen",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.check_circle_outline),
+            activeIcon: Icon(Icons.check_circle),
+            label: "Aktif",
           ),
         ],
       ),
@@ -182,11 +227,12 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
                 // MENU ITEMS
                 _menu("İş Oluştur", Icons.assignment_outlined, 0),
                 _menu("Şoför Ekle", Icons.person_add_outlined, 1),
-                _menu("Benim İşlerim", Icons.list_alt_outlined, 2),
+                _menu("Bekleyen İşler", Icons.watch_later_outlined, 2),
+                _menu("Aktif & Tamamlanan", Icons.check_circle_outline, 3),
 
                 const Spacer(),
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 20,left: 60),
+                  padding: const EdgeInsets.only(bottom: 20, left: 60),
                   child: _logoutBtn(isDesktop: true),
                 ),
               ],
@@ -197,7 +243,6 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
           Expanded(
             child: Column(
               children: [
-                // Top Bar (Title)
                 Container(
                   height: 68,
                   padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -223,7 +268,8 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
                       const SizedBox(width: 10),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5,
+                          horizontal: 10,
+                          vertical: 5,
                         ),
                         decoration: BoxDecoration(
                           color: accent.withOpacity(0.10),
@@ -231,8 +277,7 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
                         ),
                         child: Row(
                           children: [
-                            Icon(icons[_index],
-                                size: 16, color: accent),
+                            Icon(icons[_index], size: 16, color: accent),
                             const SizedBox(width: 6),
                             Text(
                               subTitles[_index],
@@ -248,7 +293,6 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
                   ),
                 ),
 
-                // PAGE CONTENT
                 Expanded(
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 250),
@@ -342,7 +386,7 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // LOGOUT CONFIRMATION
+  // LOGOUT CONFIRM
   // ---------------------------------------------------------------------------
   Future<void> _logoutDialog() async {
     final res = await showDialog<bool>(
