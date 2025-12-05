@@ -29,6 +29,9 @@ dependencies:
   file_selector: ^1.1.0
   file_picker: ^10.3.7
   win32: ^5.15.0
+  fl_chart: ^1.1.1
+  pdf: ^3.11.3
+  syncfusion_flutter_xlsio: ^31.2.16
 
   # Windows için desktop SDK
 #  firebase_core_desktop:
@@ -40,3 +43,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/fonts/Roboto-Regular.ttf
+    - assets/fonts/Roboto-Bold.ttf
+    - assets/logo.png
+    - assets/icons/

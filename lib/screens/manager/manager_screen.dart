@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart'; // Eğer kullanmıyorsan silebilirsin
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:lojistik/screens/manager/report_Screen.dart';
 
 import '../login_screen.dart';
 import 'jobs_page.dart';
@@ -37,24 +38,29 @@ class _ManagerScreenState extends State<ManagerScreen> {
     JobsPage(managerId: managerId!),
     const AddUserPage(),
     const UsersPage(),
+    const ReportScreen(), // 🔥 yeni rapor sayfası
+
   ];
 
   List<String> get _titles => [
     "İş Yönetimi",
     "Personel Ekle",
     "Kullanıcılar",
+    "Raporlar",    // 🔥 EKLE
   ];
 
   List<String> get _subTitles => [
     "Görevler",
     "Yeni Kullanıcı",
     "Kullanıcı Listesi",
+    "İş Raporları",    // 🔥 EKLE
   ];
 
   List<IconData> get _icons => [
     Icons.dashboard_customize,
     Icons.person_add,
     Icons.people_alt,
+    Icons.bar_chart,    // 🔥 EKLE
   ];
 
   // ------------------------------------------------------------
@@ -129,6 +135,12 @@ class _ManagerScreenState extends State<ManagerScreen> {
             activeIcon: Icon(Icons.people_alt),
             label: "Kullanıcılar",
           ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart_outlined),
+            activeIcon: Icon(Icons.bar_chart),
+            label: "Rapor",
+          ),
+
         ],
       ),
     );
@@ -196,6 +208,8 @@ class _ManagerScreenState extends State<ManagerScreen> {
                 _menuItem("İş Yönetimi", Icons.dashboard_customize_outlined, 0),
                 _menuItem("Personel Ekle", Icons.person_add_outlined, 1),
                 _menuItem("Kullanıcılar", Icons.people_alt_outlined, 2),
+                _menuItem("Raporlar", Icons.bar_chart, 3),
+
 
                 const Spacer(),
                 Padding(

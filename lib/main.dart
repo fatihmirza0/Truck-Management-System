@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_downloader/flutter_downloader.dart';
 import 'firebase_options.dart';
+import 'package:flutter/foundation.dart';
 
 // Ekranlar
 import 'screens/login_screen.dart';
@@ -12,10 +15,12 @@ import 'screens/driver/driver_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await FlutterDownloader.initialize(
-    debug: true,
-    ignoreSsl: true,
-  );
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    await FlutterDownloader.initialize(
+      debug: true,
+      ignoreSsl: true,
+    );
+  }
   runApp(const MyApp());
 }
 
@@ -41,7 +46,7 @@ class MyApp extends StatelessWidget {
             return MaterialPageRoute(builder: (_) => DispatchMainScreen());
 
           case '/driver':
-          // 🔹 Login ekranından gelen driverId parametresini al
+            // 🔹 Login ekranından gelen driverId parametresini al
             final args = settings.arguments as Map<String, dynamic>?;
             final driverId = args?['driverId'] ?? '';
 

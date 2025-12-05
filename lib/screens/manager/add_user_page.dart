@@ -112,12 +112,12 @@ class _AddUserPageState extends State<AddUserPage> {
         children: [
           if (desktop)
             Row(children: [
-              Expanded(child: _field(_name, "İsim")),
+              Expanded(child: _field(_name, "Ad Soyad")),
               const SizedBox(width: 12),
               Expanded(child: _emailField()),
             ])
           else ...[
-            _field(_name, "İsim"),
+            _field(_name, "Ad Soyad"),
             const SizedBox(height: 16),
             _emailField(),
           ],
