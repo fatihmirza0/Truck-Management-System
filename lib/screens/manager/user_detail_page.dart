@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class UserDetailPage extends StatefulWidget {
-  final String userId;
+  final String userId; // 🔥 UID (auth + firestore aynı)
   final Map<String, dynamic> data;
 
   const UserDetailPage({
@@ -42,21 +42,34 @@ class _UserDetailPageState extends State<UserDetailPage> {
     });
   }
 
+  // -------------------------------------------------------------
+  // SAVE USER CHANGES
+  // -------------------------------------------------------------
   Future<void> save() async {
-    await FirebaseFirestore.instance.collection('users').doc(widget.userId).update({
-      'name': name.text,
-      'email': email.text,
-      'phone': phone.text,
-      'plateNumber': plate.text,
-    });
+    Map<String, dynamic> updateData = {
+      'name': name.text.trim(),
+      'email': email.text.trim(),
+      'phone': phone.text.trim(),
+    };
+
+    if (widget.data['role'] == 'driver') {
+      updateData['plateNumber'] = plate.text.trim();
+    }
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.userId)
+        .update(updateData);
 
     setState(() => editing = false);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Kullanıcı güncellendi.")),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text("Kullanıcı güncellendi.")));
   }
 
+  // -------------------------------------------------------------
+  // DELETE USER (Firestore)
+  // -------------------------------------------------------------
   Future<void> deleteUser() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -64,7 +77,10 @@ class _UserDetailPageState extends State<UserDetailPage> {
         title: const Text("Kullanıcıyı Sil"),
         content: const Text("Bu kullanıcı kalıcı olarak silinecek."),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("İptal")),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("İptal"),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
@@ -76,15 +92,19 @@ class _UserDetailPageState extends State<UserDetailPage> {
 
     if (confirm == true) {
       await FirebaseFirestore.instance.collection('users').doc(widget.userId).delete();
-      if (context.mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Kullanıcı silindi.")),
-        );
-      }
+
+      if (!mounted) return;
+
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Kullanıcı silindi.")),
+      );
     }
   }
 
+  // -------------------------------------------------------------
+  // INPUT DECORATION
+  // -------------------------------------------------------------
   InputDecoration inputStyle(String label) {
     return InputDecoration(
       labelText: label,
@@ -124,10 +144,13 @@ class _UserDetailPageState extends State<UserDetailPage> {
     );
   }
 
+  // -------------------------------------------------------------
+  // BUILD
+  // -------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     final desktop = MediaQuery.of(context).size.width > 850;
-    final role = widget.data['roleId'] == 'driver' ? "Şoför" : "Dispatch";
+    final role = widget.data['role'] == 'driver' ? "Şoför" : "Dispatch";
 
     return Scaffold(
       backgroundColor: const Color(0xfff5f6fa),
@@ -152,12 +175,14 @@ class _UserDetailPageState extends State<UserDetailPage> {
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
                   ),
                   const Spacer(),
+
                   if (!editing)
                     IconButton(
                       onPressed: () => setState(() => editing = true),
                       icon: const Icon(Icons.edit_outlined),
                       tooltip: "Düzenle",
                     ),
+
                   IconButton(
                     onPressed: deleteUser,
                     icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
@@ -168,7 +193,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
 
               const SizedBox(height: 24),
 
-              // ========================= CONTENT CARD =========================
+              // ========================= CARD =========================
               Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 520),
@@ -189,19 +214,16 @@ class _UserDetailPageState extends State<UserDetailPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          "Kullanıcı Bilgileri",
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                        ),
+                        const Text("Kullanıcı Bilgileri",
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 20),
 
-                        // -------- View Mode --------
+                        // ========================= VIEW MODE =========================
                         if (!editing) ...[
                           displayField("İsim", name.text),
                           displayField("E-posta", email.text),
                           displayField("Telefon", phone.text),
-                          if (widget.data['roleId'] == 'driver')
-                            displayField("Plaka", plate.text),
+                          if (role == "Şoför") displayField("Plaka", plate.text),
                           displayField("Rol", role),
 
                           const SizedBox(height: 8),
@@ -211,7 +233,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
                           ),
                         ],
 
-                        // -------- Edit Mode --------
+                        // ========================= EDIT MODE =========================
                         if (editing) ...[
                           TextField(controller: name, decoration: inputStyle("İsim")),
                           const SizedBox(height: 16),
@@ -222,7 +244,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
                           TextField(controller: phone, decoration: inputStyle("Telefon")),
                           const SizedBox(height: 16),
 
-                          if (widget.data['roleId'] == 'driver')
+                          if (role == "Şoför")
                             TextField(controller: plate, decoration: inputStyle("Plaka")),
 
                           const SizedBox(height: 26),
@@ -230,68 +252,36 @@ class _UserDetailPageState extends State<UserDetailPage> {
                           Row(
                             children: [
                               Expanded(
-                                child: Container(
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(12),
-                                    color: const Color(0xff2563eb),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(0xff2563eb).withOpacity(0.25),
-                                        blurRadius: 12,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xff2563eb),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      onTap: save,
-                                      child: const Center(
-                                        child: Text(
-                                          "Kaydet",
-                                          style: TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
                                     ),
                                   ),
+                                  onPressed: save,
+                                  child: const Text("Kaydet",
+                                      style: TextStyle(fontWeight: FontWeight.w600)),
                                 ),
                               ),
                               const SizedBox(width: 14),
                               Expanded(
-                                child: Container(
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(12),
-                                    color: Colors.white,
-                                    border: Border.all(color: Colors.grey.shade300),
-                                  ),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
+                                child: OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      onTap: cancelEdit,
-                                      child: const Center(
-                                        child: Text(
-                                          "İptal",
-                                          style: TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.black87,
-                                          ),
-                                        ),
-                                      ),
                                     ),
                                   ),
+                                  onPressed: cancelEdit,
+                                  child: const Text("İptal",
+                                      style: TextStyle(fontWeight: FontWeight.w600)),
                                 ),
                               ),
                             ],
-                          )
+                          ),
                         ]
                       ],
                     ),

@@ -3,9 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dispatch_job_detail_page.dart';
 
 class DispatchActiveCompletedPage extends StatefulWidget {
-  final String dispatchId;
+  final String dispatchUid;
 
-  const DispatchActiveCompletedPage({super.key, required this.dispatchId});
+  const DispatchActiveCompletedPage({super.key, required this.dispatchUid});
 
   @override
   State<DispatchActiveCompletedPage> createState() =>
@@ -17,8 +17,9 @@ class _DispatchActiveCompletedPageState
   final TextEditingController _search = TextEditingController();
   String search = "";
 
-  bool loadingDrivers = true;
+  bool driversLoading = true;
 
+  /// Map: uid -> { name, plateNumber }
   final Map<String, Map<String, dynamic>> drivers = {};
 
   bool get isDesktop => MediaQuery.of(context).size.width >= 900;
@@ -27,35 +28,44 @@ class _DispatchActiveCompletedPageState
   @override
   void initState() {
     super.initState();
-    loadDrivers();
+    _loadDrivers();
   }
 
-  Future<void> loadDrivers() async {
+  // ---------------------------------------------------------------------------
+  // 🔹 TÜM ŞOFÖRLERİ YÜKLE (UID tabanlı)
+  // ---------------------------------------------------------------------------
+  Future<void> _loadDrivers() async {
     final snap = await FirebaseFirestore.instance
         .collection("users")
-        .where("roleId", isEqualTo: "driver")
+        .where("role", isEqualTo: "driver")
         .get();
 
     for (var d in snap.docs) {
-      drivers[d["driverId"]] = {
+      drivers[d.id] = {
         "name": d["name"] ?? "-",
-        "plate": d["plateNumber"] ?? "-"
+        "plate": d["plateNumber"] ?? "-",
       };
     }
 
-    setState(() => loadingDrivers = false);
+    setState(() => driversLoading = false);
   }
 
+  // ---------------------------------------------------------------------------
+  // 🔹 JOBS STREAM (UID tabanlı)
+  // ---------------------------------------------------------------------------
   Stream<List<QueryDocumentSnapshot>> _jobs(List<String> statuses) {
     return FirebaseFirestore.instance
         .collection("jobs")
-        .where("assignedBy", isEqualTo: widget.dispatchId)
+        .where("assignedByUid", isEqualTo: widget.dispatchUid)
         .where("status", whereIn: statuses)
         .orderBy("createdAt", descending: true)
         .snapshots()
         .map((s) => s.docs);
   }
 
+  // ---------------------------------------------------------------------------
+  // 🔹 STATUS COLOR
+  // ---------------------------------------------------------------------------
   Color _statusColor(String status) {
     switch (status) {
       case "approved":
@@ -69,9 +79,12 @@ class _DispatchActiveCompletedPageState
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // 🔹 JOB CARD
+  // ---------------------------------------------------------------------------
   Widget _jobCard(Map<String, dynamic> j, String jobId) {
-    final driverId = j["assignedTo"] ?? "";
-    final info = drivers[driverId] ?? {"name": driverId, "plate": "-"};
+    final driverUid = j["assignedToUid"] ?? "";
+    final info = drivers[driverUid] ?? {"name": driverUid, "plate": "-"};
 
     final status = j["status"];
     final sc = _statusColor(status);
@@ -150,20 +163,24 @@ class _DispatchActiveCompletedPageState
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // 🔹 JOB LIST BUILDER
+  // ---------------------------------------------------------------------------
   Widget _jobList(Stream<List<QueryDocumentSnapshot>> stream) {
     return StreamBuilder(
       stream: stream,
       builder: (_, snap) {
-        if (!snap.hasData || loadingDrivers) {
+        if (!snap.hasData || driversLoading) {
           return const Center(child: CircularProgressIndicator());
         }
 
         var docs = snap.data!;
 
+        // 🔍 SEARCH FILTER (name / plate)
         docs = docs.where((d) {
           final j = d.data() as Map<String, dynamic>;
-          final driverId = j["assignedTo"];
-          final drv = drivers[driverId];
+          final driverUid = j["assignedToUid"];
+          final drv = drivers[driverUid];
 
           if (drv == null) return false;
 
@@ -202,6 +219,9 @@ class _DispatchActiveCompletedPageState
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // 🔹 BUILD
+  // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -252,6 +272,7 @@ class _DispatchActiveCompletedPageState
 
           const SizedBox(height: 16),
 
+          // TAB BAR
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: const TabBar(
@@ -259,19 +280,21 @@ class _DispatchActiveCompletedPageState
               labelColor: accent,
               unselectedLabelColor: Colors.grey,
               tabs: [
-                Tab(text: "Onaylanan"),
+                Tab(text: "Aktif"),
                 Tab(text: "Tamamlanan"),
               ],
             ),
           ),
+
           const SizedBox(height: 10),
 
+          // TAB CONTENT
           Expanded(
             child: Container(
               color: const Color(0xFFF5F6FA),
               child: TabBarView(
                 children: [
-                  _jobList(_jobs(["approved"])),
+                  _jobList(_jobs(["approved", "active"])),
                   _jobList(_jobs(["completed"])),
                 ],
               ),

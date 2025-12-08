@@ -9,9 +9,9 @@ class CompletedJobDetailsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final createdAt = job['createdAt']?.toDate();
-    final approvedAt = job['approvedAt']?.toDate();
-    final completedAt = job['completedAt']?.toDate();
+    final createdAt = (job['createdAt'] as Timestamp?)?.toDate();
+    final approvedAt = (job['approvedAt'] as Timestamp?)?.toDate();
+    final completedAt = (job['completedAt'] as Timestamp?)?.toDate();
 
     String durationText = "-";
 
@@ -31,67 +31,25 @@ class CompletedJobDetailsPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            /// --------------------------------------------------------------
-            /// YÜK BİLGİSİ BAŞLIK KARTI
-            /// --------------------------------------------------------------
             _headerCard(job['cargoInfo'] ?? "-"),
 
             const SizedBox(height: 24),
 
-            /// --------------------------------------------------------------
-            /// YÜKLEME
-            /// --------------------------------------------------------------
-            _sectionTitle("Yükleme Limanı"),
+            _sectionTitle("Yükleme Noktası"),
             _infoBox(job['loadPort'] ?? "-"),
 
             const SizedBox(height: 24),
 
-            /// --------------------------------------------------------------
-            /// VARIŞ
-            /// --------------------------------------------------------------
-            _sectionTitle("Varış Limanı"),
+            _sectionTitle("Varış Noktası"),
             _infoBox(job['unloadPort'] ?? "-"),
 
             const SizedBox(height: 24),
 
-            /// --------------------------------------------------------------
-            /// DISPATCH
-            /// --------------------------------------------------------------
-            _sectionTitle("Dispatch"),
-            FutureBuilder<QuerySnapshot>(
-              future: FirebaseFirestore.instance
-                  .collection('users')
-                  .where('dispatchId', isEqualTo: job['assignedBy'])
-                  .limit(1)
-                  .get(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return _infoBox("Yükleniyor...");
-                }
-
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return _infoBox("Bulunamadı");
-                }
-
-                final data = snapshot.data!.docs.first.data() as Map<String, dynamic>;
-                final name = data['name'] ?? "Bilinmiyor";
-                final phone = data['phone'] ?? "-";
-
-                return Column(
-                  children: [
-                    _infoBox(name),
-                    const SizedBox(height: 10),
-                    _infoBox("Telefon: $phone"),
-                  ],
-                );
-              },
-            ),
+            _sectionTitle("Dispatch (Görevi Veren)"),
+            _dispatchInfo(job['assignedByUid']),
 
             const SizedBox(height: 24),
 
-            /// --------------------------------------------------------------
-            /// TARİHLER
-            /// --------------------------------------------------------------
             _sectionTitle("İşlem Tarihleri"),
             _dateRow("Oluşturulma", createdAt),
             _dateRow("Onaylanma", approvedAt),
@@ -99,9 +57,6 @@ class CompletedJobDetailsPage extends StatelessWidget {
 
             const SizedBox(height: 24),
 
-            /// --------------------------------------------------------------
-            /// TOPLAM SÜRE
-            /// --------------------------------------------------------------
             _sectionTitle("Toplam İş Süresi"),
             _infoBox(durationText),
           ],
@@ -110,9 +65,44 @@ class CompletedJobDetailsPage extends StatelessWidget {
     );
   }
 
-  /// -----------------------------------------------------------------
-  /// PREMIUM TARZ BAŞLIK KARTI
-  /// -----------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // 🔥 DISPATCH USER BİLGİLERİ — YENİ MİMARİ (assignedBy = UID)
+  // ---------------------------------------------------------------------------
+  Widget _dispatchInfo(String? dispatchUid) {
+    if (dispatchUid == null || dispatchUid.isEmpty) {
+      return _infoBox("Bilgi bulunamadı");
+    }
+
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection("users").doc(dispatchUid).get(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return _infoBox("Yükleniyor...");
+        }
+
+        if (!snapshot.data!.exists) {
+          return _infoBox("Dispatch bulunamadı");
+        }
+
+        final data = snapshot.data!.data() as Map<String, dynamic>;
+
+        final name = data["name"] ?? "-";
+        final phone = data["phone"] ?? "-";
+
+        return Column(
+          children: [
+            _infoBox(name),
+            const SizedBox(height: 10),
+            _infoBox("Telefon: $phone"),
+          ],
+        );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 🎨 HEADER CARD
+  // ---------------------------------------------------------------------------
   Widget _headerCard(String text) {
     return Container(
       width: double.infinity,
@@ -152,9 +142,9 @@ class CompletedJobDetailsPage extends StatelessWidget {
     );
   }
 
-  /// -----------------------------------------------------------------
-  /// BÖLÜM BAŞLIĞI
-  /// -----------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // 🎨 SECTION TITLE
+  // ---------------------------------------------------------------------------
   Widget _sectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -169,9 +159,9 @@ class CompletedJobDetailsPage extends StatelessWidget {
     );
   }
 
-  /// -----------------------------------------------------------------
-  /// PREMIUM BİLGİ KUTUSU — RENKSİZ
-  /// -----------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // 🎨 BASIC INFO BOX
+  // ---------------------------------------------------------------------------
   Widget _infoBox(String text) {
     return Container(
       width: double.infinity,
@@ -192,9 +182,9 @@ class CompletedJobDetailsPage extends StatelessWidget {
     );
   }
 
-  /// -----------------------------------------------------------------
-  /// TARİH SATIRI
-  /// -----------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // 🎨 DATE ROW
+  // ---------------------------------------------------------------------------
   Widget _dateRow(String label, DateTime? date) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10),

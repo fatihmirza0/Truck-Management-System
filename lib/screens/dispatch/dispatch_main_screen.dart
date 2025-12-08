@@ -8,7 +8,7 @@ import 'dispatch_wait_reject_page.dart';
 import 'dispatch_active_completed_page.dart';
 
 class DispatchMainScreen extends StatefulWidget {
-  const DispatchMainScreen({super.key});
+  const DispatchMainScreen({super.key, required uid});
 
   @override
   State<DispatchMainScreen> createState() => _DispatchMainScreenState();
@@ -23,39 +23,45 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
   static const Color sidebar = Color(0xFF111827);
   static const Color accent = Color(0xFF2563EB);
 
-  String? dispatchId;
+  String? dispatchUid;
   bool loading = true;
 
-  // ---------------------------------------------------------------------------
-  // DISPATCH ID YÜKLE
-  // ---------------------------------------------------------------------------
+  // ----------------------------------------------------------
+  // 🔹 UID YÜKLE (dispatcher)
+  // ----------------------------------------------------------
   @override
   void initState() {
     super.initState();
-    _loadDispatchId();
+    _loadDispatchUid();
   }
 
-  Future<void> _loadDispatchId() async {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
+  Future<void> _loadDispatchUid() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
 
-    final snap = await FirebaseFirestore.instance
-        .collection("users")
-        .doc(uid)
-        .get();
+    if (uid == null) {
+      setState(() => loading = false);
+      return;
+    }
 
-    dispatchId = snap.data()?["dispatchId"];
+    // Dispatch bilgisi sadece UID’den gelir.
+    final snap =
+    await FirebaseFirestore.instance.collection("users").doc(uid).get();
+
+    if (snap.exists && snap.data()?["role"] == "dispatch") {
+      dispatchUid = uid;
+    }
 
     setState(() => loading = false);
   }
 
-  // ---------------------------------------------------------------------------
-  // SAYFALAR
-  // ---------------------------------------------------------------------------
+  // ----------------------------------------------------------
+  // 🔹 SAYFALAR
+  // ----------------------------------------------------------
   List<Widget> get pages => [
-    const CreateJobPage(),
+    const CreateJobPage(), // → yeni mimaride otomatik UID çekecek
     const AddDriverPage(),
-    DispatchWaitRejectPage(dispatchId: dispatchId!),
-    DispatchActiveCompletedPage(dispatchId: dispatchId!),
+    DispatchWaitRejectPage(dispatchUid: dispatchUid!),
+    DispatchActiveCompletedPage(dispatchUid: dispatchUid!),
   ];
 
   List<String> get titles => [
@@ -79,9 +85,9 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
     Icons.check_circle_outline,
   ];
 
-  // ---------------------------------------------------------------------------
-  // BUILD
-  // ---------------------------------------------------------------------------
+  // ----------------------------------------------------------
+  // 🔹 BUILD
+  // ----------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     if (loading) {
@@ -94,30 +100,31 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
     return isDesktop ? _desktop() : _mobile();
   }
 
-  // ---------------------------------------------------------------------------
+  // ----------------------------------------------------------
   // 📱 MOBILE UI
-  // ---------------------------------------------------------------------------
+  // ----------------------------------------------------------
   Widget _mobile() {
     return Scaffold(
       backgroundColor: bg,
+
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0.6,
         centerTitle: true,
         title: Column(
           children: [
-            Text(
+            const Text(
               "Truck Management",
               style: TextStyle(
-                color: Colors.grey.shade900,
+                color: Colors.black87,
                 fontWeight: FontWeight.w700,
                 fontSize: 17,
               ),
             ),
-            const SizedBox(height: 3),
-            const Text(
+            SizedBox(height: 3),
+            Text(
               "Dispatch Paneli",
-              style: TextStyle(color: Colors.grey, fontSize: 12),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
             ),
           ],
         ),
@@ -127,7 +134,7 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
       ),
 
       body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
+        duration: Duration(milliseconds: 250),
         child: pages[_index],
       ),
 
@@ -136,7 +143,6 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
         onTap: (i) => setState(() => _index = i),
         selectedItemColor: accent,
         unselectedItemColor: Colors.grey,
-        backgroundColor: Colors.white,
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(
@@ -164,15 +170,15 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
+  // ----------------------------------------------------------
   // 🖥️ DESKTOP UI
-  // ---------------------------------------------------------------------------
+  // ----------------------------------------------------------
   Widget _desktop() {
     return Scaffold(
       backgroundColor: bg,
       body: Row(
         children: [
-          // ==== LEFT SIDEBAR ====
+          // ---- Sidebar ----
           Container(
             width: 250,
             decoration: const BoxDecoration(
@@ -190,7 +196,6 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
               children: [
                 const SizedBox(height: 40),
 
-                // LOGO
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 22),
                   child: Row(
@@ -224,7 +229,6 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
 
                 const SizedBox(height: 30),
 
-                // MENU ITEMS
                 _menu("İş Oluştur", Icons.assignment_outlined, 0),
                 _menu("Şoför Ekle", Icons.person_add_outlined, 1),
                 _menu("Bekleyen İşler", Icons.watch_later_outlined, 2),
@@ -239,7 +243,7 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
             ),
           ),
 
-          // ==== MAIN CONTENT ====
+          // ---- Main Area ----
           Expanded(
             child: Column(
               children: [
@@ -261,16 +265,12 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
                       Text(
                         titles[_index],
                         style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                        ),
+                            fontSize: 22, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(width: 10),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
+                        padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
                           color: accent.withOpacity(0.10),
                           borderRadius: BorderRadius.circular(50),
@@ -281,10 +281,7 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
                             const SizedBox(width: 6),
                             Text(
                               subTitles[_index],
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: accent,
-                              ),
+                              style: const TextStyle(fontSize: 12, color: accent),
                             ),
                           ],
                         ),
@@ -295,10 +292,10 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
 
                 Expanded(
                   child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
+                    duration: Duration(milliseconds: 250),
                     child: pages[_index],
                   ),
-                ),
+                )
               ],
             ),
           ),
@@ -307,9 +304,9 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // MENU ITEM
-  // ---------------------------------------------------------------------------
+  // ----------------------------------------------------------
+  // 🔹 MENU ITEM
+  // ----------------------------------------------------------
   Widget _menu(String text, IconData icon, int idx) {
     final selected = _index == idx;
 
@@ -335,8 +332,7 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
             ),
             const SizedBox(width: 12),
             Icon(icon,
-                color: Colors.white.withOpacity(selected ? 1 : 0.7),
-                size: 20),
+                color: Colors.white.withOpacity(selected ? 1 : 0.7), size: 20),
             const SizedBox(width: 12),
             Text(
               text,
@@ -352,15 +348,15 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // LOGOUT BUTTON
-  // ---------------------------------------------------------------------------
+  // ----------------------------------------------------------
+  // 🔹 LOGOUT
+  // ----------------------------------------------------------
   Widget _logoutBtn({required bool isDesktop}) {
     return InkWell(
       borderRadius: BorderRadius.circular(90),
       onTap: _logoutDialog,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: EdgeInsets.symmetric(horizontal: isDesktop ? 14 : 10, vertical: 10),
         decoration: BoxDecoration(
           color: isDesktop ? Colors.white.withOpacity(0.06) : Colors.transparent,
           borderRadius: BorderRadius.circular(90),
@@ -385,15 +381,12 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // LOGOUT CONFIRM
-  // ---------------------------------------------------------------------------
   Future<void> _logoutDialog() async {
     final res = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text("Oturumu Kapat"),
-        content: const Text("Hesabınızdan çıkış yapmak istiyor musunuz?"),
+        content: const Text("Çıkış yapmak istiyor musunuz?"),
         actions: [
           TextButton(
             child: const Text("İptal"),

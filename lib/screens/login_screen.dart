@@ -42,7 +42,6 @@ class _LoginScreenState extends State<LoginScreen>
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
 
-    // 1️⃣ Ön validasyon
     if (email.isEmpty || !email.contains('@')) {
       setState(() => errorMessage = "Geçerli bir e-posta girin");
       return;
@@ -58,34 +57,39 @@ class _LoginScreenState extends State<LoginScreen>
     });
 
     try {
-      // 2️⃣ Firebase Auth ile giriş
-      final userCredential = await FirebaseAuth.instance
+      // 🔥 Firebase Auth login
+      final auth = await FirebaseAuth.instance
           .signInWithEmailAndPassword(email: email, password: password);
 
-      final uid = userCredential.user!.uid;
+      final uid = auth.user!.uid;
 
-      // 3️⃣ Firestore’dan kullanıcı verilerini çek
-      final userDoc =
-          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      // 🔥 Firestore user bilgisi
+      final snap =
+      await FirebaseFirestore.instance.collection('users').doc(uid).get();
 
-      if (!userDoc.exists) {
+      if (!snap.exists) {
         setState(() => errorMessage = "Kullanıcı verisi bulunamadı");
         return;
       }
 
-      final data = userDoc.data()!;
-      final roleId = data['roleId'] ?? '';
-      final driverId = data['driverId'] ?? '';
+      final data = snap.data()!;
+      final role = data['role'] ?? '';
 
-      // 4️⃣ Kullanıcı rolüne göre yönlendirme
-      if (roleId == 'manager') {
+      // 🔥 UID direkt gönderiliyor, başka ID yok.
+      if (role == 'manager') {
         Navigator.pushReplacementNamed(context, '/manager');
-      } else if (roleId == 'dispatch') {
-        Navigator.pushReplacementNamed(context, '/dispatch');
-      } else if (roleId == 'driver') {
-        Navigator.pushReplacementNamed(context, '/driver', arguments: {
-          'driverId': driverId,
-        });
+      } else if (role == 'dispatch') {
+        Navigator.pushReplacementNamed(
+          context,
+          '/dispatch',
+          arguments: {"uid": uid},
+        );
+      } else if (role == 'driver') {
+        Navigator.pushReplacementNamed(
+          context,
+          '/driver',
+          arguments: {"uid": uid},
+        );
       } else {
         setState(() => errorMessage = "Bilinmeyen kullanıcı tipi");
       }
@@ -98,14 +102,13 @@ class _LoginScreenState extends State<LoginScreen>
           setState(() => errorMessage = "Geçersiz e-posta veya şifre");
           break;
         case 'invalid-email':
-          setState(() => errorMessage = "Geçersiz e-posta formatı");
+          setState(() => errorMessage = "E-posta formatı hatalı");
           break;
         default:
           setState(() => errorMessage = "Hata: ${e.message}");
       }
     } catch (e) {
-      // Diğer beklenmedik hatalar
-      setState(() => errorMessage = "Beklenmeyen hata: ${e.toString()}");
+      setState(() => errorMessage = "Beklenmeyen hata: $e");
     } finally {
       setState(() => isLoading = false);
     }
@@ -141,9 +144,11 @@ class _LoginScreenState extends State<LoginScreen>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  // ----------------------------
+                  // DESKTOP SOL TARAF
+                  // ----------------------------
                   if (isDesktop)
                     Expanded(
-                      flex: 1,
                       child: Padding(
                         padding: const EdgeInsets.only(right: 40),
                         child: Column(
@@ -153,23 +158,22 @@ class _LoginScreenState extends State<LoginScreen>
                               child: const Icon(
                                 Icons.local_shipping_rounded,
                                 color: Colors.white,
-                                size: 115,
+                                size: 120,
                               ),
                             ),
                             const SizedBox(height: 20),
-                            Text(
+                            const Text(
                               "Truck Management System",
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 32,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
-                                letterSpacing: 0.5,
                               ),
                             ),
                             const SizedBox(height: 10),
-                            Text(
-                              "Kurumsal Araç Takip ve Görev Yönetimi",
+                            const Text(
+                              "Kurumsal Araç Takip ve İş Yönetimi",
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: Colors.white70,
@@ -180,6 +184,10 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
                       ),
                     ),
+
+                  // ----------------------------
+                  // GİRİŞ KARTI
+                  // ----------------------------
                   Expanded(
                     flex: isDesktop ? 1 : 2,
                     child: Card(
@@ -214,6 +222,8 @@ class _LoginScreenState extends State<LoginScreen>
                               ),
                               const SizedBox(height: 20),
                             ],
+
+                            // EMAIL
                             TextField(
                               controller: emailController,
                               decoration: InputDecoration(
@@ -225,6 +235,8 @@ class _LoginScreenState extends State<LoginScreen>
                               ),
                             ),
                             const SizedBox(height: 20),
+
+                            // PASSWORD
                             TextField(
                               controller: passwordController,
                               obscureText: !_isPasswordVisible,
@@ -240,48 +252,55 @@ class _LoginScreenState extends State<LoginScreen>
                                         ? Icons.visibility_off
                                         : Icons.visibility,
                                   ),
-                                  onPressed: () => setState(() =>
-                                      _isPasswordVisible = !_isPasswordVisible),
+                                  onPressed: () {
+                                    setState(() {
+                                      _isPasswordVisible =
+                                      !_isPasswordVisible;
+                                    });
+                                  },
                                 ),
                               ),
                             ),
+
                             const SizedBox(height: 30),
+
+                            // LOGIN BUTONU
                             isLoading
                                 ? RotationTransition(
-                                    turns: Tween(begin: 0.0, end: 1.0)
-                                        .animate(_animationController),
-                                    child: Icon(
-                                      Icons.local_shipping_rounded,
-                                      size: 55,
-                                      color: primaryColor,
-                                    ),
-                                  )
+                              turns: Tween(begin: 0.0, end: 1.0)
+                                  .animate(_animationController),
+                              child: Icon(Icons.local_shipping_rounded,
+                                  size: 55, color: primaryColor),
+                            )
                                 : SizedBox(
-                                    width: double.infinity,
-                                    height: 52,
-                                    child: ElevatedButton(
-                                      onPressed: login,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: primaryColor,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(14),
-                                        ),
-                                      ),
-                                      child: const Text(
-                                        "Giriş Yap",
-                                        style: TextStyle(
-                                            fontSize: 18, color: Colors.white),
-                                      ),
-                                    ),
+                              width: double.infinity,
+                              height: 52,
+                              child: ElevatedButton(
+                                onPressed: login,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: primaryColor,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                    BorderRadius.circular(14),
                                   ),
+                                ),
+                                child: const Text(
+                                  "Giriş Yap",
+                                  style: TextStyle(
+                                      fontSize: 18, color: Colors.white),
+                                ),
+                              ),
+                            ),
+
                             const SizedBox(height: 20),
+
                             if (errorMessage != null)
                               Text(
                                 errorMessage!,
                                 style: const TextStyle(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.w500),
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.w500,
+                                ),
                                 textAlign: TextAlign.center,
                               ),
                           ],

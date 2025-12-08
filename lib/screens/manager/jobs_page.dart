@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -17,8 +18,7 @@ import 'package:flutter/foundation.dart';
 /// ###########################################################
 
 class JobsPage extends StatefulWidget {
-  final String managerId;
-  const JobsPage({super.key, required this.managerId});
+  const JobsPage({super.key,});
 
   @override
   State<JobsPage> createState() => _JobsPageState();
@@ -43,16 +43,28 @@ class _JobsPageState extends State<JobsPage> {
   }
 
   Future<void> _loadUsers() async {
-    final snap = await FirebaseFirestore.instance.collection("users").get();
-    for (var doc in snap.docs) {
-      final data = doc.data();
-      if (data["driverId"] != null) {
-        userCache[data["driverId"]] = data["name"] ?? "-";
-      }
-      if (data["dispatchId"] != null) {
-        userCache[data["dispatchId"]] = data["name"] ?? "-";
-      }
+    userCache.clear();
+
+    // Sürücüleri çek
+    final drivers = await FirebaseFirestore.instance
+        .collection("users")
+        .where("role", isEqualTo: "driver")
+        .get();
+
+    for (var doc in drivers.docs) {
+      userCache[doc.id] = doc.data()["name"] ?? "-";
     }
+
+    // Dispatch kullanıcılarını çek
+    final dispatchers = await FirebaseFirestore.instance
+        .collection("users")
+        .where("role", isEqualTo: "dispatch")
+        .get();
+
+    for (var doc in dispatchers.docs) {
+      userCache[doc.id] = doc.data()["name"] ?? "-";
+    }
+
     setState(() {});
   }
 
@@ -75,8 +87,23 @@ class _JobsPageState extends State<JobsPage> {
     );
   }
 
-  Future<void> _approve(String id) => _updateJob(id, {"status": "approved"});
-  Future<void> _reject(String id) => _updateJob(id, {"status": "declined"});
+  Future<void> _approve(String id) async {
+    final managerUid = FirebaseAuth.instance.currentUser!.uid;
+    await _updateJob(id, {
+      "status": "approved",
+      "approvedByUid": managerUid,
+      "approvedAt": FieldValue.serverTimestamp(),
+    });
+  }
+  Future<void> _reject(String id) async {
+    final managerUid = FirebaseAuth.instance.currentUser!.uid;
+
+    await _updateJob(id, {
+      "status": "declined",
+      "declinedByUid": managerUid,
+      "declinedAt": FieldValue.serverTimestamp(),
+    });
+  }
 
   // =================== DETAY AÇMA ===================
   void _openDetail(Map<String, dynamic> job, String id) {
@@ -160,11 +187,11 @@ class _JobsPageState extends State<JobsPage> {
                             return DataRow(
                               cells: [
                                 _cell(j["cargoInfo"], () => _openDetail(j, d.id)),
-                                _cell(uname(j["assignedTo"]),
+                                _cell(uname(j["assignedToUid"]),
                                         () => _openDetail(j, d.id)),
                                 _cell(j["loadPort"], () => _openDetail(j, d.id)),
                                 _cell(j["unloadPort"], () => _openDetail(j, d.id)),
-                                _cell(uname(j["assignedBy"]),
+                                _cell(uname(j["assignedByUid"]),
                                         () => _openDetail(j, d.id)),
                                 DataCell(
                                   Row(
@@ -209,7 +236,7 @@ class _JobsPageState extends State<JobsPage> {
                               const TextStyle(fontWeight: FontWeight.bold),
                             ),
                             subtitle: Text(
-                              "${uname(j["assignedTo"])} | ${uname(j["assignedBy"])} • ${j["loadPort"]} → ${j["unloadPort"]}",
+                              "${uname(j["assignedToUid"])} | ${uname(j["assignedByUid"])} • ${j["loadPort"]} → ${j["unloadPort"]}",
                             ),
                             trailing: _status == "pending"
                                 ? Row(
@@ -316,10 +343,10 @@ class JobDetailPanel extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _info("Yük", job["cargoInfo"]),
-                  _info("Şoför", uname(job["assignedTo"])),
+                  _info("Şoför", uname(job["assignedToUid"])),
                   _info("Yükleme", job["loadPort"]),
                   _info("Varış", job["unloadPort"]),
-                  _info("Dispatch", uname(job["assignedBy"])),
+                  _info("Dispatch", uname(job["assignedByUid"])),
                   const SizedBox(height: 16),
 
                   // Belgeler sadece completed ise

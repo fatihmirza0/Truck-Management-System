@@ -1,26 +1,15 @@
+// ------------------------------------------------------------
+//  REPORT SCREEN – FULLY REFACTORED (UID BASED ARCHITECTURE)
+// ------------------------------------------------------------
 import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:lojistik/utils/report_exporter.dart';
 
-import '/utils/report_exporter.dart';
-import '/utils/route_utils.dart';
-
-/// ------------------------------------------------------------
-/// HAFTA HESAPLAMA → Pazartesi başlangıçlı aynı haftada mı?
-/// ------------------------------------------------------------
-extension WeekStartExtension on DateTime {
-  DateTime get weekStart {
-    final dayOnly = DateTime(year, month, day);
-    final diff = dayOnly.weekday - DateTime.monday; // Pazartesi = 1
-    return dayOnly.subtract(Duration(days: diff));
-  }
-}
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
-
   @override
   State<ReportScreen> createState() => _ReportScreenState();
 }
@@ -31,170 +20,133 @@ class _ReportScreenState extends State<ReportScreen> {
   List<DocumentSnapshot> users = [];
   List<DocumentSnapshot> jobs = [];
 
-  // 🔥 FAST LOOKUP INDEX
+  /// UID tabanlı indexler
   Map<String, Map<String, dynamic>> driverIndex = {};
   Map<String, Map<String, dynamic>> dispatchIndex = {};
 
-  // 🔥 KPI
+  /// Sayısal istatistikler
   int todayJobs = 0;
   int weeklyJobs = 0;
   int monthlyJobs = 0;
 
-  // 🔥 COUNTERS
   Map<String, int> driverJobCount = {};
-  Map<String, double> driverKmCount = {};
+  Map<String, double> driverKm = {};
   Map<String, int> dispatchJobCount = {};
 
-  // 🔥 TOPS
-  String topDriverId = "-";
-  String topKmDriverId = "-";
-  String topDispatchId = "-";
-  double maxKm = 0;
+  List<int> monthlyChart = List.filled(12, 0);
 
-  // 🔥 MONTHLY CHART DATA (12 AY)
-  List<int> monthlyJobChart = List.filled(12, 0);
+  String topDriver = "-";
+  String topKmDriver = "-";
+  String topDispatch = "-";
+  double topKm = 0;
 
   @override
   void initState() {
     super.initState();
-    loadData();
+    _load();
   }
 
   // ------------------------------------------------------------
-  // FIRESTORE LOAD + INDEX BUILD
+  // MAIN LOADER
   // ------------------------------------------------------------
-  Future<void> loadData() async {
-    final u = await FirebaseFirestore.instance.collection("users").get();
-    final j = await FirebaseFirestore.instance.collection("jobs").get();
+  Future<void> _load() async {
+    try {
+      final userSnap =
+      await FirebaseFirestore.instance.collection("users").get();
+      final jobSnap =
+      await FirebaseFirestore.instance.collection("jobs").get();
 
-    users = u.docs;
-    jobs = j.docs;
+      users = userSnap.docs;
+      jobs = jobSnap.docs;
 
-    // INDEX BUILD
-    for (final doc in users) {
-      final data = doc.data() as Map<String, dynamic>;
-      final role = data["roleId"];
+      /// UID → kullanıcı bilgisi indexi
+      for (final doc in users) {
+        final d = doc.data() as Map<String, dynamic>;
+        final uid = doc.id;
 
-      if (role == "driver" && data["driverId"] != null) {
-        driverIndex[data["driverId"]] = data;
-      }
-
-      if (role == "dispatch" && data["dispatchId"] != null) {
-        dispatchIndex[data["dispatchId"]] = data;
-      }
-    }
-
-    await _calculateStats();
-    if (mounted) {
-      setState(() => loading = false);
-    }
-  }
-
-  // ------------------------------------------------------------
-  // STATS CALCULATION
-  // ------------------------------------------------------------
-  Future<void> _calculateStats() async {
-    final now = DateTime.now();
-    final nowWeekStart = now.weekStart;
-
-    for (final job in jobs) {
-      final data = job.data() as Map<String, dynamic>;
-      final createdAt = (data["createdAt"] as Timestamp).toDate();
-
-      final String? driverId = data["assignedTo"];
-      final String? dispatchId = data["assignedBy"];
-
-      // KPI
-      if (_isSameDay(createdAt, now)) todayJobs++;
-
-      if (createdAt.weekStart == nowWeekStart) {
-        weeklyJobs++;
-      }
-
-      if (createdAt.year == now.year && createdAt.month == now.month) {
-        monthlyJobs++;
-      }
-
-      // MONTHLY CHART
-      monthlyJobChart[createdAt.month - 1]++;
-
-      // DRIVER COUNT
-      if (driverId != null) {
-        driverJobCount[driverId] = (driverJobCount[driverId] ?? 0) + 1;
-      }
-
-      // DISPATCH COUNT
-      if (dispatchId != null) {
-        dispatchJobCount[dispatchId] = (dispatchJobCount[dispatchId] ?? 0) + 1;
-      }
-
-      // -----------------------------------------------------
-      // KM CALCULATION (CACHE + HAVERSINE BACKUP)
-      // -----------------------------------------------------
-      // -----------------------------------------------------
-// KM CALCULATION
-// -----------------------------------------------------
-      double km = 0;
-
-      if (data["distanceKm"] != null && data["distanceKm"] > 0) {
-        km = (data["distanceKm"] as num).toDouble();
-      } else {
-        // portları geocode et
-        final loc1 = await RouteUtils.geocode(data["loadPort"]);
-        final loc2 = await RouteUtils.geocode(data["unloadPort"]);
-
-        if (loc1 != null && loc2 != null) {
-
-          // 🔥 Google KM
-          km = await RouteUtils.getRouteKm(
-            loc1["lat"]!, loc1["lng"]!,
-            loc2["lat"]!, loc2["lng"]!,
-          );
-
-          // fallback düşükse haversine kullan
-          if (km < 1) {
-            km = RouteUtils.haversineKm(
-              loc1["lat"]!, loc1["lng"]!,
-              loc2["lat"]!, loc2["lng"]!,
-            );
-          }
-
-          // Firestore'a cachele (bir daha API çağrısı açmaz)
-          await FirebaseFirestore.instance.collection("jobs")
-              .doc(job.id).update({"distanceKm": km});
+        if (d["role"] == "driver") {
+          driverIndex[uid] = d;
+        }
+        if (d["role"] == "dispatch") {
+          dispatchIndex[uid] = d;
         }
       }
 
-      if (driverId != null) {
-        driverKmCount[driverId] = (driverKmCount[driverId] ?? 0) + km;
-      }
+      await _calculateStats();
 
-    }
-
-    // TOP DRIVER
-    if (driverJobCount.isNotEmpty) {
-      final sorted = driverJobCount.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      topDriverId = sorted.first.key;
-    }
-
-    // TOP KM DRIVER
-    if (driverKmCount.isNotEmpty) {
-      final sortedKm = driverKmCount.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      topKmDriverId = sortedKm.first.key;
-      maxKm = sortedKm.first.value;
-    }
-
-    // TOP DISPATCH
-    if (dispatchJobCount.isNotEmpty) {
-      final sortedD = dispatchJobCount.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      topDispatchId = sortedD.first.key;
+      if (mounted) setState(() => loading = false);
+    } catch (e) {
+      print("Report load error → $e");
     }
   }
 
-  bool _isSameDay(DateTime a, DateTime b) =>
+  // ------------------------------------------------------------
+  // CALCULATE STATS
+  // ------------------------------------------------------------
+  Future<void> _calculateStats() async {
+    final now = DateTime.now();
+    final weekStart = now.subtract(Duration(days: now.weekday - 1));
+
+    for (final doc in jobs) {
+      final j = doc.data() as Map<String, dynamic>;
+
+      final ts = j["createdAt"] as Timestamp?;
+      if (ts == null) continue;
+
+      final created = ts.toDate();
+      final driverUid = j["assignedToUid"];
+      final dispatchUid = j["assignedByUid"];
+
+      /// Tarihsel istatistikler
+      if (_sameDay(created, now)) todayJobs++;
+      if (created.isAfter(weekStart)) weeklyJobs++;
+      if (created.year == now.year && created.month == now.month) {
+        monthlyJobs++;
+      }
+
+      monthlyChart[created.month - 1]++;
+
+      /// ŞOFÖR ATAMA SAYISI
+      if (driverUid != null) {
+        driverJobCount[driverUid] = (driverJobCount[driverUid] ?? 0) + 1;
+      }
+
+      /// DISPATCH ATAMA SAYISI
+      if (dispatchUid != null) {
+        dispatchJobCount[dispatchUid] =
+            (dispatchJobCount[dispatchUid] ?? 0) + 1;
+      }
+
+      /// KM hesaplama
+      double km = (j["distanceKm"] ?? 0).toDouble();
+
+      if (driverUid != null) {
+        driverKm[driverUid] = (driverKm[driverUid] ?? 0) + km;
+      }
+    }
+
+    /// EN İYİLERİ BUL
+    if (driverJobCount.isNotEmpty) {
+      topDriver = driverJobCount.entries
+          .reduce((a, b) => a.value > b.value ? a : b)
+          .key;
+    }
+
+    if (driverKm.isNotEmpty) {
+      final max = driverKm.entries
+          .reduce((a, b) => a.value > b.value ? a : b);
+      topKmDriver = max.key;
+      topKm = max.value;
+    }
+
+    if (dispatchJobCount.isNotEmpty) {
+      topDispatch = dispatchJobCount.entries
+          .reduce((a, b) => a.value > b.value ? a : b)
+          .key;
+    }
+  }
+
+  bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
   // ------------------------------------------------------------
@@ -208,119 +160,101 @@ class _ReportScreenState extends State<ReportScreen> {
       );
     }
 
-    final isDesktop = MediaQuery.of(context).size.width > 1000;
-
     return Scaffold(
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "📦 Genel KPI",
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
-                      tooltip: "PDF dışa aktar",
-                      onPressed: _exportPdf,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.table_chart, color: Colors.green),
-                      tooltip: "Excel dışa aktar",
-                      onPressed: _exportExcel,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 15),
-            _kpiGrid(isDesktop),
+            _header(),
+            const SizedBox(height: 20),
+            _kpiCards(),
             const SizedBox(height: 40),
-
-            _title("📈 Aylık İş Dağılımı"),
-            const SizedBox(height: 10),
-            _monthlyChart(),
-
+            _section("📆 Aylık İş Dağılımı", _monthlyChartWidget()),
             const SizedBox(height: 40),
-            _title("🚚 Şoför KM Performansı"),
-            const SizedBox(height: 10),
-            _driverKmChart(),
-
+            _section("🚚 Şoför KM Performansı", _driverKmWidget()),
             const SizedBox(height: 40),
-            _title("🧑‍💼 Dispatch Performansı"),
-            const SizedBox(height: 10),
-            dispatchPerformanceChart(),
-
+            _section("🧑‍💼 Dispatch Performansı", _dispatchWidget()),
             const SizedBox(height: 40),
-            _title("👷 Şoför Tablosu"),
-            const SizedBox(height: 10),
-            _driverTable(),
+            _section("👷 Şoför Tablosu", _driverTableWidget()),
           ],
         ),
       ),
     );
   }
 
-
   // ------------------------------------------------------------
-  // KPI GRID
+  // HEADER
   // ------------------------------------------------------------
-  Widget _kpiGrid(bool isDesktop) {
-    return GridView.count(
-      crossAxisCount: isDesktop ? 3 : 1,
-      shrinkWrap: true,
-      childAspectRatio: isDesktop ? 3 : 2.2,
-      physics: const NeverScrollableScrollPhysics(),
+  Widget _header() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _kpiCard("Bugünkü İşler", todayJobs.toString()),
-        _kpiCard("Haftalık İşler", weeklyJobs.toString()),
-        _kpiCard("Aylık İşler", monthlyJobs.toString()),
-        _kpiCard("En Çok İş Yapan Şoför", _driverName(topDriverId)),
-        _kpiCard("En Çok KM Yapan Şoför", "${maxKm.toStringAsFixed(1)} km"),
-        _kpiCard("En Çok Atama Yapan Dispatch", _dispatchName(topDispatchId)),
+        const Text(
+          "📊 Genel KPI Raporu",
+          style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+        ),
+        Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
+              onPressed: _exportPdf,
+            ),
+            IconButton(
+              icon: const Icon(Icons.table_chart, color: Colors.green),
+              onPressed: _exportExcel,
+            ),
+          ],
+        ),
       ],
     );
   }
 
-  Widget _kpiCard(String title, String value) {
+  // ------------------------------------------------------------
+  // KPI CARDS
+  // ------------------------------------------------------------
+  Widget _kpiCards() {
+    return GridView.count(
+      shrinkWrap: true,
+      crossAxisCount: 3,
+      physics: const NeverScrollableScrollPhysics(),
+      childAspectRatio: 3,
+      children: [
+        _kpi("Bugünkü İşler", todayJobs.toString()),
+        _kpi("Haftalık İşler", weeklyJobs.toString()),
+        _kpi("Aylık İşler", monthlyJobs.toString()),
+        _kpi("En Çok İş Yapan Şoför", _driverName(topDriver)),
+        _kpi("En Çok KM Yapan Şoför", "${topKm.toStringAsFixed(1)} km"),
+        _kpi("En Çok Atama Yapan Dispatch", _dispatchName(topDispatch)),
+      ],
+    );
+  }
+
+  Widget _kpi(String title, String value) {
     return Container(
-      padding: const EdgeInsets.all(20),
       margin: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(20),
       decoration: _box(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: const TextStyle(color: Colors.grey)),
           const SizedBox(height: 10),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 22, fontWeight: FontWeight.bold)),
         ],
       ),
     );
   }
+
   // ------------------------------------------------------------
-  // 📈 MONTHLY CHART
+  // MONTHLY BAR CHART
   // ------------------------------------------------------------
-  Widget _monthlyChart() {
+  Widget _monthlyChartWidget() {
     return Container(
       height: 260,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: _box(),
       child: BarChart(
         BarChartData(
@@ -328,45 +262,25 @@ class _ReportScreenState extends State<ReportScreen> {
           gridData: const FlGridData(show: false),
           titlesData: FlTitlesData(
             bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                getTitlesWidget: (v, _) {
-                  const m = [
-                    "O",
-                    "Ş",
-                    "M",
-                    "N",
-                    "M",
-                    "H",
-                    "T",
-                    "A",
-                    "E",
-                    "E",
-                    "K",
-                    "A"
-                  ];
-                  if (v.toInt() < 0 || v.toInt() > 11) {
-                    return const SizedBox();
-                  }
-                  return Text(m[v.toInt()]);
-                },
-              ),
+              sideTitles: SideTitles(showTitles: true, getTitlesWidget: (v, _) {
+                const months = [
+                  "Oca", "Şub", "Mar", "Nis", "May", "Haz",
+                  "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"
+                ];
+                return Text(months[v.toInt()]);
+              }),
             ),
-            leftTitles: AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
+            leftTitles:
+            AxisTitles(sideTitles: SideTitles(showTitles: false)),
           ),
           barGroups: List.generate(12, (i) {
-            return BarChartGroupData(
-              x: i,
-              barRods: [
-                BarChartRodData(
-                  toY: monthlyJobChart[i].toDouble(),
-                  width: 18,
-                  color: Colors.blueAccent,
-                )
-              ],
-            );
+            return BarChartGroupData(x: i, barRods: [
+              BarChartRodData(
+                toY: monthlyChart[i].toDouble(),
+                width: 18,
+                color: Colors.blueAccent,
+              )
+            ]);
           }),
         ),
       ),
@@ -376,165 +290,76 @@ class _ReportScreenState extends State<ReportScreen> {
   // ------------------------------------------------------------
   // DRIVER KM CHART
   // ------------------------------------------------------------
-  Widget _driverKmChart() {
-    if (driverKmCount.isEmpty) {
+  Widget _driverKmWidget() {
+    if (driverKm.isEmpty) {
       return const Text("KM verisi bulunamadı.");
     }
 
-    final list = driverKmCount.entries.toList()
+    final sorted = driverKm.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: _box(),
-      height: list.length * 55,
       child: Column(
-        children: List.generate(list.length, (i) {
-          final id = list[i].key;
-          final km = list[i].value;
-          final name = _driverName(id);
-
+        children: sorted.map((e) {
+          final name = _driverName(e.key);
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               children: [
-                /// 🟩 Şoför adı
-                SizedBox(
-                  width: 160,
-                  child: Text(
-                    name,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                ),
-
-                /// 🟩 Yatay KM bar
+                SizedBox(width: 150, child: Text(name)),
                 Expanded(
-                  child: Stack(
-                    children: [
-                      Container(
-                        height: 22,
-                        decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(.25),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      LayoutBuilder(
-                        builder: (ctx, size) {
-                          final maxKm = list.first.value == 0 ? 1 : list.first.value;
-                          final ratio = km / maxKm;
-                          final width = ratio * size.maxWidth * .90; // FULL değil!
-
-                          return AnimatedContainer(
-                            duration: const Duration(milliseconds: 350),
-                            height: 22,
-                            width: width,
-                            decoration: BoxDecoration(
-                              color: Colors.green,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+                  child: LinearProgressIndicator(
+                    value: e.value / sorted.first.value,
+                    color: Colors.green,
+                    backgroundColor: Colors.green.withOpacity(.2),
                   ),
                 ),
-
                 const SizedBox(width: 10),
-
-                /// 🔥 KM sayısı net şekilde
-                Text(
-                  "${km.toStringAsFixed(1)} km",
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                ),
+                Text("${e.value.toStringAsFixed(1)} km"),
               ],
             ),
           );
-        }),
+        }).toList(),
       ),
     );
   }
 
   // ------------------------------------------------------------
-  // DISPATCH CHART
+  // DISPATCH PERFORMANCE
   // ------------------------------------------------------------
-  Widget dispatchPerformanceChart() {
-    final list = dispatchJobCount.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+  Widget _dispatchWidget() {
+    if (dispatchJobCount.isEmpty) {
+      return const Text("Dispatch verisi yok.");
+    }
 
-    if (list.isEmpty) return const Text("Henüz iş atayan dispatch yok.");
+    final sorted = dispatchJobCount.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: _box(),
-      height: list.length * 55,
       child: Column(
-        children: List.generate(list.length, (i) {
-          final id = list[i].key;
-          final count = list[i].value;
-          final name = _dispatchName(id);
-
+        children: sorted.map((e) {
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               children: [
-                /// 🔹 Dispatch adı
-                SizedBox(
-                  width: 140,
-                  child: Text(
-                    name == "Bilinmiyor" ? id : name,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                ),
-
-                /// 🔹 Bar
+                SizedBox(width: 150, child: Text(_dispatchName(e.key))),
                 Expanded(
-                  child: Stack(
-                    children: [
-                      Container(
-                        height: 22,
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(.3),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-
-                      /// oransal bar genişliği
-                      LayoutBuilder(
-                        builder: (ctx, size) {
-                          final maxCount = list.map((e) => e.value).reduce((a,b)=>a>b?a:b);
-
-                          /// En çok iş yapan bile %90 genişlikte olsun
-                          final ratio = count / maxCount;
-                          final width = ratio * size.maxWidth * .90;
-
-                          return AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
-                            height: 22,
-                            width: width,
-                            decoration: BoxDecoration(
-                              color: Colors.orange,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+                  child: LinearProgressIndicator(
+                    value: e.value / sorted.first.value,
+                    color: Colors.orange,
+                    backgroundColor: Colors.orange.withOpacity(.2),
                   ),
                 ),
-
                 const SizedBox(width: 10),
-
-                /// 🔥 sayı HER ZAMAN GÖRÜNÜR
-                Text(
-                  "$count",
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                ),
+                Text("${e.value} iş"),
               ],
             ),
           );
-        }),
+        }).toList(),
       ),
     );
   }
@@ -542,13 +367,11 @@ class _ReportScreenState extends State<ReportScreen> {
   // ------------------------------------------------------------
   // DRIVER TABLE
   // ------------------------------------------------------------
-  Widget _driverTable() {
-    final rows = driverJobCount.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+  Widget _driverTableWidget() {
+    if (driverJobCount.isEmpty) return const Text("Şoför verisi yok.");
 
-    if (rows.isEmpty) {
-      return const Text("Şoför verisi bulunamadı.");
-    }
+    final sorted = driverJobCount.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
 
     return Container(
       decoration: _box(),
@@ -557,68 +380,75 @@ class _ReportScreenState extends State<ReportScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.blueAccent.withOpacity(0.15),
+              color: Colors.blue.withOpacity(.15),
               borderRadius:
               const BorderRadius.vertical(top: Radius.circular(12)),
             ),
             child: const Row(
               children: [
-                Expanded(
-                  child: Text(
-                    "Şoför",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    "Plaka",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    "İş Sayısı",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    "Toplam KM",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
+                Expanded(child: Text("Şoför", style: TextStyle(fontWeight: FontWeight.bold))),
+                Expanded(child: Text("Plaka", style: TextStyle(fontWeight: FontWeight.bold))),
+                Expanded(child: Text("İş", style: TextStyle(fontWeight: FontWeight.bold))),
+                Expanded(child: Text("KM", style: TextStyle(fontWeight: FontWeight.bold))),
               ],
             ),
           ),
-          ...rows.map((e) {
-            final driver = driverIndex[e.key];
-            final km = driverKmCount[e.key] ?? 0;
-
+          ...sorted.map((e) {
+            final uid = e.key;
+            final d = driverIndex[uid];
             return Container(
               padding: const EdgeInsets.all(12),
               decoration: const BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: Colors.grey, width: 0.3),
-                ),
+                border: Border(bottom: BorderSide(color: Colors.black12)),
               ),
               child: Row(
                 children: [
-                  Expanded(child: Text(driver?["name"] ?? "Bilinmiyor")),
-                  Expanded(child: Text(driver?["plateNumber"] ?? "-")),
-                  Expanded(child: Text("${e.value} iş")),
-                  Expanded(child: Text("${km.toStringAsFixed(1)} km")),
+                  Expanded(child: Text(d?["name"] ?? "-")),
+                  Expanded(child: Text(d?["plateNumber"] ?? "-")),
+                  Expanded(child: Text("${e.value}")),
+                  Expanded(child: Text("${(driverKm[uid] ?? 0).toStringAsFixed(1)} km")),
                 ],
               ),
             );
-          }).toList(),
+          })
         ],
       ),
     );
   }
 
   // ------------------------------------------------------------
-  // EXPORT HANDLERS
+  // HELPERS
   // ------------------------------------------------------------
+  String _driverName(String uid) =>
+      driverIndex[uid]?["name"] ?? "Bilinmiyor";
+
+  String _dispatchName(String uid) =>
+      dispatchIndex[uid]?["name"] ?? "Bilinmiyor";
+
+  BoxDecoration _box() => BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(14),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withOpacity(.08),
+        blurRadius: 8,
+        offset: const Offset(0, 3),
+      )
+    ],
+  );
+
+  Widget _section(String title, Widget child) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title,
+            style:
+            const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 12),
+        child,
+      ],
+    );
+  }
   Future<void> _exportPdf() async {
     final drivers = driverJobCount.entries.map((e) {
       final d = driverIndex[e.key];
@@ -626,7 +456,7 @@ class _ReportScreenState extends State<ReportScreen> {
         "name": d?["name"] ?? "Bilinmiyor",
         "plate": d?["plateNumber"] ?? "-",
         "jobs": e.value,
-        "km": (driverKmCount[e.key] ?? 0).toStringAsFixed(1),
+        "km": (driverKm[e.key] ?? 0).toStringAsFixed(1),
       };
     }).toList();
 
@@ -641,7 +471,7 @@ class _ReportScreenState extends State<ReportScreen> {
     await ReportExporter.exportPdf(
       drivers: drivers,
       dispatchers: dispatchers,
-      monthlyChart: monthlyJobChart,
+      monthlyChart: monthlyChart,
       today: todayJobs,
       weekly: weeklyJobs,
       monthly: monthlyJobs,
@@ -651,9 +481,7 @@ class _ReportScreenState extends State<ReportScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("📄 PDF oluşturuldu."),
-        ),
+        const SnackBar(content: Text("📄 PDF oluşturuldu.")),
       );
     }
   }
@@ -665,7 +493,7 @@ class _ReportScreenState extends State<ReportScreen> {
         "name": d?["name"] ?? "Bilinmiyor",
         "plate": d?["plateNumber"] ?? "-",
         "jobs": e.value,
-        "km": (driverKmCount[e.key] ?? 0).toStringAsFixed(1),
+        "km": (driverKm[e.key] ?? 0).toStringAsFixed(1),
       };
     }).toList();
 
@@ -684,47 +512,9 @@ class _ReportScreenState extends State<ReportScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("📊 Excel oluşturma tamamlandı!"),
-        ),
+        const SnackBar(content: Text("📊 Excel oluşturuldu.")),
       );
     }
   }
-
-  // ------------------------------------------------------------
-  // SMALL HELPERS
-  // ------------------------------------------------------------
-  String _driverName(String id) =>
-      driverIndex[id]?["name"] ?? "Bilinmiyor";
-
-  String _dispatchName(String id) =>
-      dispatchIndex[id]?["name"] ?? "Bilinmiyor";
-
-  BoxDecoration _box() {
-    return BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      boxShadow: [
-        BoxShadow(
-          blurRadius: 8,
-          spreadRadius: 1,
-          offset: const Offset(0, 2),
-          color: Colors.black.withOpacity(0.08),
-        ),
-      ],
-    );
-  }
-
-  Widget _title(String t) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Text(
-        t,
-        style: const TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
 }
+

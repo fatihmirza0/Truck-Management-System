@@ -35,28 +35,29 @@ class _AddUserPageState extends State<AddUserPage> {
     setState(() => _loading = true);
 
     try {
+      // 1) AUTH oluştur
       final auth = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _email.text.trim(),
         password: _pass.text.trim(),
       );
 
       final uid = auth.user!.uid;
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final roleId = "${_role == 'driver' ? 'driver' : 'dispatch'}$timestamp";
 
+      // 2) USERS koleksiyonuna UID ile kayıt
       await FirebaseFirestore.instance.collection("users").doc(uid).set({
         "name": _name.text.trim(),
         "email": _email.text.trim(),
         "phone": _phone.text.trim(),
-        "roleId": _role,
-        if (_role == "driver") "driverId": roleId,
-        if (_role == "driver") "plateNumber": _plate.text.trim().toUpperCase(),
-        if (_role == "dispatch") "dispatchId": roleId,
-        "createdAt": Timestamp.now(),
+        "role": _role, // driver | dispatch
+        "plateNumber": _role == "driver"
+            ? _plate.text.trim().toUpperCase()
+            : null,
+        "createdAt": FieldValue.serverTimestamp(),
       });
 
       _clearForm();
       _snack("Kullanıcı başarıyla eklendi", true);
+
     } catch (e) {
       _snack("Hata: $e");
     }

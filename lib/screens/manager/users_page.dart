@@ -24,11 +24,11 @@ class _UsersPageState extends State<UsersPage> {
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // USER CARD (Modern & Premium)
-  // ---------------------------------------------------------------------------
-  Widget _userCard(Map<String, dynamic> u, String id) {
-    final isDriver = u['roleId'] == 'driver';
+  // ------------------------------------------------------------
+  // USER CARD
+  // ------------------------------------------------------------
+  Widget _userCard(Map<String, dynamic> u, String uid) {
+    final isDriver = u['role'] == 'driver';
 
     return InkWell(
       borderRadius: BorderRadius.circular(16),
@@ -36,7 +36,10 @@ class _UsersPageState extends State<UsersPage> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => UserDetailPage(userId: id, data: u),
+            builder: (_) => UserDetailPage(
+              userId: uid,   // 🔥 UID → Doğru ID gönderiyoruz
+              data: u,
+            ),
           ),
         );
       },
@@ -71,7 +74,7 @@ class _UsersPageState extends State<UsersPage> {
             ),
             const SizedBox(width: 16),
 
-            // Info
+            // Info Column
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -104,7 +107,6 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
-  // Mini info row
   Widget _infoRow(IconData icon, String? text) {
     return Row(
       children: [
@@ -122,28 +124,28 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // USER LIST
-  // ---------------------------------------------------------------------------
+  // ------------------------------------------------------------
+  // USER LIST BUILDER
+  // ------------------------------------------------------------
   Widget _list(String role) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
           .collection('users')
-          .where('roleId', isEqualTo: role)
+          .where('role', isEqualTo: role)
           .snapshots(),
       builder: (_, snap) {
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final data = snap.data!.docs.where((d) {
+        final filtered = snap.data!.docs.where((d) {
           final u = d.data();
           final name = (u['name'] ?? "").toLowerCase();
           final plate = (u['plateNumber'] ?? "").toLowerCase();
           return name.contains(search) || plate.contains(search);
         }).toList();
 
-        if (data.isEmpty) {
+        if (filtered.isEmpty) {
           return const Center(
             child: Text("Kayıt bulunamadı",
                 style: TextStyle(color: Colors.black54, fontSize: 16)),
@@ -159,24 +161,24 @@ class _UsersPageState extends State<UsersPage> {
             mainAxisSpacing: 18,
             childAspectRatio: 2.7,
           ),
-          itemCount: data.length,
+          itemCount: filtered.length,
           itemBuilder: (_, i) =>
-              _userCard(data[i].data(), data[i].id),
+              _userCard(filtered[i].data(), filtered[i].id),
         )
             : ListView.separated(
           padding: const EdgeInsets.all(20),
-          itemCount: data.length,
+          itemCount: filtered.length,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
           itemBuilder: (_, i) =>
-              _userCard(data[i].data(), data[i].id),
+              _userCard(filtered[i].data(), filtered[i].id),
         );
       },
     );
   }
 
-  // ---------------------------------------------------------------------------
+  // ------------------------------------------------------------
   // BUILD
-  // ---------------------------------------------------------------------------
+  // ------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -185,9 +187,7 @@ class _UsersPageState extends State<UsersPage> {
         children: [
           const SizedBox(height: 10),
 
-          // -------------------------------------------------------------------
-          // SEARCH BAR (Premium)
-          // -------------------------------------------------------------------
+          // SEARCH BAR
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 20),
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -226,29 +226,22 @@ class _UsersPageState extends State<UsersPage> {
 
           const SizedBox(height: 16),
 
-          // -------------------------------------------------------------------
           // TABS
-          // -------------------------------------------------------------------
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: const TabBar(
-              indicatorColor: accent,
-              labelColor: accent,
-              unselectedLabelColor: Colors.grey,
-              labelStyle:
-              TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              tabs: [
-                Tab(text: "Şoförler"),
-                Tab(text: "Dispatch"),
-              ],
-            ),
+          const TabBar(
+            indicatorColor: accent,
+            labelColor: accent,
+            unselectedLabelColor: Colors.grey,
+            labelStyle:
+            TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            tabs: [
+              Tab(text: "Şoförler"),
+              Tab(text: "Dispatch"),
+            ],
           ),
 
           const SizedBox(height: 10),
 
-          // -------------------------------------------------------------------
           // CONTENT
-          // -------------------------------------------------------------------
           Expanded(
             child: Container(
               color: const Color(0xFFF5F6FA),

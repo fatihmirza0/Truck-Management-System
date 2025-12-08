@@ -6,9 +6,9 @@ import 'package:lojistik/widgets/empty_state.dart';
 import 'completed_job_detail_page.dart';
 
 class CompletedJobsPage extends StatefulWidget {
-  final String driverId;
+  final String uid; // 🔥 driverUid
 
-  const CompletedJobsPage({super.key, required this.driverId});
+  const CompletedJobsPage({super.key, required this.uid});
 
   @override
   State<CompletedJobsPage> createState() => _CompletedJobsPageState();
@@ -17,15 +17,21 @@ class CompletedJobsPage extends StatefulWidget {
 class _CompletedJobsPageState extends State<CompletedJobsPage> {
   String _selectedFilter = "all";
 
+  // ---------------------------------------------------------------------------
+  // 🔥 Tamamlanan işleri çek — UID tabanlı yeni mimari
+  // ---------------------------------------------------------------------------
   Stream<QuerySnapshot> _getCompletedJobs() {
-    final query = FirebaseFirestore.instance
+    return FirebaseFirestore.instance
         .collection('jobs')
         .where('status', isEqualTo: 'completed')
-        .where('assignedTo', isEqualTo: widget.driverId);
-
-    return query.orderBy('completedAt', descending: true).snapshots();
+        .where('assignedToUid', isEqualTo: widget.uid)
+        .orderBy('completedAt', descending: true)
+        .snapshots();
   }
 
+  // ---------------------------------------------------------------------------
+  // 🔥 Filtre başlangıç tarihini hesapla
+  // ---------------------------------------------------------------------------
   DateTime? _getStartFilterDate() {
     final now = DateTime.now();
 
@@ -43,16 +49,22 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // 🔥 Filtre uygula
+  // ---------------------------------------------------------------------------
   bool _filterJob(Map<String, dynamic> job) {
-    final startFilter = _getStartFilterDate();
-    if (startFilter == null) return true;
+    final filterStart = _getStartFilterDate();
+    if (filterStart == null) return true;
 
     final completedAt = (job['completedAt'] as Timestamp?)?.toDate();
     if (completedAt == null) return true;
 
-    return completedAt.isAfter(startFilter);
+    return completedAt.isAfter(filterStart);
   }
 
+  // ---------------------------------------------------------------------------
+  // 🔥 UI
+  // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
@@ -62,16 +74,19 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
           return const Center(child: CircularProgressIndicator());
         }
 
-        List<Map<String, dynamic>> jobs = snapshot.data!.docs
-            .map((e) => e.data() as Map<String, dynamic>)
-            .where(_filterJob)
-            .toList();
+        final docs = snapshot.data!.docs;
+
+        // Map'lere dönüştür ve filtre uygula
+        List<Map<String, dynamic>> jobs =
+        docs.map((e) => e.data() as Map<String, dynamic>).where(_filterJob).toList();
 
         if (jobs.isEmpty) {
           return const EmptyState(message: "Tamamlanan iş bulunamadı.");
         }
 
-        // ÖZET HESAPLAMA
+        // --------------------------------------------------------------------
+        // 📊 ÖZET HESAPLAMA
+        // --------------------------------------------------------------------
         final total = jobs.length;
 
         final lastCompletedAt =
@@ -79,21 +94,26 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
 
         Duration totalDuration = Duration.zero;
         for (var j in jobs) {
-          final start = (j['createdAt'] as Timestamp?)?.toDate();
-          final end = (j['completedAt'] as Timestamp?)?.toDate();
-          if (start != null && end != null) {
-            totalDuration += end.difference(start);
+          final created = (j['createdAt'] as Timestamp?)?.toDate();
+          final completed = (j['completedAt'] as Timestamp?)?.toDate();
+          if (created != null && completed != null) {
+            totalDuration += completed.difference(created);
           }
         }
 
-        final avgMinutes =
-        totalDuration.inMinutes == 0 ? 0 : totalDuration.inMinutes ~/ total;
+        final avgMinutes = totalDuration.inMinutes == 0
+            ? 0
+            : totalDuration.inMinutes ~/ total;
 
+        final avgHour = avgMinutes ~/ 60;
+        final avgMin = avgMinutes % 60;
+
+        // --------------------------------------------------------------------
+        // 🔥 SAYFA YAPISI
+        // --------------------------------------------------------------------
         return Column(
           children: [
-            // ----------------------------------------------------------------
-            // 🎯 ÖZET KARTI
-            // ----------------------------------------------------------------
+            // ---------------------- ÖZET CARD -----------------------
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(18),
@@ -108,17 +128,16 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                   const Text("Tamamlanan İşler Özeti",
                       style:
                       TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+
                   const SizedBox(height: 8),
                   Text("Toplam iş: $total"),
                   Text("Son tamamlanan: ${lastCompletedAt != null ? DateFormat('dd MMM yyyy HH:mm').format(lastCompletedAt) : "-"}"),
-                  Text("Ortalama süre: ${avgMinutes ~/ 60} saat ${avgMinutes % 60} dk"),
+                  Text("Ortalama süre: $avgHour saat $avgMin dk"),
                 ],
               ),
             ),
 
-            // ----------------------------------------------------------------
-            // 📅 FİLTRE BAR
-            // ----------------------------------------------------------------
+            // ---------------------- FİLTRE BAR -----------------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
@@ -141,13 +160,10 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
 
             const SizedBox(height: 8),
 
-            // ----------------------------------------------------------------
-            // 📌 LİSTE
-            // ----------------------------------------------------------------
+            // ---------------------- LİSTE -----------------------
             Expanded(
               child: ListView.builder(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 itemCount: jobs.length,
                 itemBuilder: (context, i) {
                   final job = jobs[i];
@@ -156,24 +172,33 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                     margin: const EdgeInsets.symmetric(vertical: 8),
                     elevation: 2,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: ListTile(
                       leading: const Icon(Icons.check_circle,
                           color: Colors.green, size: 32),
+
                       title: Text(
                         job['cargoInfo'] ?? 'Bilinmeyen Yük',
                         style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 16),
                       ),
+
                       subtitle: Text(
                         "${job['loadPort']} → ${job['unloadPort']}",
-                        style:
-                        const TextStyle(color: Colors.black54, fontSize: 13),
+                        style: const TextStyle(
+                            color: Colors.black54, fontSize: 13),
                       ),
+
                       trailing: const Icon(Icons.arrow_forward_ios_rounded,
                           size: 18, color: Colors.grey),
-                      onTap: () =>
-                          _openJobDetailsPage(context: context, job: job),
+
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CompletedJobDetailsPage(job: job),
+                        ),
+                      ),
                     ),
                   );
                 },
@@ -184,18 +209,4 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
       },
     );
   }
-
-  // ----------------------------------------------------------------------
-  // 📄 DETAY SAYFASINA GÖTÜREN METHOD
-  // ----------------------------------------------------------------------
-  void _openJobDetailsPage(
-      {required BuildContext context, required Map<String, dynamic> job}) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CompletedJobDetailsPage(job: job),
-      ),
-    );
-  }
 }
-

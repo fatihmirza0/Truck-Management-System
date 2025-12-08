@@ -16,11 +16,11 @@ class _CreateJobPageState extends State<CreateJobPage>
   final TextEditingController _unloadPortController = TextEditingController();
   final TextEditingController _cargoInfoController = TextEditingController();
 
-  String? _selectedDriver;
+  String? _selectedDriverUid;
   bool _isCreatingJob = false;
 
-  /// Giriş yapan dispatch kullanıcısının Firestore'daki dispatchId alanı
-  String? _dispatchId;
+  /// Giriş yapan dispatch'in UID'si
+  String? _dispatchUid;
   bool _isLoadingDispatch = true;
 
   late AnimationController _animationController;
@@ -40,7 +40,7 @@ class _CreateJobPageState extends State<CreateJobPage>
       CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
     );
 
-    _loadCurrentDispatchId();
+    _loadDispatchUid();
   }
 
   @override
@@ -53,53 +53,44 @@ class _CreateJobPageState extends State<CreateJobPage>
   }
 
   // ---------------------------------------------------------------------------
-  // 🔹 Giriş yapan dispatch kullanıcısının dispatchId'sini yükle
+  // 🔹 Dispatch UID yükle
   // ---------------------------------------------------------------------------
-  Future<void> _loadCurrentDispatchId() async {
+  Future<void> _loadDispatchUid() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        setState(() => _isLoadingDispatch = false);
-        return;
-      }
 
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
-      if (doc.exists) {
-        _dispatchId = doc.data()?['dispatchId'] as String?;
+      if (user != null) {
+        _dispatchUid = user.uid;
       }
     } catch (_) {
-      // Hata olsa da formu tamamen kilitlemeyelim
+      // sessiz geç
     } finally {
-      if (mounted) {
-        setState(() => _isLoadingDispatch = false);
-      }
+      if (mounted) setState(() => _isLoadingDispatch = false);
     }
   }
 
   // ---------------------------------------------------------------------------
-  // 🔹 Şoförleri çek
+  // 🔹 Şoförleri UID olarak yükle
   // ---------------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> _fetchDrivers() async {
-    final snapshot = await FirebaseFirestore.instance
+    final snap = await FirebaseFirestore.instance
         .collection('users')
-        .where('roleId', isEqualTo: 'driver')
+        .where('role', isEqualTo: 'driver')
         .get();
 
-    return snapshot.docs
-        .map((doc) => {
-      'id': doc.id,
-      'name': doc['name'] ?? 'Bilinmeyen',
-      'driverId': doc['driverId'] ?? '',
-    })
-        .toList();
+    return snap.docs.map((doc) {
+      final data = doc.data();
+      return {
+        'uid': doc.id,
+        'name': data['name'] ?? 'Bilinmeyen',
+        'plate': data['plateNumber'] ?? '-',
+        'jobStatus': data['jobStatus'] ?? 'available',
+      };
+    }).toList();
   }
 
   // ---------------------------------------------------------------------------
-  // 🔹 Job oluştur
+  // 🔹 İş oluştur
   // ---------------------------------------------------------------------------
   Future<void> _createJob() async {
     final loadPort = _loadPortController.text.trim();
@@ -109,19 +100,16 @@ class _CreateJobPageState extends State<CreateJobPage>
     if (loadPort.isEmpty ||
         unloadPort.isEmpty ||
         cargoInfo.isEmpty ||
-        _selectedDriver == null) {
+        _selectedDriverUid == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Lütfen tüm alanları doldurun")),
       );
       return;
     }
 
-    if (_dispatchId == null) {
+    if (_dispatchUid == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              "Dispatch bilgileri yüklenemedi. Lütfen tekrar giriş yapmayı deneyin."),
-        ),
+        const SnackBar(content: Text("Dispatch UID okunamadı")),
       );
       return;
     }
@@ -129,23 +117,33 @@ class _CreateJobPageState extends State<CreateJobPage>
     setState(() => _isCreatingJob = true);
 
     try {
+      /// 🔥 1) Jobs koleksiyonuna iş ekle
       await FirebaseFirestore.instance.collection('jobs').add({
         'loadPort': loadPort,
         'unloadPort': unloadPort,
         'cargoInfo': cargoInfo,
-        'assignedTo': _selectedDriver, // driverId
-        'assignedBy': _dispatchId, // 🔹 Firestore’daki dispatchId
+        'assignedToUid': _selectedDriverUid, // UID
+        'assignedByUid': _dispatchUid, // Dispatch UID
         'status': 'pending',
         'createdAt': Timestamp.now(),
       });
 
+      /// 🔥 2) Şoförün durumunu BUSY yap
+      await FirebaseFirestore.instance
+          .collection("users")
+          .doc(_selectedDriverUid)
+          .update({
+        'jobStatus': 'busy',
+      });
+
+      /// Formu temizle
       _loadPortController.clear();
       _unloadPortController.clear();
       _cargoInfoController.clear();
-      setState(() => _selectedDriver = null);
+      setState(() => _selectedDriverUid = null);
 
       await _animationController.forward();
-      await Future.delayed(const Duration(milliseconds: 150));
+      await Future.delayed(const Duration(milliseconds: 120));
       await _animationController.reverse();
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -155,16 +153,15 @@ class _CreateJobPageState extends State<CreateJobPage>
         ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Hata: ${e.toString()}")),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Hata: $e")));
     } finally {
       setState(() => _isCreatingJob = false);
     }
   }
 
   // ---------------------------------------------------------------------------
-  // 🔹 Ortak textfield
+  // TEXT FIELD
   // ---------------------------------------------------------------------------
   Widget _buildTextField(
       TextEditingController controller, String label, IconData icon) {
@@ -188,14 +185,16 @@ class _CreateJobPageState extends State<CreateJobPage>
   }
 
   // ---------------------------------------------------------------------------
-  // 🔹 BUILD
+  // BUILD
   // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     const primaryColor = Color(0xFF007AFF);
 
     if (_isLoadingDispatch) {
-      return const Center(child: CircularProgressIndicator());
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
     return isDesktop
@@ -204,7 +203,7 @@ class _CreateJobPageState extends State<CreateJobPage>
   }
 
   // ---------------------------------------------------------------------------
-  // 📱 MOBİL UI (revize)
+  // MOBILE
   // ---------------------------------------------------------------------------
   Widget _buildMobileLayout(Color primaryColor) {
     return Scaffold(
@@ -212,27 +211,13 @@ class _CreateJobPageState extends State<CreateJobPage>
         padding: const EdgeInsets.all(16),
         child: ScaleTransition(
           scale: _scaleAnimation,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.white.withOpacity(0.3)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: primaryColor.withOpacity(0.15),
-                      blurRadius: 18,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.all(20),
-                child: _formContent(primaryColor),
-              ),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(24),
             ),
+            child: _form(primaryColor),
           ),
         ),
       ),
@@ -240,7 +225,7 @@ class _CreateJobPageState extends State<CreateJobPage>
   }
 
   // ---------------------------------------------------------------------------
-  // 🖥️ DESKTOP UI (sıfırdan tasarım)
+  // DESKTOP
   // ---------------------------------------------------------------------------
   Widget _buildDesktopLayout(Color primaryColor) {
     return Scaffold(
@@ -249,7 +234,6 @@ class _CreateJobPageState extends State<CreateJobPage>
           constraints: const BoxConstraints(maxWidth: 1000),
           child: Row(
             children: [
-              // Sol bilgi paneli
               Expanded(
                 flex: 4,
                 child: Container(
@@ -322,27 +306,17 @@ class _CreateJobPageState extends State<CreateJobPage>
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(width: 28),
-              // Sağ form paneli
+              ),              const SizedBox(width: 28),
               Expanded(
                 flex: 5,
                 child: Container(
-                  height: 420,
+                  height: 400,
+                  padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
+                    color: Colors.white,
                   ),
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
-                  child: _formContent(primaryColor, isDesktop: true),
+                  child: _form(primaryColor, isDesktop: true),
                 ),
               ),
             ],
@@ -353,33 +327,30 @@ class _CreateJobPageState extends State<CreateJobPage>
   }
 
   // ---------------------------------------------------------------------------
-  // 🔹 Ortak form içeriği (mobil + desktop)
+  // FORM (Ortak)
   // ---------------------------------------------------------------------------
-  Widget _formContent(Color primaryColor, {bool isDesktop = false}) {
+  Widget _form(Color primaryColor, {bool isDesktop = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (!isDesktop) ...[
-          Icon(Icons.assignment, color: primaryColor, size: 40),
-          const SizedBox(height: 8),
-        ],
+        if (!isDesktop)
+          const Icon(Icons.assignment, size: 40, color: Colors.blue),
         Text(
           "Yeni İş Ekle",
           style: TextStyle(
-            fontSize: isDesktop ? 20 : 22,
+            fontSize: isDesktop ? 22 : 20,
             fontWeight: FontWeight.bold,
-            color: Colors.grey[800],
           ),
         ),
         const SizedBox(height: 18),
 
-        // 2 kolonlu layout (desktop) / tek kolon (mobil)
+        // Limanlar
         if (isDesktop)
           Row(
             children: [
               Expanded(
-                child: _buildTextField(
-                    _loadPortController, "Alış Limanı", Icons.anchor),
+                child:
+                _buildTextField(_loadPortController, "Alış Limanı", Icons.anchor),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -389,63 +360,71 @@ class _CreateJobPageState extends State<CreateJobPage>
             ],
           )
         else ...[
-          _buildTextField(
-              _loadPortController, "Alış Limanı", Icons.anchor),
+          _buildTextField(_loadPortController, "Alış Limanı", Icons.anchor),
           const SizedBox(height: 12),
-          _buildTextField(
-              _unloadPortController, "Varış Limanı", Icons.flag),
+          _buildTextField(_unloadPortController, "Varış Limanı", Icons.flag),
         ],
+
         const SizedBox(height: 12),
         _buildTextField(
-            _cargoInfoController, "Yük Bilgisi", Icons.inventory),
+            _cargoInfoController, "Yük Bilgisi", Icons.inventory_2_outlined),
+
         const SizedBox(height: 14),
 
-        // Şoför dropdown
+        // Şoför seçimi
         FutureBuilder<List<Map<String, dynamic>>>(
           future: _fetchDrivers(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8.0),
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return const Text("Hiç şoför bulunamadı");
+          builder: (context, snap) {
+            if (!snap.hasData) {
+              return const Center(child: CircularProgressIndicator());
             }
 
-            final drivers = snapshot.data!;
+            final drivers = snap.data!;
+            if (drivers.isEmpty) {
+              return const Text("Hiç şoför bulunamadı.");
+            }
+
             return DropdownButtonFormField<String>(
-              value: _selectedDriver,
+              value: _selectedDriverUid,
               decoration: InputDecoration(
                 labelText: "Şoför Seç",
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide:
-                  const BorderSide(color: Colors.blueAccent, width: 2),
                 ),
               ),
-              items: drivers
-                  .map(
-                    (d) => DropdownMenuItem<String>(
-                  value: d['driverId'],
-                  child: Text(d['name']),
-                ),
-              )
-                  .toList(),
-              onChanged: (val) => setState(() => _selectedDriver = val),
+              items: drivers.map((d) {
+                final isBusy = d['jobStatus'] == 'busy';
+
+                return DropdownMenuItem<String>(
+                  value: d['uid'],   // ❗ her zaman String
+                  enabled: !isBusy,  // ❗ meşgulse seçilemez
+                  child: Row(
+                    children: [
+                      Text(d['name']),
+                      const SizedBox(width: 6),
+                      Text("(${d['plate']})", style: const TextStyle(color: Colors.grey)),
+                      if (isBusy)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 8),
+                          child: Text(
+                            "[meşgul]",
+                            style: TextStyle(color: Colors.red, fontSize: 12),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: (val) => setState(() => _selectedDriverUid = val),
             );
           },
         ),
+
         const SizedBox(height: 22),
 
-        // Kaydet butonu
+        // Görev oluştur
         SizedBox(
           width: double.infinity,
           height: 48,
@@ -454,24 +433,13 @@ class _CreateJobPageState extends State<CreateJobPage>
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryColor,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              elevation: 4,
             ),
             child: _isCreatingJob
-                ? const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 2.2,
-              ),
-            )
+                ? const CircularProgressIndicator(
+                color: Colors.white, strokeWidth: 2)
                 : const Text(
               "Görevi Oluştur",
-              style:
-              TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
         ),

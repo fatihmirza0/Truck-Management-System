@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:lottie/lottie.dart'; // ⭐ LOTTIE EKLENDİ
+import 'package:lottie/lottie.dart';
 
 class UploadDocumentsPage extends StatefulWidget {
   final String jobId;
@@ -21,43 +21,46 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
   bool isUploading = false;
   double uploadProgress = 0.0;
 
-  // --------------------------------------------------------
-  // GALERİDEN ÇOKLU SEÇİM
-  // --------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // 📌 Çoklu Galeri Seçimi
+  // ---------------------------------------------------------------------------
   Future<void> pickDocuments() async {
     try {
-      final files = await _picker.pickMultiImage();
+      final files = await _picker.pickMultiImage(imageQuality: 70);
 
-      if (files != null && files.isNotEmpty) {
+      if (files.isNotEmpty) {
         setState(() => selectedFiles.addAll(files));
       }
     } catch (e) {
-      print("Pick Error: $e");
+      debugPrint("Pick Error: $e");
     }
   }
 
-  // --------------------------------------------------------
-  // KAMERA
-  // --------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // 📷 Kamera ile Fotoğraf
+  // ---------------------------------------------------------------------------
   Future<void> pickFromCamera() async {
     try {
-      final photo = await _picker.pickImage(source: ImageSource.camera);
+      final photo = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 70,
+      );
 
       if (photo != null) {
         setState(() => selectedFiles.add(photo));
       }
     } catch (e) {
-      print("Camera Error: $e");
+      debugPrint("Camera Error: $e");
     }
   }
 
-  // --------------------------------------------------------
-  // UPLOAD FILES + YÜZDE + FIRESTORE
-  // --------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // ⬆ Belgeleri Upload Et + Firestore'a Kaydet
+  // ---------------------------------------------------------------------------
   Future<void> uploadFiles() async {
     if (selectedFiles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Lütfen evrak yükleyin.")),
+        const SnackBar(content: Text("Lütfen evrak seçin.")),
       );
       return;
     }
@@ -83,7 +86,7 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
         UploadTask task = ref.putFile(File(file.path));
 
         task.snapshotEvents.listen((snapshot) {
-          double progress =
+          final progress =
               snapshot.bytesTransferred / snapshot.totalBytes;
 
           setState(() {
@@ -99,19 +102,21 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
         documentUrls.add(url);
       }
 
-      // 🔥 FIRESTORE'A KAYDET
-      final jobRef =
-      FirebaseFirestore.instance.collection('jobs').doc(widget.jobId);
-
-      await jobRef.update({
+      // ---------------------------------------------------------------------
+      // 🔥 JOB DÖKÜMANLARINI GÜNCELLE
+      // ---------------------------------------------------------------------
+      await FirebaseFirestore.instance
+          .collection('jobs')
+          .doc(widget.jobId)
+          .update({
         "documents": FieldValue.arrayUnion(documentUrls),
         "status": "completed",
         "completedAt": FieldValue.serverTimestamp(),
       });
 
-      // ---------------------------------------------------
-      // 🎉 BAŞARI ANİMASYONU (Yumuşak geçiş)
-      // ---------------------------------------------------
+      // ---------------------------------------------------------------------
+      // 🎉 BAŞARI ANİMASYONU
+      // ---------------------------------------------------------------------
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -132,23 +137,29 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
       );
 
       await Future.delayed(const Duration(milliseconds: 1400));
-
-      Navigator.pop(context); // animasyon pop
-      Navigator.pop(context); // sayfa pop
+      if (mounted) Navigator.pop(context);
+      if (mounted) Navigator.pop(context);
 
     } catch (e) {
-      print("UPLOAD ERROR: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Hata: $e")),
-      );
+      debugPrint("UPLOAD ERROR: $e");
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Hata oluştu: $e")),
+        );
+      }
     } finally {
-      setState(() => isUploading = false);
+      if (mounted) {
+        setState(() {
+          isUploading = false;
+        });
+      }
     }
   }
 
-  // --------------------------------------------------------
-  // PREVIEW
-  // --------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // 🖼 Fotoğraf Önizleme
+  // ---------------------------------------------------------------------------
   void openPreview(XFile file) {
     showDialog(
       context: context,
@@ -178,16 +189,16 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
     );
   }
 
-  // --------------------------------------------------------
-  // REMOVE FILE
-  // --------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // ❌ Fotoğraf Silme
+  // ---------------------------------------------------------------------------
   void removeFile(int index) {
     setState(() => selectedFiles.removeAt(index));
   }
 
-  // --------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // UI
-  // --------------------------------------------------------
+  // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -225,7 +236,9 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
           // Grid
           Expanded(
             child: selectedFiles.isEmpty
-                ? const Center(child: Text("Henüz evrak seçilmedi."))
+                ? const Center(
+              child: Text("Henüz evrak seçilmedi."),
+            )
                 : GridView.builder(
               padding: const EdgeInsets.all(10),
               itemCount: selectedFiles.length,
@@ -253,7 +266,7 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
                       ),
                     ),
 
-                    // Sil
+                    // Sil butonu
                     Positioned(
                       top: 4,
                       right: 4,
@@ -279,7 +292,7 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
             ),
           ),
 
-          // Progress
+          // Yükleme Progress
           isUploading
               ? Column(
             children: [
