@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_downloader/flutter_downloader.dart';
 import 'firebase_options.dart';
 import 'package:flutter/foundation.dart';
+import 'widgets/app_theme.dart';
 
 // Ekranlar
 import 'screens/login_screen.dart';
@@ -17,8 +18,8 @@ void main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     await FlutterDownloader.initialize(
-      debug: true,
-      ignoreSsl: true,
+      debug: kDebugMode,
+      ignoreSsl: false,
     );
   }
   runApp(const MyApp());
@@ -32,7 +33,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Truck Management System',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.blueGrey),
+      theme: AppTheme.theme(),
       initialRoute: '/',
       onGenerateRoute: (settings) {
         switch (settings.name) {

@@ -3,15 +3,24 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 
 class RouteUtils {
+  static const String _apiKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
 
-  static const String apiKey = "AIzaSyBW9ivbOndjriQ50cwHN6d3VUiWmQJ9VdE";
+  static String get _safeApiKey {
+    if (_apiKey.isEmpty) {
+      throw const FormatException(
+          'Google Maps API anahtarı eksik. --dart-define=GOOGLE_MAPS_API_KEY ile geçin.');
+    }
+    return _apiKey;
+  }
 
   /// 🔹 adres → koordinat
   static Future<Map<String, double>?> geocode(String address) async {
     final url =
-        "https://maps.googleapis.com/maps/api/geocode/json?address=${Uri.encodeComponent(address)}&key=$apiKey";
+        "https://maps.googleapis.com/maps/api/geocode/json?address=${Uri.encodeComponent(address)}&key=$_safeApiKey";
 
-    final res = await http.get(Uri.parse(url));
+    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) return null;
+
     final data = jsonDecode(res.body);
 
     if (data["status"] == "OK") {
@@ -27,9 +36,10 @@ class RouteUtils {
   /// 🔥 Google Directions API ile gerçek rota km'si
   static Future<double> getRouteKm(double lat1, double lng1, double lat2, double lng2) async {
     final url =
-        "https://maps.googleapis.com/maps/api/directions/json?origin=$lat1,$lng1&destination=$lat2,$lng2&key=$apiKey";
+        "https://maps.googleapis.com/maps/api/directions/json?origin=$lat1,$lng1&destination=$lat2,$lng2&key=$_safeApiKey";
 
-    final res = await http.get(Uri.parse(url));
+    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) return 0;
     final data = jsonDecode(res.body);
 
     if (data["routes"] == null || data["routes"].isEmpty) return 0;

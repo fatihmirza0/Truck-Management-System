@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math' as math;
+import '../widgets/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -115,17 +116,18 @@ class _LoginScreenState extends State<LoginScreen>
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     final isDesktop = width >= 900;
-    final primaryColor = Colors.blueGrey.shade900;
+    final primaryColor = AppTheme.primary;
+    final gradientColors = [
+      AppTheme.primary,
+      AppTheme.secondary,
+      AppTheme.primary.withOpacity(0.85),
+    ];
 
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              Colors.blueGrey.shade900,
-              Colors.blueGrey.shade700,
-              Colors.blueGrey.shade600
-            ],
+            colors: gradientColors,
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -148,23 +150,30 @@ class _LoginScreenState extends State<LoginScreen>
                         padding: const EdgeInsets.only(right: 40),
                         child: Column(
                           children: [
-                            Transform.rotate(
-                              angle: -math.pi / 12,
-                              child: const Icon(
-                                Icons.local_shipping_rounded,
-                                color: Colors.white,
-                                size: 115,
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Transform.rotate(
+                                angle: -math.pi / 12,
+                                child: const Icon(
+                                  Icons.local_shipping_rounded,
+                                  color: Colors.white,
+                                  size: 115,
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 24),
                             Text(
                               "Truck Management System",
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 34,
+                                fontWeight: FontWeight.w700,
                                 color: Colors.white,
-                                letterSpacing: 0.5,
+                                letterSpacing: 0.8,
                               ),
                             ),
                             const SizedBox(height: 10),
@@ -173,9 +182,41 @@ class _LoginScreenState extends State<LoginScreen>
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: Colors.white70,
-                                fontSize: 16,
+                                fontSize: 17,
                               ),
                             ),
+                            const SizedBox(height: 24),
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(18),
+                                border:
+                                    Border.all(color: Colors.white24, width: 1),
+                              ),
+                              child: const Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    " • Gerçek zamanlı filo görünürlüğü",
+                                    style: TextStyle(
+                                        color: Colors.white70, fontSize: 14),
+                                  ),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    " • Güvenli görev atama ve takip",
+                                    style: TextStyle(
+                                        color: Colors.white70, fontSize: 14),
+                                  ),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    " • İleri seviye raporlama ve içgörü",
+                                    style: TextStyle(
+                                        color: Colors.white70, fontSize: 14),
+                                  ),
+                                ],
+                              ),
+                            )
                           ],
                         ),
                       ),
@@ -191,29 +232,50 @@ class _LoginScreenState extends State<LoginScreen>
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 28, vertical: 38),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (!isDesktop) ...[
-                              Transform.rotate(
-                                angle: -math.pi / 12,
-                                child: Icon(
-                                  Icons.local_shipping_rounded,
-                                  color: primaryColor,
-                                  size: 80,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (!isDesktop) ...[
+                                Transform.rotate(
+                                  angle: -math.pi / 12,
+                                  child: Icon(
+                                    Icons.local_shipping_rounded,
+                                    color: primaryColor,
+                                    size: 80,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                "Truck Management System",
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                  color: primaryColor,
+                                const SizedBox(height: 10),
+                                Text(
+                                  "Truck Management System",
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: primaryColor,
+                                  ),
                                 ),
+                                const SizedBox(height: 20),
+                              ],
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "Giriş yapın",
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge
+                                        ?.copyWith(color: primaryColor),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    "Kurumsal hesabınızla giriş yaparak araç, sürücü ve operasyonlarınızı yönetin.",
+                                    style: Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                                  const SizedBox(height: 24),
+                                ],
                               ),
-                              const SizedBox(height: 20),
-                            ],
+                            ),
                             TextField(
                               controller: emailController,
                               decoration: InputDecoration(
