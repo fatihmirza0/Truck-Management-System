@@ -14,8 +14,6 @@ class ActiveJobsPage extends StatefulWidget {
 }
 
 class _ActiveJobsPageState extends State<ActiveJobsPage> {
-  bool _isLoading = false;
-
   /// 🔹 Bu şoföre atanmış aktif işleri çek
   Stream<QuerySnapshot> _getActiveJobs() {
     return FirebaseFirestore.instance
@@ -58,29 +56,29 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
 
         return Container(
           color: const Color(0xFFF5F5F7),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: const [
-                  Icon(Icons.local_shipping_outlined,
-                      color: Colors.blueAccent, size: 30),
-                  SizedBox(width: 8),
-                  Text("Aktif İş",
-                      style:
-                      TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                ],
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                "Şu anda üzerinizdeki aktif iş.",
-                style: TextStyle(color: Colors.black54),
-              ),
-              const SizedBox(height: 16),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: const [
+                    Icon(Icons.local_shipping_outlined,
+                        color: Colors.blueAccent, size: 30),
+                    SizedBox(width: 8),
+                    Text("Aktif İş",
+                        style: TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "Şu anda üzerinizdeki aktif iş.",
+                  style: TextStyle(color: Colors.black54),
+                ),
+                const SizedBox(height: 16),
 
-              Expanded(
-                child: Container(
+                Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -126,7 +124,8 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
                             return _infoRow("👤 Dispatch", "Yükleniyor...");
                           }
 
-                          final dispatch = snap.data!.data() as Map<String, dynamic>?;
+                          final dispatch =
+                          snap.data!.data() as Map<String, dynamic>?;
 
                           if (dispatch == null) {
                             return _infoRow("👤 Dispatch", "Bulunamadı");
@@ -142,7 +141,7 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
                         },
                       ),
 
-                      const Spacer(),
+                      const SizedBox(height: 24),
 
                       SizedBox(
                         width: double.infinity,
@@ -176,8 +175,8 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
                     ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -203,7 +202,8 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
           ),
           Expanded(
             flex: 4,
-            child: Text(value ?? "-", style: const TextStyle(color: Colors.black54)),
+            child: Text(value ?? "-",
+                style: const TextStyle(color: Colors.black54)),
           ),
         ],
       ),
@@ -221,7 +221,8 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(title,
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[800])),
+            style: TextStyle(
+                fontWeight: FontWeight.bold, color: Colors.grey[800])),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.all(12),
@@ -234,7 +235,8 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
             children: [
               Icon(Icons.place, color: color),
               const SizedBox(width: 10),
-              Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
+              Expanded(
+                  child: Text(value, style: const TextStyle(fontSize: 14))),
               ElevatedButton(
                 onPressed: onTap,
                 style: ElevatedButton.styleFrom(
