@@ -5,8 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 class AddUserPage extends StatefulWidget {
   const AddUserPage({super.key});
 
-  static const Color accent = Color(0xFF2563EB);
-  static const Color bg = Color(0xFFF7F8FA);
+  static const Color primary = Color(0xFF1E3A5F);
+  static const Color bg = Color(0xFFF8FAFC);
 
   @override
   State<AddUserPage> createState() => _AddUserPageState();
@@ -21,21 +21,21 @@ class _AddUserPageState extends State<AddUserPage> {
   final _phone = TextEditingController();
   final _plate = TextEditingController();
 
+  bool _loading = false;
+  String _role = "driver";
+
   bool get isDesktop => MediaQuery.of(context).size.width > 900;
 
-  String _role = "driver";
-  bool _loading = false;
-
-  // ---------------------------------------------------------------------------
-  // FIREBASE: Kullanıcı ekleme
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // 🔥 FIREBASE: Kullanıcı Ekleme (PLAKA SORUNU DÜZELTİLDİ)
+  // ===========================================================================
   Future<void> _addUser() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _loading = true);
 
     try {
-      // 1) AUTH oluştur
+      // 1) Auth oluştur
       final auth = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _email.text.trim(),
         password: _pass.text.trim(),
@@ -43,21 +43,23 @@ class _AddUserPageState extends State<AddUserPage> {
 
       final uid = auth.user!.uid;
 
-      // 2) USERS koleksiyonuna UID ile kayıt
-      await FirebaseFirestore.instance.collection("users").doc(uid).set({
+      // 2) Firestore kayıt (plateNumber sadece driver ise ekleniyor)
+      final data = {
         "name": _name.text.trim(),
         "email": _email.text.trim(),
         "phone": _phone.text.trim(),
-        "role": _role, // driver | dispatch
-        "plateNumber": _role == "driver"
-            ? _plate.text.trim().toUpperCase()
-            : null,
+        "role": _role,
         "createdAt": FieldValue.serverTimestamp(),
-      });
+      };
 
-      _clearForm();
+      if (_role == "driver") {
+        data["plateNumber"] = _plate.text.trim().toUpperCase();
+      }
+
+      await FirebaseFirestore.instance.collection("users").doc(uid).set(data);
+
+      _clear();
       _snack("Kullanıcı başarıyla eklendi", true);
-
     } catch (e) {
       _snack("Hata: $e");
     }
@@ -65,7 +67,7 @@ class _AddUserPageState extends State<AddUserPage> {
     setState(() => _loading = false);
   }
 
-  void _clearForm() {
+  void _clear() {
     _name.clear();
     _email.clear();
     _pass.clear();
@@ -82,161 +84,139 @@ class _AddUserPageState extends State<AddUserPage> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // INPUT DECORATION
-  // ---------------------------------------------------------------------------
-  InputDecoration _dec(String label) => InputDecoration(
-    labelText: label,
-    filled: true,
-    fillColor: Colors.white,
-    labelStyle: const TextStyle(color: Colors.grey),
-    contentPadding:
-    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: Colors.grey.shade300),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide:
-      const BorderSide(color: AddUserPage.accent, width: 2),
-    ),
-  );
-
-  // ---------------------------------------------------------------------------
-  // TEK FORM
-  // ---------------------------------------------------------------------------
-  Widget _form({required bool desktop}) {
-    return Form(
-      key: _formKey,
-      child: Column(
-        children: [
-          if (desktop)
-            Row(children: [
-              Expanded(child: _field(_name, "Ad Soyad")),
-              const SizedBox(width: 12),
-              Expanded(child: _emailField()),
-            ])
-          else ...[
-            _field(_name, "Ad Soyad"),
-            const SizedBox(height: 16),
-            _emailField(),
-          ],
-
-          const SizedBox(height: 16),
-
-          if (desktop)
-            Row(children: [
-              Expanded(child: _phoneField()),
-              const SizedBox(width: 12),
-              if (_role == "driver") Expanded(child: _plateField()),
-            ])
-          else ...[
-            _phoneField(),
-            if (_role == "driver") ...[
-              const SizedBox(height: 16),
-              _plateField(),
-            ]
-          ],
-
-          const SizedBox(height: 16),
-          _passwordField(),
-
-          const SizedBox(height: 24),
-          _roleChips(),
-
-          const SizedBox(height: 28),
-          _submitButton(desktop),
-        ],
+  // ===========================================================================
+  // 🔧 UI: Input Decoration (JobsPage Style)
+  // ===========================================================================
+  InputDecoration _dec(String label) {
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: Colors.white,
+      labelStyle: const TextStyle(color: Color(0xFF64748B)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(12)),
+        borderSide: BorderSide(color: AddUserPage.primary, width: 2),
       ),
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // FORM ELEMENTLERİ (Expanded YOK!)
-  // ---------------------------------------------------------------------------
-  Widget _field(TextEditingController c, String label) => TextFormField(
-    controller: c,
-    decoration: _dec(label),
-    validator: _required,
-  );
+  // ===========================================================================
+  // FORM ELEMANLARI
+  // ===========================================================================
+  Widget _field(TextEditingController c, String label) {
+    return TextFormField(
+      controller: c,
+      decoration: _dec(label),
+      validator: (v) => v == null || v.isEmpty ? "Bu alan zorunlu" : null,
+    );
+  }
 
-  Widget _emailField() => TextFormField(
-    controller: _email,
-    decoration: _dec("E-posta"),
-    keyboardType: TextInputType.emailAddress,
-    validator: (v) =>
-    v == null || !v.contains("@") ? "Geçerli e-posta girin" : null,
-  );
+  Widget _emailField() {
+    return TextFormField(
+      controller: _email,
+      decoration: _dec("E-posta"),
+      keyboardType: TextInputType.emailAddress,
+      validator: (v) =>
+      v != null && v.contains("@") ? null : "Geçerli e-posta girin",
+    );
+  }
 
-  Widget _phoneField() => TextFormField(
-    controller: _phone,
-    decoration: _dec("Telefon Numarası"),
-    keyboardType: TextInputType.phone,
-    validator: (v) => v == null || v.length < 10 ? "Geçersiz numara" : null,
-  );
+  Widget _phoneField() {
+    return TextFormField(
+      controller: _phone,
+      decoration: _dec("Telefon"),
+      keyboardType: TextInputType.phone,
+      validator: (v) =>
+      v != null && v.length >= 10 ? null : "Telefon numarası geçersiz",
+    );
+  }
 
-  Widget _plateField() => TextFormField(
-    controller: _plate,
-    decoration: _dec("Plaka No"),
-    validator: _required,
-  );
+  Widget _plateField() {
+    return TextFormField(
+      controller: _plate,
+      decoration: _dec("Plaka"),
+      validator: (v) => v == null || v.isEmpty ? "Plaka zorunlu" : null,
+    );
+  }
 
-  Widget _passwordField() => TextFormField(
-    controller: _pass,
-    decoration: _dec("Şifre"),
-    obscureText: true,
-    validator: (v) =>
-    v != null && v.length >= 6 ? null : "En az 6 karakter",
-  );
+  Widget _passwordField() {
+    return TextFormField(
+      controller: _pass,
+      obscureText: true,
+      decoration: _dec("Şifre"),
+      validator: (v) =>
+      v != null && v.length >= 6 ? null : "Min 6 karakter olmalı",
+    );
+  }
 
-  String? _required(String? v) =>
-      v == null || v.isEmpty ? "Zorunlu alan" : null;
-
-  // ---------------------------------------------------------------------------
-  // ROLE CHIPS
-  // ---------------------------------------------------------------------------
-  Widget _roleChips() {
-    Widget chip(String key, String text) {
+  // ===========================================================================
+  // ROLE SELECTOR (JobsPage Tarzında Segment Control)
+  // ===========================================================================
+  Widget _roleSelector() {
+    Widget button(String key, String label, IconData icon) {
       final selected = _role == key;
-      return ChoiceChip(
-        label: Text(text),
-        selected: selected,
-        selectedColor: AddUserPage.accent.withOpacity(0.15),
-        labelStyle: TextStyle(
-          color: selected ? AddUserPage.accent : Colors.grey[700],
-          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+
+      return InkWell(
+        onTap: () => setState(() => _role = key),
+        borderRadius: BorderRadius.circular(10),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? AddUserPage.primary : Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon,
+                  size: 18,
+                  color: selected ? Colors.white : const Color(0xFF64748B)),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: selected ? Colors.white : const Color(0xFF475569),
+                ),
+              ),
+            ],
+          ),
         ),
-        onSelected: (_) => setState(() => _role = key),
       );
     }
 
-    return Wrap(
-      spacing: 12,
+    return Row(
       children: [
-        chip("driver", "Şoför"),
-        chip("dispatch", "Dispatch"),
+        button("driver", "Şoför", Icons.local_shipping_outlined),
+        const SizedBox(width: 12),
+        button("dispatch", "Dispatch", Icons.support_agent_outlined),
       ],
     );
   }
 
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
   // SUBMIT BUTTON
-  // ---------------------------------------------------------------------------
-  Widget _submitButton(bool desktop) {
+  // ===========================================================================
+  Widget _submitBtn(bool desktop) {
     return SizedBox(
-      width: desktop ? 220 : double.infinity,
-      height: 46,
+      width: desktop ? 240 : double.infinity,
+      height: 48,
       child: ElevatedButton(
         onPressed: _loading ? null : _addUser,
         style: ElevatedButton.styleFrom(
-          backgroundColor: AddUserPage.accent,
+          backgroundColor: AddUserPage.primary,
           shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
         child: _loading
-            ? const CircularProgressIndicator(
-            color: Colors.white, strokeWidth: 2)
+            ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
             : const Text("Kullanıcı Ekle",
             style: TextStyle(
                 color: Colors.white, fontWeight: FontWeight.bold)),
@@ -244,147 +224,163 @@ class _AddUserPageState extends State<AddUserPage> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // DESKTOP UI — HİÇ DOKUNMADIM
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // DESKTOP UI (Modern JobsPage Style)
+  // ===========================================================================
   Widget _desktop() {
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 800),
-        child: Row(children: [
-          Expanded(flex: 4, child: _leftInfoCard()),
-          const SizedBox(width: 28),
-          Expanded(flex: 5, child: _rightFormCard()),
-        ]),
+        constraints: const BoxConstraints(maxWidth: 900),
+        child: Row(
+          children: [
+            // SOL PANEL (GRADIENT)
+            Expanded(
+              flex: 4,
+              child: Container(
+                height: 480,
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF111827), Color(0xFF1E3A5F)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 20,
+                        offset: Offset(0, 10)),
+                  ],
+                ),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.admin_panel_settings,
+                          size: 42, color: Colors.white),
+                      const SizedBox(height: 18),
+                      const Text("Yönetici Kullanıcı Oluşturma",
+                          style: TextStyle(
+                              fontSize: 22,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 10),
+                      Text(
+                        "Sisteme yeni sürücü veya dispatch ekleyin.",
+                        style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white.withOpacity(.85)),
+                      ),
+                      const Spacer(),
+                      _infoBox(),
+                    ]),
+              ),
+            ),
+
+            const SizedBox(width: 28),
+
+            // FORM PANEL
+            Expanded(
+              flex: 5,
+              child: Container(
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 20,
+                        offset: Offset(0, 10)),
+                  ],
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Yeni Kullanıcı Oluştur",
+                            style: TextStyle(
+                                fontSize: 20,
+                                color: Color(0xFF0F172A),
+                                fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Kullanıcı bilgilerini doldurun.",
+                          style: TextStyle(
+                              fontSize: 13, color: Colors.grey.shade600),
+                        ),
+                        const SizedBox(height: 20),
+                        _form(desktop: true),
+                      ]),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _leftInfoCard() {
+  Widget _infoBox() {
     return Container(
-      height: 450,
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF111827), Color(0xFF1D4ED8)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Colors.white.withOpacity(.08),
+        borderRadius: BorderRadius.circular(16),
       ),
-      child:
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Icon(Icons.admin_panel_settings,
-            color: Colors.white, size: 46),
-        const SizedBox(height: 18),
-        const Text("Yönetici Kullanıcı Oluşturma",
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        Text(
-          "Sürücü ve dispatch kullanıcıları ekleyerek sistemi yönetin.",
-          style: TextStyle(
-              color: Colors.white.withOpacity(.9), fontSize: 14),
-        ),
-        const Spacer(),
-        _infoBox(),
-      ]),
-    );
-  }
-
-  Widget _infoBox() => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: Colors.white.withOpacity(.08),
-      borderRadius: BorderRadius.circular(16),
-    ),
-    child: Row(children: [
-      const Icon(Icons.info_outline, color: Colors.white),
-      const SizedBox(width: 10),
-      Expanded(
-        child: Text(
-          "Dispatch kullanıcıları iş ataması yapar, sürücüler atanan işleri görür.",
-          style: TextStyle(
-              color: Colors.white.withOpacity(.9), fontSize: 13),
-        ),
-      )
-    ]),
-  );
-
-  Widget _rightFormCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 20,
-              offset: const Offset(0, 10)),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, color: Colors.white),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              "Dispatch kullanıcıları iş ataması yapar; sürücüler yalnızca kendilerine atanmış işleri görür.",
+              style: TextStyle(
+                  color: Colors.white.withOpacity(.9), fontSize: 13),
+            ),
+          ),
         ],
       ),
-      child: SingleChildScrollView(
-        child:
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text("Yeni Kullanıcı Oluştur",
-              style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800])),
-          const SizedBox(height: 8),
-          Text("Kullanıcı bilgilerini girerek sisteme ekleyin.",
-              style: TextStyle(fontSize: 13, color: Colors.grey[600])),
-          const SizedBox(height: 20),
-          _form(desktop: true),
-        ]),
-      ),
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // MOBILE UI — Sadece Expanded sorunu çözüldü
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // MOBILE UI
+  // ===========================================================================
   Widget _mobile() {
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(22),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 500),
             child: Container(
-              width: double.infinity,
               padding: const EdgeInsets.all(22),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(22),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
-                  ),
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 20,
+                      offset: Offset(0, 6)),
                 ],
               ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text("Yeni Kullanıcı Oluştur",
-                      style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[800])),
-                  const SizedBox(height: 8),
-                  Text("Kullanıcı bilgilerini girerek sisteme ekleyin.",
-                      style: TextStyle(
-                          fontSize: 13, color: Colors.grey[600])),
-                  const SizedBox(height: 20),
-                  _form(desktop: false),
-                ],
-              ),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("Yeni Kullanıcı Oluştur",
+                        style: TextStyle(
+                            fontSize: 20,
+                            color: Color(0xFF1E293B),
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text("Kullanıcı bilgilerini girin.",
+                        style: TextStyle(
+                            fontSize: 13, color: Colors.grey.shade600)),
+                    const SizedBox(height: 20),
+                    _form(desktop: false),
+                  ]),
             ),
           ),
         ),
@@ -392,9 +388,9 @@ class _AddUserPageState extends State<AddUserPage> {
     );
   }
 
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
   // BUILD
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -402,4 +398,60 @@ class _AddUserPageState extends State<AddUserPage> {
       body: isDesktop ? _desktop() : _mobile(),
     );
   }
+  Widget _form({required bool desktop}) {
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // AD SOYAD + EMAIL
+          if (desktop)
+            Row(
+              children: [
+                Expanded(child: _field(_name, "Ad Soyad")),
+                const SizedBox(width: 16),
+                Expanded(child: _emailField()),
+              ],
+            )
+          else ...[
+            _field(_name, "Ad Soyad"),
+            const SizedBox(height: 16),
+            _emailField(),
+          ],
+
+          const SizedBox(height: 18),
+
+          // TELEFON + PLAKA
+          if (desktop)
+            Row(
+              children: [
+                Expanded(child: _phoneField()),
+                const SizedBox(width: 16),
+                if (_role == "driver") Expanded(child: _plateField()),
+              ],
+            )
+          else ...[
+            _phoneField(),
+            if (_role == "driver") ...[
+              const SizedBox(height: 16),
+              _plateField(),
+            ],
+          ],
+
+          const SizedBox(height: 18),
+
+          _passwordField(),
+
+          const SizedBox(height: 28),
+
+          _roleSelector(),
+
+          const SizedBox(height: 28),
+
+          _submitBtn(desktop),
+        ],
+      ),
+    );
+  }
+
 }

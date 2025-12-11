@@ -2,7 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../login_screen.dart';
-import 'jobs_page.dart';
+import 'jobs/jobs_page.dart';
 import 'add_user_page.dart';
 import 'users_page.dart';
 import 'report_Screen.dart';

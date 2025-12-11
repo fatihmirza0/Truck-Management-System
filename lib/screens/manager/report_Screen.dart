@@ -1,5 +1,6 @@
 // ------------------------------------------------------------
-//  REPORT SCREEN – FULLY REFACTORED (UID BASED ARCHITECTURE)
+//  MODERN ENTERPRISE REPORT SCREEN
+//  Aligned with JobsPage UI/UX Standards
 // ------------------------------------------------------------
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -7,9 +8,19 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:lojistik/utils/report_exporter.dart';
 
+// ------------------------------------------------------------
+//  MODERN ENTERPRISE REPORT SCREEN
+//  Fully Responsive & Professional Design
+// ------------------------------------------------------------
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
+import 'package:lojistik/utils/report_exporter.dart';
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
+
   @override
   State<ReportScreen> createState() => _ReportScreenState();
 }
@@ -20,11 +31,9 @@ class _ReportScreenState extends State<ReportScreen> {
   List<DocumentSnapshot> users = [];
   List<DocumentSnapshot> jobs = [];
 
-  /// UID tabanlı indexler
   Map<String, Map<String, dynamic>> driverIndex = {};
   Map<String, Map<String, dynamic>> dispatchIndex = {};
 
-  /// Sayısal istatistikler
   int todayJobs = 0;
   int weeklyJobs = 0;
   int monthlyJobs = 0;
@@ -40,26 +49,23 @@ class _ReportScreenState extends State<ReportScreen> {
   String topDispatch = "-";
   double topKm = 0;
 
+  bool get isDesktop => MediaQuery.of(context).size.width > 900;
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
-  // ------------------------------------------------------------
-  // MAIN LOADER
-  // ------------------------------------------------------------
   Future<void> _load() async {
     try {
       final userSnap =
-      await FirebaseFirestore.instance.collection("users").get();
-      final jobSnap =
-      await FirebaseFirestore.instance.collection("jobs").get();
+          await FirebaseFirestore.instance.collection("users").get();
+      final jobSnap = await FirebaseFirestore.instance.collection("jobs").get();
 
       users = userSnap.docs;
       jobs = jobSnap.docs;
 
-      /// UID → kullanıcı bilgisi indexi
       for (final doc in users) {
         final d = doc.data() as Map<String, dynamic>;
         final uid = doc.id;
@@ -77,12 +83,10 @@ class _ReportScreenState extends State<ReportScreen> {
       if (mounted) setState(() => loading = false);
     } catch (e) {
       print("Report load error → $e");
+      if (mounted) setState(() => loading = false);
     }
   }
 
-  // ------------------------------------------------------------
-  // CALCULATE STATS
-  // ------------------------------------------------------------
   Future<void> _calculateStats() async {
     final now = DateTime.now();
     final weekStart = now.subtract(Duration(days: now.weekday - 1));
@@ -97,7 +101,6 @@ class _ReportScreenState extends State<ReportScreen> {
       final driverUid = j["assignedToUid"];
       final dispatchUid = j["assignedByUid"];
 
-      /// Tarihsel istatistikler
       if (_sameDay(created, now)) todayJobs++;
       if (created.isAfter(weekStart)) weeklyJobs++;
       if (created.year == now.year && created.month == now.month) {
@@ -106,26 +109,21 @@ class _ReportScreenState extends State<ReportScreen> {
 
       monthlyChart[created.month - 1]++;
 
-      /// ŞOFÖR ATAMA SAYISI
       if (driverUid != null) {
         driverJobCount[driverUid] = (driverJobCount[driverUid] ?? 0) + 1;
       }
 
-      /// DISPATCH ATAMA SAYISI
       if (dispatchUid != null) {
         dispatchJobCount[dispatchUid] =
             (dispatchJobCount[dispatchUid] ?? 0) + 1;
       }
 
-      /// KM hesaplama
       double km = (j["distanceKm"] ?? 0).toDouble();
-
       if (driverUid != null) {
         driverKm[driverUid] = (driverKm[driverUid] ?? 0) + km;
       }
     }
 
-    /// EN İYİLERİ BUL
     if (driverJobCount.isNotEmpty) {
       topDriver = driverJobCount.entries
           .reduce((a, b) => a.value > b.value ? a : b)
@@ -133,8 +131,7 @@ class _ReportScreenState extends State<ReportScreen> {
     }
 
     if (driverKm.isNotEmpty) {
-      final max = driverKm.entries
-          .reduce((a, b) => a.value > b.value ? a : b);
+      final max = driverKm.entries.reduce((a, b) => a.value > b.value ? a : b);
       topKmDriver = max.key;
       topKm = max.value;
     }
@@ -149,306 +146,793 @@ class _ReportScreenState extends State<ReportScreen> {
   bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
-  // ------------------------------------------------------------
-  // UI
-  // ------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     if (loading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        backgroundColor: Color(0xFFF8FAFC),
+        body: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+          ),
+        ),
       );
     }
 
     return Scaffold(
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _header(),
-            const SizedBox(height: 20),
-            _kpiCards(),
-            const SizedBox(height: 40),
-            _section("📆 Aylık İş Dağılımı", _monthlyChartWidget()),
-            const SizedBox(height: 40),
-            _section("🚚 Şoför KM Performansı", _driverKmWidget()),
-            const SizedBox(height: 40),
-            _section("🧑‍💼 Dispatch Performansı", _dispatchWidget()),
-            const SizedBox(height: 40),
-            _section("👷 Şoför Tablosu", _driverTableWidget()),
-          ],
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(isDesktop ? 32 : 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(),
+              const SizedBox(height: 24),
+              _buildKpiCards(),
+              const SizedBox(height: 32),
+              if (isDesktop) ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 2, child: _buildMonthlyChart()),
+                    const SizedBox(width: 24),
+                    Expanded(child: _buildDriverKmSection()),
+                  ],
+                ),
+                const SizedBox(height: 32),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildDispatchSection()),
+                    const SizedBox(width: 24),
+                    Expanded(flex: 2, child: _buildDriverTable()),
+                  ],
+                ),
+              ] else ...[
+                _buildMonthlyChart(),
+                const SizedBox(height: 24),
+                _buildDriverKmSection(),
+                const SizedBox(height: 24),
+                _buildDispatchSection(),
+                const SizedBox(height: 24),
+                _buildDriverTable(),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // ------------------------------------------------------------
-  // HEADER
-  // ------------------------------------------------------------
-  Widget _header() {
+  Widget _buildHeader() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Text(
-          "📊 Genel KPI Raporu",
-          style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E3A5F),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1E3A5F).withOpacity(0.2),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.analytics_outlined,
+            color: Colors.white,
+            size: 28,
+          ),
         ),
-        Row(
-          children: [
-            IconButton(
-              icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
-              onPressed: _exportPdf,
-            ),
-            IconButton(
-              icon: const Icon(Icons.table_chart, color: Colors.green),
-              onPressed: _exportExcel,
-            ),
-          ],
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Genel KPI Raporu",
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1E3A5F),
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "Performans metriklerini ve istatistikleri görüntüleyin",
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
         ),
+        if (isDesktop) ...[
+          _buildExportButton(
+            icon: Icons.picture_as_pdf,
+            label: "PDF",
+            color: const Color(0xFFDC2626),
+            onPressed: _exportPdf,
+          ),
+          const SizedBox(width: 12),
+          _buildExportButton(
+            icon: Icons.table_chart,
+            label: "Excel",
+            color: const Color(0xFF059669),
+            onPressed: _exportExcel,
+          ),
+        ] else
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Color(0xFF1E3A5F)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            onSelected: (value) {
+              if (value == 'pdf') _exportPdf();
+              if (value == 'excel') _exportExcel();
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'pdf',
+                child: Row(
+                  children: [
+                    Icon(Icons.picture_as_pdf,
+                        color: Color(0xFFDC2626), size: 20),
+                    SizedBox(width: 12),
+                    Text('PDF İndir'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'excel',
+                child: Row(
+                  children: [
+                    Icon(Icons.table_chart, color: Color(0xFF059669), size: 20),
+                    SizedBox(width: 12),
+                    Text('Excel İndir'),
+                  ],
+                ),
+              ),
+            ],
+          ),
       ],
     );
   }
 
-  // ------------------------------------------------------------
-  // KPI CARDS
-  // ------------------------------------------------------------
-  Widget _kpiCards() {
+  Widget _buildExportButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                Icon(icon, size: 18, color: color),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKpiCards() {
+    final crossAxisCount = isDesktop ? 3 : 2;
+    final childAspectRatio = isDesktop ? 2.5 : 1.5;
+
     return GridView.count(
       shrinkWrap: true,
-      crossAxisCount: 3,
       physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 3,
+      crossAxisCount: crossAxisCount,
+      childAspectRatio: childAspectRatio,
+      crossAxisSpacing: 16,
+      mainAxisSpacing: 16,
       children: [
-        _kpi("Bugünkü İşler", todayJobs.toString()),
-        _kpi("Haftalık İşler", weeklyJobs.toString()),
-        _kpi("Aylık İşler", monthlyJobs.toString()),
-        _kpi("En Çok İş Yapan Şoför", _driverName(topDriver)),
-        _kpi("En Çok KM Yapan Şoför", "${topKm.toStringAsFixed(1)} km"),
-        _kpi("En Çok Atama Yapan Dispatch", _dispatchName(topDispatch)),
+        _buildKpiCard(
+          icon: Icons.today_outlined,
+          title: "Bugünkü İşler",
+          value: todayJobs.toString(),
+          color: const Color(0xFF3B82F6),
+        ),
+        _buildKpiCard(
+          icon: Icons.calendar_view_week_outlined,
+          title: "Haftalık İşler",
+          value: weeklyJobs.toString(),
+          color: const Color(0xFF8B5CF6),
+        ),
+        _buildKpiCard(
+          icon: Icons.calendar_month_outlined,
+          title: "Aylık İşler",
+          value: monthlyJobs.toString(),
+          color: const Color(0xFFEC4899),
+        ),
+        _buildKpiCard(
+          icon: Icons.emoji_events_outlined,
+          title: "En Çok İş Yapan",
+          value: _driverName(topDriver),
+          color: const Color(0xFFF59E0B),
+        ),
+        _buildKpiCard(
+          icon: Icons.route_outlined,
+          title: "En Çok KM",
+          value: "${topKm.toStringAsFixed(1)} km",
+          color: const Color(0xFF10B981),
+        ),
+        _buildKpiCard(
+          icon: Icons.support_agent_outlined,
+          title: "Top Dispatch",
+          value: _dispatchName(topDispatch),
+          color: const Color(0xFF6366F1),
+        ),
       ],
     );
   }
 
-  Widget _kpi(String title, String value) {
+  Widget _buildKpiCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required Color color,
+  }) {
     return Container(
-      margin: const EdgeInsets.all(8),
-      padding: const EdgeInsets.all(20),
-      decoration: _box(),
+      padding: EdgeInsets.all(isDesktop ? 20 : 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: const TextStyle(color: Colors.grey)),
-          const SizedBox(height: 10),
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 22, fontWeight: FontWeight.bold)),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 20, color: color),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: isDesktop ? 13 : 11,
+                  color: const Color(0xFF64748B),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: isDesktop ? 22 : 18,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF0F172A),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  // ------------------------------------------------------------
-  // MONTHLY BAR CHART
-  // ------------------------------------------------------------
-  Widget _monthlyChartWidget() {
-    return Container(
-      height: 260,
-      padding: const EdgeInsets.all(16),
-      decoration: _box(),
-      child: BarChart(
-        BarChartData(
-          borderData: FlBorderData(show: false),
-          gridData: const FlGridData(show: false),
-          titlesData: FlTitlesData(
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(showTitles: true, getTitlesWidget: (v, _) {
-                const months = [
-                  "Oca", "Şub", "Mar", "Nis", "May", "Haz",
-                  "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"
-                ];
-                return Text(months[v.toInt()]);
-              }),
+  Widget _buildMonthlyChart() {
+    return _buildSection(
+      title: "Aylık İş Dağılımı",
+      icon: Icons.bar_chart_outlined,
+      child: Container(
+        height: isDesktop ? 300 : 250,
+        padding: EdgeInsets.all(isDesktop ? 24 : 16),
+        decoration: _buildBoxDecoration(),
+        child: BarChart(
+          BarChartData(
+            borderData: FlBorderData(show: false),
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: false,
+              getDrawingHorizontalLine: (value) {
+                return FlLine(
+                  color: const Color(0xFFE2E8F0),
+                  strokeWidth: 1,
+                );
+              },
             ),
-            leftTitles:
-            AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            titlesData: FlTitlesData(
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  getTitlesWidget: (value, meta) {
+                    const months = [
+                      "Oca",
+                      "Şub",
+                      "Mar",
+                      "Nis",
+                      "May",
+                      "Haz",
+                      "Tem",
+                      "Ağu",
+                      "Eyl",
+                      "Eki",
+                      "Kas",
+                      "Ara"
+                    ];
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        months[value.toInt()],
+                        style: TextStyle(
+                          fontSize: isDesktop ? 12 : 10,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 40,
+                  getTitlesWidget: (value, meta) {
+                    return Text(
+                      value.toInt().toString(),
+                      style: TextStyle(
+                        fontSize: isDesktop ? 12 : 10,
+                        color: const Color(0xFF64748B),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              rightTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              topTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+            ),
+            barGroups: List.generate(12, (i) {
+              return BarChartGroupData(
+                x: i,
+                barRods: [
+                  BarChartRodData(
+                    toY: monthlyChart[i].toDouble(),
+                    width: isDesktop ? 24 : 16,
+                    color: const Color(0xFF1E3A5F),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(4),
+                    ),
+                  ),
+                ],
+              );
+            }),
           ),
-          barGroups: List.generate(12, (i) {
-            return BarChartGroupData(x: i, barRods: [
-              BarChartRodData(
-                toY: monthlyChart[i].toDouble(),
-                width: 18,
-                color: Colors.blueAccent,
-              )
-            ]);
-          }),
         ),
       ),
     );
   }
 
-  // ------------------------------------------------------------
-  // DRIVER KM CHART
-  // ------------------------------------------------------------
-  Widget _driverKmWidget() {
+  Widget _buildDriverKmSection() {
     if (driverKm.isEmpty) {
-      return const Text("KM verisi bulunamadı.");
+      return _buildSection(
+        title: "Şoför KM Performansı",
+        icon: Icons.route_outlined,
+        child: _buildEmptyState("KM verisi bulunmuyor"),
+      );
     }
 
     final sorted = driverKm.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _box(),
-      child: Column(
-        children: sorted.map((e) {
-          final name = _driverName(e.key);
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                SizedBox(width: 150, child: Text(name)),
-                Expanded(
-                  child: LinearProgressIndicator(
-                    value: e.value / sorted.first.value,
-                    color: Colors.green,
-                    backgroundColor: Colors.green.withOpacity(.2),
+    final topItems = sorted.take(isDesktop ? 5 : 3).toList();
+
+    return _buildSection(
+      title: "Şoför KM Performansı",
+      icon: Icons.route_outlined,
+      child: Container(
+        padding: EdgeInsets.all(isDesktop ? 24 : 16),
+        decoration: _buildBoxDecoration(),
+        child: Column(
+          children: topItems.map((e) {
+            final name = _driverName(e.key);
+            final percentage = e.value / sorted.first.value;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          name,
+                          style: TextStyle(
+                            fontSize: isDesktop ? 14 : 13,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF0F172A),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        "${e.value.toStringAsFixed(1)} km",
+                        style: TextStyle(
+                          fontSize: isDesktop ? 14 : 13,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF059669),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 10),
-                Text("${e.value.toStringAsFixed(1)} km"),
-              ],
-            ),
-          );
-        }).toList(),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: percentage,
+                      minHeight: 8,
+                      color: const Color(0xFF059669),
+                      backgroundColor: const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
 
-  // ------------------------------------------------------------
-  // DISPATCH PERFORMANCE
-  // ------------------------------------------------------------
-  Widget _dispatchWidget() {
+  Widget _buildDispatchSection() {
     if (dispatchJobCount.isEmpty) {
-      return const Text("Dispatch verisi yok.");
+      return _buildSection(
+        title: "Dispatch Performansı",
+        icon: Icons.support_agent_outlined,
+        child: _buildEmptyState("Dispatch verisi bulunmuyor"),
+      );
     }
 
     final sorted = dispatchJobCount.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _box(),
-      child: Column(
-        children: sorted.map((e) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                SizedBox(width: 150, child: Text(_dispatchName(e.key))),
-                Expanded(
-                  child: LinearProgressIndicator(
-                    value: e.value / sorted.first.value,
-                    color: Colors.orange,
-                    backgroundColor: Colors.orange.withOpacity(.2),
+    final topItems = sorted.take(isDesktop ? 5 : 3).toList();
+
+    return _buildSection(
+      title: "Dispatch Performansı",
+      icon: Icons.support_agent_outlined,
+      child: Container(
+        padding: EdgeInsets.all(isDesktop ? 24 : 16),
+        decoration: _buildBoxDecoration(),
+        child: Column(
+          children: topItems.map((e) {
+            final name = _dispatchName(e.key);
+            final percentage = e.value / sorted.first.value;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          name,
+                          style: TextStyle(
+                            fontSize: isDesktop ? 14 : 13,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF0F172A),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        "${e.value} iş",
+                        style: TextStyle(
+                          fontSize: isDesktop ? 14 : 13,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFFF59E0B),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 10),
-                Text("${e.value} iş"),
-              ],
-            ),
-          );
-        }).toList(),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: percentage,
+                      minHeight: 8,
+                      color: const Color(0xFFF59E0B),
+                      backgroundColor: const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
 
-  // ------------------------------------------------------------
-  // DRIVER TABLE
-  // ------------------------------------------------------------
-  Widget _driverTableWidget() {
-    if (driverJobCount.isEmpty) return const Text("Şoför verisi yok.");
+  Widget _buildDriverTable() {
+    if (driverJobCount.isEmpty) {
+      return _buildSection(
+        title: "Şoför Detay Tablosu",
+        icon: Icons.table_chart_outlined,
+        child: _buildEmptyState("Şoför verisi bulunmuyor"),
+      );
+    }
 
     final sorted = driverJobCount.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    return Container(
-      decoration: _box(),
-      child: Column(
+    return _buildSection(
+      title: "Şoför Detay Tablosu",
+      icon: Icons.table_chart_outlined,
+      child: Container(
+        decoration: _buildBoxDecoration(),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: isDesktop
+              ? SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    headingRowColor: MaterialStateProperty.all(
+                      const Color(0xFFF8FAFC),
+                    ),
+                    headingRowHeight: 48,
+                    dataRowHeight: 56,
+                    horizontalMargin: 20,
+                    columnSpacing: 40,
+                    columns: [
+                      _buildDataColumn("Şoför", Icons.person_outline),
+                      _buildDataColumn("Plaka", Icons.car_rental_outlined),
+                      _buildDataColumn("İş", Icons.work_outline),
+                      _buildDataColumn("KM", Icons.route_outlined),
+                    ],
+                    rows: sorted.map((e) {
+                      final d = driverIndex[e.key];
+                      return DataRow(
+                        cells: [
+                          _buildDataTableCell(d?["name"] ?? "Bilinmiyor"),
+                          _buildDataTableCell(d?["plateNumber"] ?? "-"),
+                          _buildDataTableCell("${e.value}"),
+                          _buildDataTableCell(
+                            "${(driverKm[e.key] ?? 0).toStringAsFixed(1)} km",
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                )
+              : Column(
+                  children: sorted.map((e) {
+                    final d = driverIndex[e.key];
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            d?["name"] ?? "Bilinmiyor",
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildMobileTableItem(
+                                  "Plaka",
+                                  d?["plateNumber"] ?? "-",
+                                ),
+                              ),
+                              Expanded(
+                                child: _buildMobileTableItem(
+                                  "İş",
+                                  "${e.value}",
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          _buildMobileTableItem(
+                            "KM",
+                            "${(driverKm[e.key] ?? 0).toStringAsFixed(1)} km",
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileTableItem(String label, String value) {
+    return Row(
+      children: [
+        Text(
+          "$label: ",
+          style: const TextStyle(
+            fontSize: 12,
+            color: Color(0xFF64748B),
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF0F172A),
+          ),
+        ),
+      ],
+    );
+  }
+
+  DataColumn _buildDataColumn(String label, IconData icon) {
+    return DataColumn(
+      label: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(.15),
-              borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(12)),
-            ),
-            child: const Row(
-              children: [
-                Expanded(child: Text("Şoför", style: TextStyle(fontWeight: FontWeight.bold))),
-                Expanded(child: Text("Plaka", style: TextStyle(fontWeight: FontWeight.bold))),
-                Expanded(child: Text("İş", style: TextStyle(fontWeight: FontWeight.bold))),
-                Expanded(child: Text("KM", style: TextStyle(fontWeight: FontWeight.bold))),
-              ],
+          Icon(icon, size: 16, color: const Color(0xFF64748B)),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF475569),
+              letterSpacing: 0.3,
             ),
           ),
-          ...sorted.map((e) {
-            final uid = e.key;
-            final d = driverIndex[uid];
-            return Container(
-              padding: const EdgeInsets.all(12),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.black12)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(child: Text(d?["name"] ?? "-")),
-                  Expanded(child: Text(d?["plateNumber"] ?? "-")),
-                  Expanded(child: Text("${e.value}")),
-                  Expanded(child: Text("${(driverKm[uid] ?? 0).toStringAsFixed(1)} km")),
-                ],
-              ),
-            );
-          })
         ],
       ),
     );
   }
 
-  // ------------------------------------------------------------
-  // HELPERS
-  // ------------------------------------------------------------
-  String _driverName(String uid) =>
-      driverIndex[uid]?["name"] ?? "Bilinmiyor";
+  DataCell _buildDataTableCell(String text) {
+    return DataCell(
+      Text(
+        text,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+          color: Color(0xFF475569),
+        ),
+      ),
+    );
+  }
 
-  String _dispatchName(String uid) =>
-      dispatchIndex[uid]?["name"] ?? "Bilinmiyor";
-
-  BoxDecoration _box() => BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(14),
-    boxShadow: [
-      BoxShadow(
-        color: Colors.black.withOpacity(.08),
-        blurRadius: 8,
-        offset: const Offset(0, 3),
-      )
-    ],
-  );
-
-  Widget _section(String title, Widget child) {
+  Widget _buildSection({
+    required String title,
+    required IconData icon,
+    required Widget child,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title,
-            style:
-            const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
+        Row(
+          children: [
+            Icon(icon, size: 20, color: const Color(0xFF1E3A5F)),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: isDesktop ? 18 : 16,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF1E3A5F),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
         child,
       ],
     );
   }
+
+  Widget _buildEmptyState(String message) {
+    return Container(
+      padding: EdgeInsets.all(isDesktop ? 48 : 32),
+      decoration: _buildBoxDecoration(),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(
+              Icons.info_outline,
+              size: isDesktop ? 48 : 40,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: TextStyle(
+                fontSize: isDesktop ? 14 : 13,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  BoxDecoration _buildBoxDecoration() {
+    return BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFFE2E8F0)),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.03),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    );
+  }
+
+  String _driverName(String uid) => driverIndex[uid]?["name"] ?? "Bilinmiyor";
+
+  String _dispatchName(String uid) =>
+      dispatchIndex[uid]?["name"] ?? "Bilinmiyor";
+
   Future<void> _exportPdf() async {
     final drivers = driverJobCount.entries.map((e) {
       final d = driverIndex[e.key];
@@ -481,7 +965,20 @@ class _ReportScreenState extends State<ReportScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("📄 PDF oluşturuldu.")),
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Text("PDF başarıyla oluşturuldu"),
+            ],
+          ),
+          backgroundColor: const Color(0xFF059669),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
       );
     }
   }
@@ -512,9 +1009,21 @@ class _ReportScreenState extends State<ReportScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("📊 Excel oluşturuldu.")),
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Text("Excel başarıyla oluşturuldu"),
+            ],
+          ),
+          backgroundColor: const Color(0xFF059669),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
       );
     }
   }
 }
-

@@ -1,8 +1,12 @@
+// ============================================
+// PROFESSIONAL USER DETAIL PAGE
+// Desktop & Mobile Optimized
+// ============================================
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class UserDetailPage extends StatefulWidget {
-  final String userId; // 🔥 UID (auth + firestore aynı)
+  final String userId;
   final Map<String, dynamic> data;
 
   const UserDetailPage({
@@ -17,65 +21,83 @@ class UserDetailPage extends StatefulWidget {
 
 class _UserDetailPageState extends State<UserDetailPage> {
   bool editing = false;
+  bool loading = false;
 
-  late TextEditingController name;
-  late TextEditingController email;
-  late TextEditingController phone;
-  late TextEditingController plate;
+  late TextEditingController _nameCtrl;
+  late TextEditingController _emailCtrl;
+  late TextEditingController _phoneCtrl;
+  late TextEditingController _plateCtrl;
 
   @override
   void initState() {
     super.initState();
-    name = TextEditingController(text: widget.data['name'] ?? '');
-    email = TextEditingController(text: widget.data['email'] ?? '');
-    phone = TextEditingController(text: widget.data['phone'] ?? '');
-    plate = TextEditingController(text: widget.data['plateNumber'] ?? '');
+    _nameCtrl = TextEditingController(text: widget.data['name'] ?? '');
+    _emailCtrl = TextEditingController(text: widget.data['email'] ?? '');
+    _phoneCtrl = TextEditingController(text: widget.data['phone'] ?? '');
+    _plateCtrl = TextEditingController(text: widget.data['plateNumber'] ?? '');
   }
 
-  void cancelEdit() {
-    setState(() {
-      editing = false;
-      name.text = widget.data['name'] ?? '';
-      email.text = widget.data['email'] ?? '';
-      phone.text = widget.data['phone'] ?? '';
-      plate.text = widget.data['plateNumber'] ?? '';
-    });
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _phoneCtrl.dispose();
+    _plateCtrl.dispose();
+    super.dispose();
   }
 
-  // -------------------------------------------------------------
-  // SAVE USER CHANGES
-  // -------------------------------------------------------------
-  Future<void> save() async {
-    Map<String, dynamic> updateData = {
-      'name': name.text.trim(),
-      'email': email.text.trim(),
-      'phone': phone.text.trim(),
-    };
+  bool get isDriver => widget.data['role'] == 'driver';
+  bool get isDesktop => MediaQuery.of(context).size.width > 900;
 
-    if (widget.data['role'] == 'driver') {
-      updateData['plateNumber'] = plate.text.trim();
+  Future<void> _save() async {
+    if (_nameCtrl.text.trim().isEmpty) {
+      _showSnackBar("İsim boş olamaz", isError: true);
+      return;
     }
 
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.userId)
-        .update(updateData);
+    setState(() => loading = true);
 
-    setState(() => editing = false);
+    try {
+      Map<String, dynamic> updates = {
+        'name': _nameCtrl.text.trim(),
+        'email': _emailCtrl.text.trim(),
+        'phone': _phoneCtrl.text.trim(),
+      };
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text("Kullanıcı güncellendi.")));
+      if (isDriver) {
+        updates['plateNumber'] = _plateCtrl.text.trim();
+      }
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.userId)
+          .update(updates);
+
+      setState(() {
+        editing = false;
+        loading = false;
+      });
+
+      _showSnackBar("Başarıyla güncellendi");
+    } catch (e) {
+      setState(() => loading = false);
+      _showSnackBar("Hata: $e", isError: true);
+    }
   }
 
-  // -------------------------------------------------------------
-  // DELETE USER (Firestore)
-  // -------------------------------------------------------------
-  Future<void> deleteUser() async {
+  Future<void> _delete() async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text("Kullanıcıyı Sil"),
-        content: const Text("Bu kullanıcı kalıcı olarak silinecek."),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text(
+          "Kullanıcıyı Sil",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        content: const Text(
+          "Bu işlem geri alınamaz. Devam etmek istiyor musunuz?",
+          style: TextStyle(fontSize: 14),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -83,7 +105,10 @@ class _UserDetailPageState extends State<UserDetailPage> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+            ),
             child: const Text("Sil"),
           ),
         ],
@@ -91,207 +116,635 @@ class _UserDetailPageState extends State<UserDetailPage> {
     );
 
     if (confirm == true) {
-      await FirebaseFirestore.instance.collection('users').doc(widget.userId).delete();
+      setState(() => loading = true);
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.userId)
+            .delete();
 
-      if (!mounted) return;
-
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Kullanıcı silindi.")),
-      );
+        if (!mounted) return;
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Kullanıcı silindi")),
+        );
+      } catch (e) {
+        setState(() => loading = false);
+        _showSnackBar("Silme hatası: $e", isError: true);
+      }
     }
   }
 
-  // -------------------------------------------------------------
-  // INPUT DECORATION
-  // -------------------------------------------------------------
-  InputDecoration inputStyle(String label) {
-    return InputDecoration(
-      labelText: label,
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey.shade300),
+  void _showSnackBar(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? const Color(0xFFDC2626) : const Color(0xFF059669),
+        behavior: SnackBarBehavior.floating,
       ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.blueAccent, width: 2),
-      ),
-      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
     );
   }
 
-  Widget displayField(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black54)),
-        const SizedBox(height: 6),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade300),
+  @override
+  Widget build(BuildContext context) {
+    if (isDesktop) {
+      return _buildDesktopLayout();
+    } else {
+      return _buildMobileLayout();
+    }
+  }
+
+  // ============================================
+  // DESKTOP LAYOUT - Full Width Professional
+  // ============================================
+  Widget _buildDesktopLayout() {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: Stack(
+        children: [
+          Column(
+            children: [
+              // Fixed Header Bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border(
+                    bottom: BorderSide(color: const Color(0xFFE2E8F0)),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back, size: 22),
+                      color: const Color(0xFF1E3A5F),
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFFF8FAFC),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
+                        size: 24,
+                        color: const Color(0xFF1E3A5F),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.data['name'] ?? "Kullanıcı Detayı",
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1E3A5F),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            isDriver ? "Şoför" : "Dispatch",
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (!editing) ...[
+                      ElevatedButton.icon(
+                        onPressed: () => setState(() => editing = true),
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        label: const Text("Düzenle"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1E3A5F),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    if (editing) ...[
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            editing = false;
+                            _nameCtrl.text = widget.data['name'] ?? '';
+                            _emailCtrl.text = widget.data['email'] ?? '';
+                            _phoneCtrl.text = widget.data['phone'] ?? '';
+                            _plateCtrl.text = widget.data['plateNumber'] ?? '';
+                          });
+                        },
+                        icon: const Icon(Icons.close, size: 18),
+                        label: const Text("İptal"),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF64748B),
+                          side: const BorderSide(color: Color(0xFFE2E8F0)),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: _save,
+                        icon: const Icon(Icons.check, size: 18),
+                        label: const Text("Kaydet"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF059669),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    OutlinedButton.icon(
+                      onPressed: _delete,
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      label: const Text("Sil"),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFDC2626),
+                        side: const BorderSide(color: Color(0xFFDC2626)),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Content Area
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(32),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Left Column - Main Info
+                      Expanded(
+                        flex: 2,
+                        child: Container(
+                          padding: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.03),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Kullanıcı Bilgileri",
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF1E3A5F),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              if (editing) _buildEditForm() else _buildViewMode(),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 24),
+                      // Right Column - Stats/Info
+                      Expanded(
+                        flex: 1,
+                        child: Column(
+                          children: [
+                            _buildInfoCard(
+                              "Hesap Durumu",
+                              Icons.verified_user_outlined,
+                              "Aktif",
+                              const Color(0xFF059669),
+                            ),
+                            const SizedBox(height: 16),
+                            _buildInfoCard(
+                              "Rol",
+                              Icons.badge_outlined,
+                              isDriver ? "Şoför" : "Dispatch",
+                              const Color(0xFF1E3A5F),
+                            ),
+                            const SizedBox(height: 16),
+                            _buildInfoCard(
+                              "Kullanıcı ID",
+                              Icons.fingerprint_outlined,
+                              widget.userId.substring(0, 8) + "...",
+                              const Color(0xFF64748B),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-          child: Text(value.isNotEmpty ? value : "-", style: const TextStyle(fontSize: 15)),
+          if (loading)
+            Container(
+              color: Colors.black26,
+              child: const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(String title, IconData icon, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 20, color: color),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================
+  // MOBILE LAYOUT - Compact
+  // ============================================
+  Widget _buildMobileLayout() {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    _buildMobileHeader(),
+                    const SizedBox(height: 32),
+                    _buildMobileCard(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (loading)
+            Container(
+              color: Colors.black26,
+              child: const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileHeader() {
+    return Row(
+      children: [
+        IconButton(
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.arrow_back, size: 22),
+          color: const Color(0xFF1E3A5F),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            widget.data['name'] ?? "Kullanıcı Detayı",
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF1E3A5F),
+            ),
+          ),
+        ),
+        if (!editing)
+          IconButton(
+            onPressed: () => setState(() => editing = true),
+            icon: const Icon(Icons.edit_outlined, size: 20),
+            color: const Color(0xFF1E3A5F),
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+            ),
+          ),
+        const SizedBox(width: 8),
+        IconButton(
+          onPressed: _delete,
+          icon: const Icon(Icons.delete_outline, size: 20),
+          color: const Color(0xFFDC2626),
+          style: IconButton.styleFrom(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: const BorderSide(color: Color(0xFFDC2626)),
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  // -------------------------------------------------------------
-  // BUILD
-  // -------------------------------------------------------------
-  @override
-  Widget build(BuildContext context) {
-    final desktop = MediaQuery.of(context).size.width > 850;
-    final role = widget.data['role'] == 'driver' ? "Şoför" : "Dispatch";
+  Widget _buildMobileCard() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
+              size: 32,
+              color: const Color(0xFF1E3A5F),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            widget.data['name'] ?? "-",
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            isDriver ? "Şoför" : "Dispatch",
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF64748B),
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+          const SizedBox(height: 24),
+          if (editing) _buildEditForm() else _buildViewMode(),
+        ],
+      ),
+    );
+  }
 
-    return Scaffold(
-      backgroundColor: const Color(0xfff5f6fa),
+  // ============================================
+  // SHARED COMPONENTS
+  // ============================================
+  Widget _buildViewMode() {
+    return Column(
+      children: [
+        _infoTile(Icons.person_outline, "İsim", _nameCtrl.text),
+        _infoTile(Icons.email_outlined, "E-posta", _emailCtrl.text),
+        _infoTile(Icons.phone_outlined, "Telefon", _phoneCtrl.text),
+        if (isDriver) _infoTile(Icons.car_rental_outlined, "Plaka", _plateCtrl.text),
+      ],
+    );
+  }
 
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: desktop ? 60 : 20, vertical: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _infoTile(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 18, color: const Color(0xFF64748B)),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF64748B),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  value.isNotEmpty ? value : "-",
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEditForm() {
+    return Column(
+      children: [
+        _field("İsim", _nameCtrl, Icons.person_outline),
+        const SizedBox(height: 20),
+        _field("E-posta", _emailCtrl, Icons.email_outlined),
+        const SizedBox(height: 20),
+        _field("Telefon", _phoneCtrl, Icons.phone_outlined),
+        if (isDriver) ...[
+          const SizedBox(height: 20),
+          _field("Plaka", _plateCtrl, Icons.car_rental_outlined),
+        ],
+        if (!isDesktop) ...[
+          const SizedBox(height: 32),
+          Row(
             children: [
-
-              // ========================= HEADER =========================
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 22),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                  const SizedBox(width: 6),
-                  const Text(
-                    "Kullanıcı Detayı",
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-                  ),
-                  const Spacer(),
-
-                  if (!editing)
-                    IconButton(
-                      onPressed: () => setState(() => editing = true),
-                      icon: const Icon(Icons.edit_outlined),
-                      tooltip: "Düzenle",
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    setState(() {
+                      editing = false;
+                      _nameCtrl.text = widget.data['name'] ?? '';
+                      _emailCtrl.text = widget.data['email'] ?? '';
+                      _phoneCtrl.text = widget.data['phone'] ?? '';
+                      _plateCtrl.text = widget.data['plateNumber'] ?? '';
+                    });
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
                     ),
-
-                  IconButton(
-                    onPressed: deleteUser,
-                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                    tooltip: "Sil",
                   ),
-                ],
-              ),
-
-              const SizedBox(height: 24),
-
-              // ========================= CARD =========================
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 520),
-                  child: Container(
-                    padding: const EdgeInsets.all(22),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 15,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text("Kullanıcı Bilgileri",
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 20),
-
-                        // ========================= VIEW MODE =========================
-                        if (!editing) ...[
-                          displayField("İsim", name.text),
-                          displayField("E-posta", email.text),
-                          displayField("Telefon", phone.text),
-                          if (role == "Şoför") displayField("Plaka", plate.text),
-                          displayField("Rol", role),
-
-                          const SizedBox(height: 8),
-                          const Text(
-                            "Düzenlemek için sağ üstteki kalem ikonuna tıklayın.",
-                            style: TextStyle(fontSize: 13, color: Colors.black45),
-                          ),
-                        ],
-
-                        // ========================= EDIT MODE =========================
-                        if (editing) ...[
-                          TextField(controller: name, decoration: inputStyle("İsim")),
-                          const SizedBox(height: 16),
-
-                          TextField(controller: email, decoration: inputStyle("E-posta")),
-                          const SizedBox(height: 16),
-
-                          TextField(controller: phone, decoration: inputStyle("Telefon")),
-                          const SizedBox(height: 16),
-
-                          if (role == "Şoför")
-                            TextField(controller: plate, decoration: inputStyle("Plaka")),
-
-                          const SizedBox(height: 26),
-
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xff2563eb),
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 14),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  onPressed: save,
-                                  child: const Text("Kaydet",
-                                      style: TextStyle(fontWeight: FontWeight.w600)),
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: OutlinedButton(
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 14),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  onPressed: cancelEdit,
-                                  child: const Text("İptal",
-                                      style: TextStyle(fontWeight: FontWeight.w600)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ]
-                      ],
+                  child: const Text(
+                    "İptal",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF64748B),
                     ),
                   ),
                 ),
-              )
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1E3A5F),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    "Kaydet",
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
             ],
           ),
+        ],
+      ],
+    );
+  }
+
+  Widget _field(String label, TextEditingController ctrl, IconData icon) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 16, color: const Color(0xFF64748B)),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF475569),
+              ),
+            ),
+          ],
         ),
-      ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: ctrl,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFF1E3A5F), width: 2),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
