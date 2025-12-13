@@ -1,8 +1,5 @@
-// ---------------------------------------------------------------------------
-// UPLOAD DOCUMENTS PAGE – DIALOG FIXED VERSION
-// ---------------------------------------------------------------------------
-
 import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
@@ -19,15 +16,24 @@ class UploadDocumentsPage extends StatefulWidget {
 }
 
 class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
+  // ======================================================
+  // UI TOKENS (DİĞER SAYFALARLA AYNI)
+  // ======================================================
+  static const Color primary = Color(0xFF1E3A5F);
+  static const Color bg = Color(0xFFF8FAFC);
+  static const Color border = Color(0xFFE2E8F0);
+  static const Color textDark = Color(0xFF0F172A);
+  static const Color textMuted = Color(0xFF64748B);
+
   final ImagePicker _picker = ImagePicker();
-  List<XFile> selectedFiles = [];
+  final List<XFile> selectedFiles = [];
 
   bool isUploading = false;
   double uploadProgress = 0.0;
 
-  // ---------------------------------------------------------------------------
-  // 📌 Çoklu Galeri Seçimi
-  // ---------------------------------------------------------------------------
+  // ======================================================
+  // 📁 GALERİ
+  // ======================================================
   Future<void> pickDocuments() async {
     try {
       final files = await _picker.pickMultiImage(imageQuality: 75);
@@ -39,13 +45,13 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // 📷 Kamera ile Fotoğraf
-  // ---------------------------------------------------------------------------
+  // ======================================================
+  // 📷 KAMERA
+  // ======================================================
   Future<void> pickFromCamera() async {
     try {
       final photo =
-      await _picker.pickImage(imageQuality: 75, source: ImageSource.camera);
+      await _picker.pickImage(source: ImageSource.camera, imageQuality: 75);
       if (photo != null) {
         setState(() => selectedFiles.add(photo));
       }
@@ -54,9 +60,9 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // ⬆ Belgeleri Upload Et + Firestore Güncelle
-  // ---------------------------------------------------------------------------
+  // ======================================================
+  // ⬆ UPLOAD
+  // ======================================================
   Future<void> uploadFiles() async {
     if (selectedFiles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -70,80 +76,79 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
       uploadProgress = 0.0;
     });
 
-    List<String> documentUrls = [];
-
     try {
-      // ---------------------------------------------------------
-      // 1) JOB → assignedToUid (şoför UID) al
-      // ---------------------------------------------------------
       final jobRef =
       FirebaseFirestore.instance.collection("jobs").doc(widget.jobId);
       final jobSnap = await jobRef.get();
+      final driverUid = jobSnap.data()?["assignedToUid"];
 
-      final String? driverUid = jobSnap.data()?["assignedToUid"];
+      if (driverUid == null) throw "assignedToUid bulunamadı";
 
-      if (driverUid == null) {
-        throw "Job içinde assignedToUid bulunamadı!";
-      }
+      List<String> urls = [];
 
-      // ---------------------------------------------------------
-      // 2) Dosyaları sırayla yükle
-      // ---------------------------------------------------------
       for (int i = 0; i < selectedFiles.length; i++) {
         final file = selectedFiles[i];
-
         final path =
             "jobDocuments/${widget.jobId}/${DateTime.now().millisecondsSinceEpoch}_${file.name}";
         final ref = FirebaseStorage.instance.ref().child(path);
 
         final uploadTask = ref.putFile(File(file.path));
-
-        uploadTask.snapshotEvents.listen((snapshot) {
-          final p = snapshot.bytesTransferred / snapshot.totalBytes;
-          setState(() => uploadProgress =
-              (i / selectedFiles.length) + (p / selectedFiles.length));
+        uploadTask.snapshotEvents.listen((snap) {
+          final p = snap.bytesTransferred / snap.totalBytes;
+          setState(() {
+            uploadProgress =
+                (i / selectedFiles.length) + (p / selectedFiles.length);
+          });
         });
 
         await uploadTask;
-        final url = await ref.getDownloadURL();
-        documentUrls.add(url);
+        urls.add(await ref.getDownloadURL());
       }
 
-      // ---------------------------------------------------------
-      // 3) JOB durumunu güncelle + doküman ekle
-      // ---------------------------------------------------------
       await jobRef.update({
-        "documents": FieldValue.arrayUnion(documentUrls),
+        "documents": FieldValue.arrayUnion(urls),
         "status": "completed",
         "completedAt": FieldValue.serverTimestamp(),
       });
 
-      // ---------------------------------------------------------
-      // 4) Şoförü tekrar müsait yap
-      // ---------------------------------------------------------
       await FirebaseFirestore.instance
           .collection("users")
           .doc(driverUid)
           .update({"jobStatus": "available"});
 
-      // ---------------------------------------------------------
-      // 5) BAŞARI ANİMASYONU - DÜZELTİLMİŞ VERSİYON
-      // ---------------------------------------------------------
       if (!mounted) return;
 
-      // Dialog göster ve kapandığında devam et
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) => WillPopScope(
-          onWillPop: () async => false, // Geri tuşunu engelle
+      await _successDialog();
+
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      debugPrint("UPLOAD ERROR → $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Hata: $e")));
+      }
+    } finally {
+      if (mounted) setState(() => isUploading = false);
+    }
+  }
+
+  // ======================================================
+  // ✅ SUCCESS DIALOG
+  // ======================================================
+  Future<void> _successDialog() async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return WillPopScope(
+          onWillPop: () async => false,
           child: Dialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
             child: SizedBox(
-              width: 250,
-              height: 280,
+              height: 260,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -152,7 +157,7 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
                     height: 120,
                     repeat: false,
                     onLoaded: (composition) {
-                      // Animasyon bitince otomatik kapat
+                      // ✅ ANİMASYON BİTİNCE DIALOG'U KAPAT
                       Future.delayed(composition.duration, () {
                         if (Navigator.canPop(dialogContext)) {
                           Navigator.of(dialogContext).pop();
@@ -160,12 +165,12 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
                       });
                     },
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   const Text(
-                    "İş Tamamlandı!",
+                    "İş Tamamlandı",
                     style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -176,81 +181,48 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
               ),
             ),
           ),
-        ),
-      );
-
-      // Dialog kapandıktan sonra
-      if (!mounted) return;
-
-      // Küçük delay ekle
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      // ---------------------------------------
-      // 🚀 YÖNLENDİRME - DriverScreen'e geri dön
-      // ---------------------------------------
-      if (!mounted) return;
-
-      // Tüm sayfaları kapat ve DriverScreen'e dön
-      // UploadDocumentsPage'i kapat
-      Navigator.of(context).pop();
-
-    } catch (e) {
-      debugPrint("UPLOAD ERROR → $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Hata oluştu: $e")),
         );
-      }
-    } finally {
-      if (mounted) setState(() => isUploading = false);
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // 🖼 Fotoğraf Önizleme
-  // ---------------------------------------------------------------------------
-  void openPreview(XFile file) {
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        child: Image.file(File(file.path), fit: BoxFit.cover),
-      ),
+      },
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // ❌ Fotoğraf Sil
-  // ---------------------------------------------------------------------------
-  void removeFile(int index) {
-    setState(() => selectedFiles.removeAt(index));
-  }
-
-  // ---------------------------------------------------------------------------
+  // ======================================================
   // UI
-  // ---------------------------------------------------------------------------
+  // ======================================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Evrak Yükleme")),
+      backgroundColor: bg,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: textDark,
+        elevation: 0,
+        title: const Text(
+          "Evrak Yükleme",
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
       body: Column(
         children: [
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
 
-          // GALERİ + KAMERA
+          // ===================================================
+          // ACTION BUTTONS
+          // ===================================================
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
                 Expanded(
-                  child: ElevatedButton.icon(
+                  child: OutlinedButton.icon(
                     onPressed: isUploading ? null : pickDocuments,
                     icon: const Icon(Icons.photo_library),
                     label: const Text("Galeriden Seç"),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton.icon(
+                  child: OutlinedButton.icon(
                     onPressed: isUploading ? null : pickFromCamera,
                     icon: const Icon(Icons.camera_alt),
                     label: const Text("Kamera"),
@@ -260,44 +232,47 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
             ),
           ),
 
-          // FOTO LISTESI
+          const SizedBox(height: 16),
+
+          // ===================================================
+          // FILE LIST
+          // ===================================================
           Expanded(
             child: selectedFiles.isEmpty
-                ? const Center(child: Text("Henüz evrak seçilmedi."))
+                ? _emptyState()
                 : GridView.builder(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(16),
               itemCount: selectedFiles.length,
               gridDelegate:
               const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
               ),
               itemBuilder: (_, i) {
                 final file = selectedFiles[i];
                 return Stack(
                   children: [
-                    GestureDetector(
-                      onTap: () => openPreview(file),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.file(
-                          File(file.path),
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          height: double.infinity,
-                        ),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(
+                        File(file.path),
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
                       ),
                     ),
                     Positioned(
-                      right: 4,
-                      top: 4,
+                      right: 6,
+                      top: 6,
                       child: GestureDetector(
-                        onTap: () => removeFile(i),
+                        onTap: () =>
+                            setState(() => selectedFiles.removeAt(i)),
                         child: const CircleAvatar(
+                          radius: 14,
                           backgroundColor: Colors.black54,
                           child: Icon(Icons.close,
-                              size: 18, color: Colors.white),
+                              size: 16, color: Colors.white),
                         ),
                       ),
                     ),
@@ -307,37 +282,61 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
             ),
           ),
 
-          // PROGRESS + BUTON
-          isUploading
-              ? Padding(
+          // ===================================================
+          // PROGRESS / SUBMIT
+          // ===================================================
+          Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
+            child: isUploading
+                ? Column(
               children: [
                 Text(
                   "%${(uploadProgress * 100).toStringAsFixed(0)}",
                   style: const TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.bold),
+                      fontSize: 18, fontWeight: FontWeight.w700),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 LinearProgressIndicator(
                   value: uploadProgress,
-                  minHeight: 12,
-                  borderRadius: BorderRadius.circular(12),
+                  minHeight: 10,
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ],
-            ),
-          )
-              : Padding(
-            padding: const EdgeInsets.all(16),
-            child: ElevatedButton(
+            )
+                : ElevatedButton(
               onPressed: uploadFiles,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 50),
-                backgroundColor: Colors.green,
+                backgroundColor: primary,
               ),
-              child: const Text("Yüklemeyi Tamamla",
-                  style: TextStyle(fontSize: 16)),
+              child: const Text(
+                "Yüklemeyi Tamamla",
+                style:
+                TextStyle(fontSize: 16, fontWeight: FontWeight.w600,color: Colors.white),
+              ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.upload_file_outlined,
+              size: 64, color: Colors.grey[400]),
+          const SizedBox(height: 12),
+          const Text(
+            "Henüz evrak seçilmedi",
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            "Galeriden veya kameradan belge ekleyin",
+            style: TextStyle(color: textMuted),
           ),
         ],
       ),

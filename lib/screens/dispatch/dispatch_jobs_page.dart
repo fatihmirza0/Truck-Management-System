@@ -2,24 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dispatch_job_detail_page.dart';
 
-class DispatchActiveCompletedPage extends StatefulWidget {
+class DispatchJobsPage extends StatefulWidget {
   final String dispatchUid;
 
-  const DispatchActiveCompletedPage({super.key, required this.dispatchUid});
+  const DispatchJobsPage({
+    super.key,
+    required this.dispatchUid,
+  });
 
   @override
-  State<DispatchActiveCompletedPage> createState() =>
-      _DispatchActiveCompletedPageState();
+  State<DispatchJobsPage> createState() => _DispatchJobsPageState();
 }
 
-class _DispatchActiveCompletedPageState
-    extends State<DispatchActiveCompletedPage> {
+class _DispatchJobsPageState extends State<DispatchJobsPage> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
-  String _selectedTab = "active"; // active or completed
+  String _selectedTab = "pending"; // pending, declined, approved, completed
 
-  bool driversLoading = true;
-  final Map<String, Map<String, dynamic>> drivers = {};
+  bool loadingDrivers = true;
+  final Map<String, Map<String, String>> drivers = {};
 
   bool get isDesktop => MediaQuery.of(context).size.width > 900;
 
@@ -53,14 +54,14 @@ class _DispatchActiveCompletedPageState
       };
     }
 
-    setState(() => driversLoading = false);
+    setState(() => loadingDrivers = false);
   }
 
   Stream<QuerySnapshot> _jobsStream() {
     return FirebaseFirestore.instance
         .collection("jobs")
         .where("assignedByUid", isEqualTo: widget.dispatchUid)
-        .where("status", isEqualTo: _selectedTab == "active" ? "approved" : "completed")
+        .where("status", isEqualTo: _selectedTab)
         .orderBy("createdAt", descending: true)
         .snapshots();
   }
@@ -75,8 +76,8 @@ class _DispatchActiveCompletedPageState
 
       if (drv == null) return false;
 
-      final name = drv["name"].toLowerCase();
-      final plate = drv["plate"].toLowerCase();
+      final name = drv["name"]!.toLowerCase();
+      final plate = drv["plate"]!.toLowerCase();
       final cargoInfo = (j["cargoInfo"] ?? "").toLowerCase();
       final loadPort = (j["loadPort"] ?? "").toLowerCase();
       final unloadPort = (j["unloadPort"] ?? "").toLowerCase();
@@ -96,10 +97,55 @@ class _DispatchActiveCompletedPageState
         builder: (_) => DispatchJobDetailPage(
           jobId: jobId,
           data: job,
-          canEdit: false,
+          canEdit: job["status"] == "declined",
         ),
       ),
     );
+  }
+
+  String _getPageTitle() {
+    switch (_selectedTab) {
+      case "pending":
+        return "Bekleyen İşler";
+      case "declined":
+        return "Reddedilen İşler";
+      case "approved":
+        return "Yoldaki İşler";
+      case "completed":
+        return "Tamamlanan İşler";
+      default:
+        return "İş Takibi";
+    }
+  }
+
+  String _getPageSubtitle() {
+    switch (_selectedTab) {
+      case "pending":
+        return "Onay bekleyen işleriniz";
+      case "declined":
+        return "Şoförler tarafından reddedilen işler";
+      case "approved":
+        return "Şu anda devam eden işler";
+      case "completed":
+        return "Başarıyla tamamlanan işler";
+      default:
+        return "Tüm işleriniz";
+    }
+  }
+
+  IconData _getPageIcon() {
+    switch (_selectedTab) {
+      case "pending":
+        return Icons.pending_outlined;
+      case "declined":
+        return Icons.cancel_outlined;
+      case "approved":
+        return Icons.local_shipping_outlined;
+      case "completed":
+        return Icons.check_circle_outline;
+      default:
+        return Icons.assignment_outlined;
+    }
   }
 
   @override
@@ -112,7 +158,7 @@ class _DispatchActiveCompletedPageState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Modern Header with Icon
+              // Dynamic Header
               Row(
                 children: [
                   Container(
@@ -128,8 +174,8 @@ class _DispatchActiveCompletedPageState
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.local_shipping_outlined,
+                    child: Icon(
+                      _getPageIcon(),
                       color: Colors.white,
                       size: 28,
                     ),
@@ -139,9 +185,9 @@ class _DispatchActiveCompletedPageState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          "Yolda ve Tamamlanan",
-                          style: TextStyle(
+                        Text(
+                          _getPageTitle(),
+                          style: const TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.w600,
                             color: Color(0xFF1E3A5F),
@@ -150,7 +196,7 @@ class _DispatchActiveCompletedPageState
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          "Devam eden ve tamamlanan işleriniz",
+                          _getPageSubtitle(),
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[600],
@@ -195,7 +241,7 @@ class _DispatchActiveCompletedPageState
               ),
               const SizedBox(height: 20),
 
-              // Premium Segmented Control
+              // Four Tab Buttons
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
@@ -210,11 +256,26 @@ class _DispatchActiveCompletedPageState
                     ),
                   ],
                 ),
-                child: Row(
+                child: isDesktop
+                    ? Row(
                   children: [
                     Expanded(
                       child: _buildTabButton(
-                        "active",
+                        "pending",
+                        "Bekleyen",
+                        Icons.pending_outlined,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildTabButton(
+                        "declined",
+                        "Reddedilen",
+                        Icons.cancel_outlined,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildTabButton(
+                        "approved",
                         "Yolda",
                         Icons.local_shipping_outlined,
                       ),
@@ -227,6 +288,47 @@ class _DispatchActiveCompletedPageState
                       ),
                     ),
                   ],
+                )
+                    : Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildTabButton(
+                            "pending",
+                            "Bekleyen",
+                            Icons.pending_outlined,
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildTabButton(
+                            "declined",
+                            "Reddedilen",
+                            Icons.cancel_outlined,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildTabButton(
+                            "approved",
+                            "Yolda",
+                            Icons.local_shipping_outlined,
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildTabButton(
+                            "completed",
+                            "Tamamlanan",
+                            Icons.check_circle_outline,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 12),
@@ -235,7 +337,7 @@ class _DispatchActiveCompletedPageState
                 child: StreamBuilder<QuerySnapshot>(
                   stream: _jobsStream(),
                   builder: (context, snap) {
-                    if (!snap.hasData || driversLoading) {
+                    if (!snap.hasData || loadingDrivers) {
                       return const Center(
                         child: CircularProgressIndicator(
                           valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
@@ -427,14 +529,27 @@ class _DispatchActiveCompletedPageState
     String statusText = "";
     IconData statusIcon = Icons.info_outline;
 
-    if (status == "approved") {
-      statusColor = const Color(0xFF3B82F6);
-      statusText = "YOLDA";
-      statusIcon = Icons.local_shipping_outlined;
-    } else if (status == "completed") {
-      statusColor = const Color(0xFF059669);
-      statusText = "TAMAMLANDI";
-      statusIcon = Icons.check_circle;
+    switch (status) {
+      case "pending":
+        statusColor = const Color(0xFFF59E0B);
+        statusText = "BEKLEYEN";
+        statusIcon = Icons.pending_outlined;
+        break;
+      case "declined":
+        statusColor = const Color(0xFFDC2626);
+        statusText = "REDDEDİLDİ";
+        statusIcon = Icons.cancel_outlined;
+        break;
+      case "approved":
+        statusColor = const Color(0xFF3B82F6);
+        statusText = "YOLDA";
+        statusIcon = Icons.local_shipping_outlined;
+        break;
+      case "completed":
+        statusColor = const Color(0xFF059669);
+        statusText = "TAMAMLANDI";
+        statusIcon = Icons.check_circle;
+        break;
     }
 
     return Container(

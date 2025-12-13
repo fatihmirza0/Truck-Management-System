@@ -15,26 +15,32 @@ class DispatchWaitRejectPage extends StatefulWidget {
 }
 
 class _DispatchWaitRejectPageState extends State<DispatchWaitRejectPage> {
-  final TextEditingController _search = TextEditingController();
-  String search = "";
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = "";
+  String _selectedTab = "pending"; // pending or declined
 
   bool loadingDrivers = true;
-
-  /// uid -> { name, plate }
   final Map<String, Map<String, String>> drivers = {};
 
-  bool get isDesktop => MediaQuery.of(context).size.width >= 900;
-  static const accent = Color(0xFF2563EB);
+  bool get isDesktop => MediaQuery.of(context).size.width > 900;
 
   @override
   void initState() {
     super.initState();
     _loadDrivers();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+      });
+    });
   }
 
-  // ---------------------------------------------------------------------------
-  // ŞOFÖRLERİ UID'YE GÖRE YÜKLE
-  // ---------------------------------------------------------------------------
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadDrivers() async {
     final snap = await FirebaseFirestore.instance
         .collection("users")
@@ -51,257 +57,520 @@ class _DispatchWaitRejectPageState extends State<DispatchWaitRejectPage> {
     setState(() => loadingDrivers = false);
   }
 
-  // ---------------------------------------------------------------------------
-  // İŞLERİ ÇEK (pending & declined)
-  // ---------------------------------------------------------------------------
-  Stream<List<QueryDocumentSnapshot>> _jobs(List<String> statuses) {
+  Stream<QuerySnapshot> _jobsStream() {
     return FirebaseFirestore.instance
         .collection("jobs")
         .where("assignedByUid", isEqualTo: widget.dispatchUid)
-        .where("status", whereIn: statuses)
+        .where("status", isEqualTo: _selectedTab)
         .orderBy("createdAt", descending: true)
-        .snapshots()
-        .map((s) => s.docs);
+        .snapshots();
   }
 
-  // ---------------------------------------------------------------------------
-  // KART
-  // ---------------------------------------------------------------------------
-  Widget _jobCard(Map<String, dynamic> j, String jobId) {
-    final driverUid = j["assignedToUid"] ?? "";
-    final info = drivers[driverUid] ?? {"name": "-", "plate": "-"};
+  List<QueryDocumentSnapshot> _filterJobs(List<QueryDocumentSnapshot> docs) {
+    if (_searchQuery.isEmpty) return docs;
 
-    final status = j["status"];
-    Color sc = Colors.grey;
-    if (status == "pending") sc = Colors.orange;
-    if (status == "declined") sc = Colors.red;
+    return docs.where((d) {
+      final j = d.data() as Map<String, dynamic>;
+      final driverUid = j["assignedToUid"];
+      final drv = drivers[driverUid];
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => DispatchJobDetailPage(
-              jobId: jobId,
-              data: j,
-              canEdit: status == "declined", // reddedilen iş düzenlenebilir
-            ),
-          ),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4)),
-          ],
-        ),
-        child: Row(
-          children: [
-            // Icon
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(Icons.local_shipping, color: Colors.grey.shade700),
-            ),
+      if (drv == null) return false;
 
-            const SizedBox(width: 16),
+      final name = drv["name"]!.toLowerCase();
+      final plate = drv["plate"]!.toLowerCase();
+      final cargoInfo = (j["cargoInfo"] ?? "").toLowerCase();
+      final loadPort = (j["loadPort"] ?? "").toLowerCase();
+      final unloadPort = (j["unloadPort"] ?? "").toLowerCase();
 
-            // Text info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(j["cargoInfo"] ?? "-",
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  Text(
-                    "Şoför: ${info["name"]} | Plaka: ${info["plate"]}",
-                    style:
-                    TextStyle(fontSize: 13, color: Colors.grey.shade700),
-                  ),
-                  Text("Yükleme: ${j["loadPort"] ?? "-"}"),
-                  Text("Varış: ${j["unloadPort"] ?? "-"}"),
-                ],
-              ),
-            ),
+      return name.contains(_searchQuery) ||
+          plate.contains(_searchQuery) ||
+          cargoInfo.contains(_searchQuery) ||
+          loadPort.contains(_searchQuery) ||
+          unloadPort.contains(_searchQuery);
+    }).toList();
+  }
 
-            // Status Chip
-            Container(
-              padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: sc.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                status.toUpperCase(),
-                style: TextStyle(
-                    color: sc, fontWeight: FontWeight.bold, fontSize: 12),
-              ),
-            )
-          ],
+  void _openDetail(Map<String, dynamic> job, String jobId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DispatchJobDetailPage(
+          jobId: jobId,
+          data: job,
+          canEdit: job["status"] == "declined",
         ),
       ),
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // LİSTE
-  // ---------------------------------------------------------------------------
-  Widget _jobList(Stream<List<QueryDocumentSnapshot>> stream) {
-    return StreamBuilder(
-      stream: stream,
-      builder: (_, snap) {
-        if (!snap.hasData || loadingDrivers) {
-          return const Center(child: CircularProgressIndicator());
-        }
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Modern Header with Icon
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E3A5F),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF1E3A5F).withOpacity(0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.assignment_outlined,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "İş Takibi",
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1E3A5F),
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Bekleyen ve reddedilen işleriniz",
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
 
-        var docs = snap.data!;
+              // Search Bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: const InputDecoration(
+                    hintText: "Şoför adı, plaka veya yük ile ara...",
+                    hintStyle: TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 14,
+                    ),
+                    prefixIcon: Icon(Icons.search, color: Color(0xFF64748B)),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
 
-        /// Arama filtresi
-        docs = docs.where((d) {
-          final j = d.data() as Map<String, dynamic>;
-          final driverUid = j["assignedToUid"];
-          final drv = drivers[driverUid];
+              // Premium Segmented Control
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _buildTabButton(
+                        "pending",
+                        "Bekleyen",
+                        Icons.pending_outlined,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildTabButton(
+                        "declined",
+                        "Reddedilen",
+                        Icons.cancel_outlined,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
 
-          if (drv == null) return false;
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: _jobsStream(),
+                  builder: (context, snap) {
+                    if (!snap.hasData || loadingDrivers) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+                        ),
+                      );
+                    }
 
-          final name = drv["name"]!.toLowerCase();
-          final plate = drv["plate"]!.toLowerCase();
+                    final allDocs = snap.data!.docs;
+                    final filtered = _filterJobs(allDocs);
 
-          return name.contains(search) || plate.contains(search);
-        }).toList();
+                    if (allDocs.isEmpty) {
+                      return _buildEmptyState();
+                    }
 
-        if (docs.isEmpty) {
-          return const Center(
-            child: Text(
-              "Kayıt bulunamadı",
-              style: TextStyle(fontSize: 16, color: Colors.black54),
-            ),
-          );
-        }
+                    if (_searchQuery.isNotEmpty && filtered.isEmpty) {
+                      return _buildNoResultsState();
+                    }
 
-        return isDesktop
-            ? GridView.builder(
-          padding: const EdgeInsets.all(24),
-          gridDelegate:
-          const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            childAspectRatio: 2.5,
-            crossAxisSpacing: 20,
-            mainAxisSpacing: 20,
+                    return isDesktop
+                        ? _buildDesktopGrid(filtered)
+                        : _buildMobileList(filtered);
+                  },
+                ),
+              ),
+            ],
           ),
-          itemCount: docs.length,
-          itemBuilder: (_, i) => _jobCard(
-              docs[i].data() as Map<String, dynamic>, docs[i].id),
-        )
-            : ListView.separated(
-          padding: const EdgeInsets.all(20),
-          itemCount: docs.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (_, i) => _jobCard(
-              docs[i].data() as Map<String, dynamic>, docs[i].id),
-        );
-      },
+        ),
+      ),
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // BUILD
-  // ---------------------------------------------------------------------------
-  @override
-  Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Column(
-        children: [
-          const SizedBox(height: 10),
-
-          // SEARCH
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 20),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4)),
-              ],
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.search, color: Colors.grey),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextField(
-                    controller: _search,
-                    onChanged: (v) =>
-                        setState(() => search = v.toLowerCase().trim()),
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      hintText: "İsim veya plaka ile ara...",
-                    ),
-                  ),
-                ),
-                if (search.isNotEmpty)
-                  IconButton(
-                    onPressed: () {
-                      _search.clear();
-                      setState(() => search = "");
-                    },
-                    icon: const Icon(Icons.close),
-                  ),
-              ],
-            ),
+  Widget _buildTabButton(String key, String label, IconData icon) {
+    final selected = _selectedTab == key;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedTab = key;
+          });
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF1E3A5F) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
           ),
-
-          const SizedBox(height: 14),
-
-          // TAB
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: const TabBar(
-              indicatorColor: accent,
-              labelColor: accent,
-              unselectedLabelColor: Colors.grey,
-              tabs: [
-                Tab(text: "Bekleyen"),
-                Tab(text: "Reddedilen"),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
-          // CONTENT
-          Expanded(
-            child: Container(
-              color: const Color(0xFFF5F6FA),
-              child: TabBarView(
-                children: [
-                  _jobList(_jobs(["pending"])),
-                  _jobList(_jobs(["declined"])),
-                ],
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: selected ? Colors.white : const Color(0xFF64748B),
               ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  color: selected ? Colors.white : const Color(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              Icons.inbox_outlined,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            "Henüz İş Yok",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[700],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Bu kategoride görüntülenecek iş bulunmuyor",
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[500],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildNoResultsState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              Icons.search_off_outlined,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            "Sonuç Bulunamadı",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[700],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Aramanızla eşleşen iş bulunamadı",
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[500],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopGrid(List<QueryDocumentSnapshot> docs) {
+    return GridView.builder(
+      padding: const EdgeInsets.only(bottom: 32),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        childAspectRatio: 1.8,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+      ),
+      itemCount: docs.length,
+      itemBuilder: (context, index) {
+        final d = docs[index];
+        final j = d.data() as Map<String, dynamic>;
+        return _buildJobCard(j, d.id);
+      },
+    );
+  }
+
+  Widget _buildMobileList(List<QueryDocumentSnapshot> docs) {
+    return ListView.separated(
+      itemCount: docs.length,
+      padding: const EdgeInsets.only(bottom: 32),
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final d = docs[index];
+        final j = d.data() as Map<String, dynamic>;
+        return _buildJobCard(j, d.id);
+      },
+    );
+  }
+
+  Widget _buildJobCard(Map<String, dynamic> j, String jobId) {
+    final driverUid = j["assignedToUid"] ?? "";
+    final info = drivers[driverUid] ?? {"name": "-", "plate": "-"};
+    final status = j["status"];
+
+    Color statusColor = Colors.grey;
+    String statusText = "";
+    IconData statusIcon = Icons.info_outline;
+
+    if (status == "pending") {
+      statusColor = const Color(0xFFF59E0B);
+      statusText = "BEKLEYEN";
+      statusIcon = Icons.pending_outlined;
+    } else if (status == "declined") {
+      statusColor = const Color(0xFFDC2626);
+      statusText = "REDDEDİLDİ";
+      statusIcon = Icons.cancel_outlined;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _openDetail(j, jobId),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.inventory_2_outlined,
+                        size: 20,
+                        color: Color(0xFF1E3A5F),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        j["cargoInfo"] ?? "-",
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            statusIcon,
+                            size: 14,
+                            color: statusColor,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            statusText,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: statusColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildInfoRow(
+                  Icons.person_outline,
+                  "Şoför",
+                  info["name"]!,
+                ),
+                const SizedBox(height: 8),
+                _buildInfoRow(
+                  Icons.car_rental_outlined,
+                  "Plaka",
+                  info["plate"]!,
+                ),
+                const SizedBox(height: 8),
+                _buildInfoRow(
+                  Icons.location_on_outlined,
+                  "Güzergah",
+                  "${j["loadPort"]} → ${j["unloadPort"]}",
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: const Color(0xFF64748B)),
+        const SizedBox(width: 8),
+        Text(
+          "$label: ",
+          style: const TextStyle(
+            fontSize: 13,
+            color: Color(0xFF64748B),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF475569),
+              fontWeight: FontWeight.w400,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }

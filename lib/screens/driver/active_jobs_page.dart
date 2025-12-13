@@ -5,7 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:lojistik/widgets/empty_state.dart';
 
 class ActiveJobsPage extends StatefulWidget {
-  final String uid; // 🔥 artık driverId DEĞİL UID
+  final String uid;
 
   const ActiveJobsPage({super.key, required this.uid});
 
@@ -14,239 +14,304 @@ class ActiveJobsPage extends StatefulWidget {
 }
 
 class _ActiveJobsPageState extends State<ActiveJobsPage> {
-  /// 🔹 Bu şoföre atanmış aktif işleri çek
+  // ===============================
+  // UI TOKENS (JobsPage ile aynı dil)
+  // ===============================
+  static const Color primary = Color(0xFF1E3A5F);
+  static const Color bg = Color(0xFFF8FAFC);
+  static const Color border = Color(0xFFE2E8F0);
+  static const Color textDark = Color(0xFF0F172A);
+  static const Color textMuted = Color(0xFF64748B);
+
+  // ===============================
+  // FIRESTORE
+  // ===============================
   Stream<QuerySnapshot> _getActiveJobs() {
     return FirebaseFirestore.instance
         .collection('jobs')
         .where('status', isEqualTo: 'approved')
-        .where('assignedToUid', isEqualTo: widget.uid) // 🔥 UID kullanılıyor
+        .where('assignedToUid', isEqualTo: widget.uid)
         .snapshots();
   }
 
-  /// 🔹 Google Maps aç
+  // ===============================
+  // MAPS
+  // ===============================
   Future<void> _openMaps(String query) async {
     if (query.isEmpty) return;
     final encoded = Uri.encodeComponent(query);
-
     final url = Uri.parse(
       "https://www.google.com/maps/dir/?api=1&destination=$encoded",
     );
-
     await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _getActiveJobs(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final jobs = snapshot.data?.docs ?? [];
-
-        if (jobs.isEmpty) {
-          return const EmptyState(message: "Aktif iş bulunamadı.");
-        }
-
-        final job = jobs.first;
-        final jobData = job.data() as Map<String, dynamic>;
-        final jobId = job.id;
-
-        return Container(
-          color: const Color(0xFFF5F5F7),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: const [
-                    Icon(Icons.local_shipping_outlined,
-                        color: Colors.blueAccent, size: 30),
-                    SizedBox(width: 8),
-                    Text("Aktif İş",
-                        style: TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.bold)),
-                  ],
+    return Scaffold(
+      backgroundColor: bg,
+      body: SafeArea(
+        child: StreamBuilder<QuerySnapshot>(
+          stream: _getActiveJobs(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation(primary),
                 ),
-                const SizedBox(height: 10),
-                const Text(
-                  "Şu anda üzerinizdeki aktif iş.",
-                  style: TextStyle(color: Colors.black54),
-                ),
-                const SizedBox(height: 16),
+              );
+            }
 
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                        color: Colors.black.withOpacity(0.05),
+            final jobs = snapshot.data?.docs ?? [];
+
+            if (jobs.isEmpty) {
+              return const EmptyState(message: "Aktif iş bulunamadı.");
+            }
+
+            final job = jobs.first;
+            final data = job.data() as Map<String, dynamic>;
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ===================================================
+                  // HEADER
+                  // ===================================================
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: primary,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.local_shipping_outlined,
+                          color: Colors.white,
+                          size: 26,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text(
+                            "Aktif İş",
+                            style: TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.w600,
+                              color: primary,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            "Üzerinizde bulunan aktif sevkiyat bilgileri",
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: textMuted,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _infoRow("📦 Yük Bilgisi", jobData['cargoInfo']),
-                      const SizedBox(height: 16),
 
-                      _locationBox(
-                        title: "Yükleme Noktası",
-                        value: jobData['loadPort'],
-                        color: Colors.blueAccent,
-                        onTap: () => _openMaps(jobData['loadPort']),
-                      ),
-                      const SizedBox(height: 20),
+                  const SizedBox(height: 28),
 
-                      _locationBox(
-                        title: "Varış Noktası",
-                        value: jobData['unloadPort'],
-                        color: Colors.green,
-                        onTap: () => _openMaps(jobData['unloadPort']),
-                      ),
-                      const SizedBox(height: 20),
+                  // ===================================================
+                  // MAIN CARD
+                  // ===================================================
+                  Container(
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _infoRow("Yük Bilgisi", data['cargoInfo']),
+                        const SizedBox(height: 20),
+                        const Divider(height: 1),
 
-                      /// 🔹 Dispatch bilgisi — YENİ MİMARİ: assignedBy = dispatchUid
-                      FutureBuilder<DocumentSnapshot>(
-                        future: FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(jobData['assignedByUid'])
-                            .get(),
-                        builder: (context, snap) {
-                          if (!snap.hasData) {
-                            return _infoRow("👤 Dispatch", "Yükleniyor...");
-                          }
+                        const SizedBox(height: 20),
+                        _routeRow(
+                          title: "Yükleme Noktası",
+                          value: data['loadPort'],
+                          onMap: () => _openMaps(data['loadPort']),
+                        ),
 
-                          final dispatch =
-                          snap.data!.data() as Map<String, dynamic>?;
+                        const SizedBox(height: 20),
+                        _routeRow(
+                          title: "Varış Noktası",
+                          value: data['unloadPort'],
+                          onMap: () => _openMaps(data['unloadPort']),
+                        ),
 
-                          if (dispatch == null) {
-                            return _infoRow("👤 Dispatch", "Bulunamadı");
-                          }
+                        const SizedBox(height: 24),
+                        const Divider(height: 1),
+                        const SizedBox(height: 20),
 
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _infoRow("👤 Dispatch", dispatch['name']),
-                              _infoRow("📞 Telefon", dispatch['phone'] ?? "-"),
-                            ],
-                          );
-                        },
-                      ),
+                        // ===================================================
+                        // DISPATCH INFO
+                        // ===================================================
+                        FutureBuilder<DocumentSnapshot>(
+                          future: FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(data['assignedByUid'])
+                              .get(),
+                          builder: (context, snap) {
+                            if (!snap.hasData) {
+                              return _infoRow("Dispatch", "Yükleniyor...");
+                            }
 
-                      const SizedBox(height: 24),
+                            final dispatch =
+                            snap.data!.data() as Map<String, dynamic>?;
 
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    UploadDocumentsPage(jobId: jobId),
-                              ),
+                            if (dispatch == null) {
+                              return _infoRow("Dispatch", "Bulunamadı");
+                            }
+
+                            return Column(
+                              children: [
+                                _infoRow("Dispatch", dispatch['name']),
+                                const SizedBox(height: 8),
+                                _infoRow(
+                                    "Telefon", dispatch['phone'] ?? "-"),
+                              ],
                             );
                           },
-                          icon: const Icon(Icons.upload_file_rounded),
-                          label: const Text(
-                            "Evrak Yükle ve Tamamla",
-                            style: TextStyle(fontSize: 16),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blueGrey.shade800,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 16,
+                        ),
+
+                        const SizedBox(height: 32),
+
+                        // ===================================================
+                        // ACTION BUTTON
+                        // ===================================================
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      UploadDocumentsPage(jobId: job.id),
+                                ),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primary,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding:
+                              const EdgeInsets.symmetric(vertical: 18),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
+                            child: const Text(
+                              "Evrak Yükle ve İşi Tamamla",
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  /// Bilgi satırı
-  Widget _infoRow(String label, String? value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 3,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
+                ],
               ),
-            ),
-          ),
-          Expanded(
-            flex: 4,
-            child: Text(value ?? "-",
-                style: const TextStyle(color: Colors.black54)),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }
 
-  /// Konum kutusu
-  Widget _locationBox({
+  // ===================================================
+  // INFO ROW
+  // ===================================================
+  Widget _infoRow(String label, String? value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 3,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: textMuted,
+            ),
+          ),
+        ),
+        Expanded(
+          flex: 5,
+          child: Text(
+            value ?? "-",
+            style: const TextStyle(
+              fontSize: 14,
+              color: textDark,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ===================================================
+  // ROUTE ROW (KURUMSAL, RENKSİZ)
+  // ===================================================
+  Widget _routeRow({
     required String title,
     required String value,
-    required Color color,
-    required VoidCallback onTap,
+    required VoidCallback onMap,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title,
-            style: TextStyle(
-                fontWeight: FontWeight.bold, color: Colors.grey[800])),
+        Text(
+          title.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: textMuted,
+            letterSpacing: .6,
+          ),
+        ),
         const SizedBox(height: 6),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withOpacity(0.2)),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.place, color: color),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: Text(value, style: const TextStyle(fontSize: 14))),
-              ElevatedButton(
-                onPressed: onTap,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: color,
-                  foregroundColor: Colors.white,
+        Row(
+          children: [
+            const Icon(
+              Icons.place_outlined,
+              size: 18,
+              color: Color(0xFF475569),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: textDark,
                 ),
-                child: const Text("Git"),
-              )
-            ],
-          ),
+              ),
+            ),
+            IconButton(
+              onPressed: onMap,
+              icon: const Icon(Icons.map_outlined, size: 20),
+              color: primary,
+              tooltip: "Haritada aç",
+            ),
+          ],
         ),
       ],
     );

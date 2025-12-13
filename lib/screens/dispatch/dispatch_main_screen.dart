@@ -4,8 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'create_job_page.dart';
 import 'add_driver_page.dart';
-import 'dispatch_wait_reject_page.dart';
-import 'dispatch_active_completed_page.dart';
+import 'dispatch_jobs_page.dart';
+import 'package:lojistik/screens/profile_screen.dart';
 
 class DispatchMainScreen extends StatefulWidget {
   const DispatchMainScreen({super.key, required uid});
@@ -19,16 +19,15 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
 
   bool get isDesktop => MediaQuery.of(context).size.width >= 900;
 
-  static const Color bg = Color(0xFFF3F4F6);
-  static const Color sidebar = Color(0xFF111827);
-  static const Color accent = Color(0xFF2563EB);
+  // 🎨 UI TOKENS
+  static const Color accent = Color(0xFF1E3A5F);
+  static const Color bg = Color(0xFFF8FAFC);
+  static const Color sidebar = Color(0xFF0F172A);
 
   String? dispatchUid;
+  String? userName;
   bool loading = true;
 
-  // ----------------------------------------------------------
-  // 🔹 UID YÜKLE (dispatcher)
-  // ----------------------------------------------------------
   @override
   void initState() {
     super.initState();
@@ -43,51 +42,51 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
       return;
     }
 
-    // Dispatch bilgisi sadece UID’den gelir.
     final snap =
     await FirebaseFirestore.instance.collection("users").doc(uid).get();
 
     if (snap.exists && snap.data()?["role"] == "dispatch") {
       dispatchUid = uid;
+      userName = snap.data()?["name"] ?? "Kullanıcı";
     }
 
     setState(() => loading = false);
   }
 
-  // ----------------------------------------------------------
-  // 🔹 SAYFALAR
-  // ----------------------------------------------------------
   List<Widget> get pages => [
-    const CreateJobPage(), // → yeni mimaride otomatik UID çekecek
+    const CreateJobPage(),
     const AddDriverPage(),
-    DispatchWaitRejectPage(dispatchUid: dispatchUid!),
-    DispatchActiveCompletedPage(dispatchUid: dispatchUid!),
+    DispatchJobsPage(dispatchUid: dispatchUid!),
   ];
 
   List<String> get titles => [
     "Yeni İş Oluştur",
     "Şoför Ekle",
-    "Bekleyen & Reddedilen",
-    "Aktif & Tamamlanan",
+    "İş Takibi",
   ];
 
   List<String> get subTitles => [
     "Görev",
     "Personel",
-    "İş Durumu",
-    "İş Durumu",
+    "Tüm İşler",
   ];
 
   List<IconData> get icons => [
-    Icons.assignment,
-    Icons.person_add,
-    Icons.watch_later_outlined,
-    Icons.check_circle_outline,
+    Icons.assignment_outlined,
+    Icons.person_add_outlined,
+    Icons.work_outline,
   ];
 
-  // ----------------------------------------------------------
-  // 🔹 BUILD
-  // ----------------------------------------------------------
+  void _openProfile() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+    ).then((_) {
+      // Profil sayfasından dönünce kullanıcı adını yeniden yükle
+      _loadDispatchUid();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (loading) {
@@ -97,53 +96,77 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
       );
     }
 
-    return isDesktop ? _desktop() : _mobile();
+    return isDesktop ? _desktopLayout() : _mobileLayout();
   }
 
-  // ----------------------------------------------------------
+  // ==========================================================
   // 📱 MOBILE UI
-  // ----------------------------------------------------------
-  Widget _mobile() {
+  // ==========================================================
+  Widget _mobileLayout() {
     return Scaffold(
       backgroundColor: bg,
-
       appBar: AppBar(
         backgroundColor: Colors.white,
-        elevation: 0.6,
-        centerTitle: true,
-        title: Column(
+        elevation: 0,
+        centerTitle: false,
+        title: Row(
           children: [
-            const Text(
-              "Truck Management",
-              style: TextStyle(
-                color: Colors.black87,
-                fontWeight: FontWeight.w700,
-                fontSize: 17,
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: accent,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.local_shipping_outlined,
+                color: Colors.white,
+                size: 18,
               ),
             ),
-            SizedBox(height: 3),
-            Text(
-              "Dispatch Paneli",
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Truck Management",
+                  style: TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+                Text(
+                  titles[_index],
+                  style: const TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
         actions: [
-          _logoutBtn(isDesktop: false),
+          IconButton(
+            onPressed: _openProfile,
+            icon: const Icon(Icons.person_outline, color: Color(0xFF1E3A5F)),
+            tooltip: "Profilim",
+          ),
+          const SizedBox(width: 8),
         ],
       ),
-
       body: AnimatedSwitcher(
-        duration: Duration(milliseconds: 250),
+        duration: const Duration(milliseconds: 250),
         child: pages[_index],
       ),
-
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
         onTap: (i) => setState(() => _index = i),
         selectedItemColor: accent,
-        unselectedItemColor: Colors.grey,
+        unselectedItemColor: const Color(0xFF94A3B8),
         type: BottomNavigationBarType.fixed,
+        selectedFontSize: 12,
+        unselectedFontSize: 12,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.assignment_outlined),
@@ -156,132 +179,77 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
             label: "Şoför",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.watch_later_outlined),
-            activeIcon: Icon(Icons.watch_later),
-            label: "Bekleyen",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.check_circle_outline),
-            activeIcon: Icon(Icons.check_circle),
-            label: "Aktif",
+            icon: Icon(Icons.work_outline),
+            activeIcon: Icon(Icons.work),
+            label: "İşler",
           ),
         ],
       ),
     );
   }
 
-  // ----------------------------------------------------------
+  // ==========================================================
   // 🖥️ DESKTOP UI
-  // ----------------------------------------------------------
-  Widget _desktop() {
+  // ==========================================================
+  Widget _desktopLayout() {
     return Scaffold(
       backgroundColor: bg,
       body: Row(
         children: [
-          // ---- Sidebar ----
+          // SIDEBAR
           Container(
-            width: 250,
-            decoration: const BoxDecoration(
+            width: 280,
+            decoration: BoxDecoration(
               color: sidebar,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black45,
-                  blurRadius: 12,
-                  offset: Offset(0, 3),
+              border: Border(
+                right: BorderSide(
+                  color: Colors.white.withOpacity(0.05),
+                  width: 1,
                 ),
-              ],
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 40),
+                const SizedBox(height: 32),
 
+                // LOGO
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 22),
-                  child: Row(
-                    children: const [
-                      Icon(Icons.local_shipping,
-                          color: Colors.white, size: 26),
-                      SizedBox(width: 10),
-                      Text(
-                        "Dispatch Paneli",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 22),
-                  child: Text(
-                    "Truck Management System",
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 30),
-
-                _menu("İş Oluştur", Icons.assignment_outlined, 0),
-                _menu("Şoför Ekle", Icons.person_add_outlined, 1),
-                _menu("Bekleyen İşler", Icons.watch_later_outlined, 2),
-                _menu("Aktif & Tamamlanan", Icons.check_circle_outline, 3),
-
-                const Spacer(),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 20, left: 60),
-                  child: _logoutBtn(isDesktop: true),
-                ),
-              ],
-            ),
-          ),
-
-          // ---- Main Area ----
-          Expanded(
-            child: Column(
-              children: [
-                Container(
-                  height: 68,
-                  padding: const EdgeInsets.symmetric(horizontal: 28),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 8,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
                     children: [
-                      Text(
-                        titles[_index],
-                        style: const TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(width: 10),
                       Container(
-                        padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: accent.withOpacity(0.10),
-                          borderRadius: BorderRadius.circular(50),
+                          color: accent,
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Row(
+                        child: const Icon(
+                          Icons.local_shipping_outlined,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(icons[_index], size: 16, color: accent),
-                            const SizedBox(width: 6),
                             Text(
-                              subTitles[_index],
-                              style: const TextStyle(fontSize: 12, color: accent),
+                              "Dispatch Paneli",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              "Truck Management",
+                              style: TextStyle(
+                                color: Color(0xFF64748B),
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
@@ -290,12 +258,85 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
                   ),
                 ),
 
+                const SizedBox(height: 32),
+
+                _menuItem("İş Oluştur", Icons.assignment_outlined, 0),
+                _menuItem("Şoför Ekle", Icons.person_add_outlined, 1),
+                _menuItem("İş Takibi", Icons.work_outline, 2),
+
+                const Spacer(),
+
+                // Profile Button
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: _profileButton(),
+                ),
+              ],
+            ),
+          ),
+
+          // MAIN AREA
+          Expanded(
+            child: Column(
+              children: [
+                // HEADER
+                Container(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: const Color(0xFFE2E8F0),
+                        width: 1,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: accent.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          icons[_index],
+                          color: accent,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            titles[_index],
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          Text(
+                            subTitles[_index],
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
                 Expanded(
                   child: AnimatedSwitcher(
-                    duration: Duration(milliseconds: 250),
+                    duration: const Duration(milliseconds: 250),
                     child: pages[_index],
                   ),
-                )
+                ),
               ],
             ),
           ),
@@ -304,111 +345,126 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
     );
   }
 
-  // ----------------------------------------------------------
-  // 🔹 MENU ITEM
-  // ----------------------------------------------------------
-  Widget _menu(String text, IconData icon, int idx) {
+  // ==========================================================
+  // MENU ITEM
+  // ==========================================================
+  Widget _menuItem(String text, IconData icon, int idx) {
     final selected = _index == idx;
 
-    return InkWell(
-      onTap: () => setState(() => _index = idx),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: selected ? Colors.white.withOpacity(0.08) : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 4,
-              height: 24,
-              decoration: BoxDecoration(
-                color: selected ? accent : Colors.transparent,
-                borderRadius: BorderRadius.circular(100),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: InkWell(
+        onTap: () => setState(() => _index = idx),
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: selected ? accent.withOpacity(0.15) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                color: selected ? accent : Colors.white.withOpacity(0.6),
+                size: 20,
               ),
-            ),
-            const SizedBox(width: 12),
-            Icon(icon,
-                color: Colors.white.withOpacity(selected ? 1 : 0.7), size: 20),
-            const SizedBox(width: 12),
-            Text(
-              text,
-              style: TextStyle(
-                color: Colors.white.withOpacity(selected ? 1 : 0.8),
-                fontSize: 14.5,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ----------------------------------------------------------
-  // 🔹 LOGOUT
-  // ----------------------------------------------------------
-  Widget _logoutBtn({required bool isDesktop}) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(90),
-      onTap: _logoutDialog,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: isDesktop ? 14 : 10, vertical: 10),
-        decoration: BoxDecoration(
-          color: isDesktop ? Colors.white.withOpacity(0.06) : Colors.transparent,
-          borderRadius: BorderRadius.circular(90),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.logout, color: Colors.redAccent),
-            if (isDesktop) ...[
-              const SizedBox(width: 10),
-              const Text(
-                "Çıkış",
-                style: TextStyle(
-                  color: Colors.redAccent,
-                  fontWeight: FontWeight.w600,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  text,
+                  style: TextStyle(
+                    color:
+                    selected ? Colors.white : Colors.white.withOpacity(0.7),
+                    fontSize: 14,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  ),
                 ),
-              )
-            ]
-          ],
+              ),
+              if (selected)
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Icon(
+                    Icons.chevron_right,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Future<void> _logoutDialog() async {
-    final res = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Oturumu Kapat"),
-        content: const Text("Çıkış yapmak istiyor musunuz?"),
-        actions: [
-          TextButton(
-            child: const Text("İptal"),
-            onPressed: () => Navigator.pop(context, false),
+  // ==========================================================
+  // PROFILE BUTTON
+  // ==========================================================
+  Widget _profileButton() {
+    return InkWell(
+      onTap: _openProfile,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.1),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: accent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.person,
+                color: Colors.white,
+                size: 18,
+              ),
             ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text("Çıkış Yap"),
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    userName ?? "Kullanıcı",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const Text(
+                    "Profilimi Görüntüle",
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: Colors.white.withOpacity(0.6),
+              size: 18,
+            ),
+          ],
+        ),
       ),
     );
-
-    if (res == true) {
-      await FirebaseAuth.instance.signOut();
-      if (context.mounted) {
-        Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
-      }
-    }
   }
 }
