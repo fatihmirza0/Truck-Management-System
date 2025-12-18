@@ -59,12 +59,71 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   // FIRESTORE
   // ======================================================
   Stream<QuerySnapshot> _getCompletedJobs() {
+    // Not: status: completed senin app’te var. Şemanda yok ama akışın için mantıklı.
     return FirebaseFirestore.instance
         .collection('jobs')
         .where('status', isEqualTo: 'completed')
-        .where('assignedToUid', isEqualTo: widget.uid)
-        .orderBy('completedAt', descending: true)
+        .where('driverId', isEqualTo: widget.uid)
+        .where('softDeleted', isEqualTo: false)
+    // timestamps.completedAt yoksa orderBy sıkıntı çıkarır.
+    // Bu yüzden sıralamayı client-side yapıyoruz.
         .snapshots();
+  }
+
+  // ======================================================
+  // HELPERS
+  // ======================================================
+  DateTime? _jobCompletedAt(Map<String, dynamic> job) {
+    final ts = (job['timestamps'] as Map?)?.cast<String, dynamic>() ?? {};
+    final completed = ts['completedAt'];
+    final reviewed = ts['reviewedAt'];
+    if (completed is Timestamp) return completed.toDate();
+    if (reviewed is Timestamp) return reviewed.toDate();
+
+    // fallback (eski yapı veya eksik)
+    final legacy = job['completedAt'];
+    if (legacy is Timestamp) return legacy.toDate();
+
+    return null;
+  }
+
+  DateTime? _jobCreatedAt(Map<String, dynamic> job) {
+    final ts = (job['timestamps'] as Map?)?.cast<String, dynamic>() ?? {};
+    final created = ts['createdAt'];
+    if (created is Timestamp) return created.toDate();
+
+    // fallback (eski)
+    final legacy = job['createdAt'];
+    if (legacy is Timestamp) return legacy.toDate();
+
+    return null;
+  }
+
+  String _loadPort(Map<String, dynamic> job) {
+    final route = (job['route'] as Map?)?.cast<String, dynamic>() ?? {};
+    return (route['loadPort'] ?? job['loadPort'] ?? '-').toString();
+  }
+
+  String _unloadPort(Map<String, dynamic> job) {
+    final route = (job['route'] as Map?)?.cast<String, dynamic>() ?? {};
+    return (route['unloadPort'] ?? job['unloadPort'] ?? '-').toString();
+  }
+
+  String _cargoLabel(Map<String, dynamic> job) {
+    final cargo = (job['cargo'] as Map?)?.cast<String, dynamic>() ?? {};
+    final type = (cargo['type'] ?? '').toString().trim();
+    final desc = (cargo['description'] ?? '').toString().trim();
+    final w = cargo['weightKg'];
+    final weight = (w == null) ? '' : '${w.toString()} kg';
+
+    // kısa ve okunur başlık
+    final parts = <String>[];
+    if (type.isNotEmpty) parts.add(type);
+    if (weight.isNotEmpty) parts.add(weight);
+
+    final head = parts.isEmpty ? '-' : parts.join(' • ');
+    if (desc.isEmpty) return head;
+    return "$head — $desc";
   }
 
   // ======================================================
@@ -72,18 +131,24 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   // ======================================================
   bool _applyFilters(Map<String, dynamic> job) {
     if (_searchQuery.isNotEmpty) {
-      final load = (job['loadPort'] ?? '').toString().toLowerCase();
-      final unload = (job['unloadPort'] ?? '').toString().toLowerCase();
+      final load = _loadPort(job).toLowerCase();
+      final unload = _unloadPort(job).toLowerCase();
       if (!load.contains(_searchQuery) && !unload.contains(_searchQuery)) {
         return false;
       }
     }
 
     if (_dateRange != null) {
-      final createdAt = (job['createdAt'] as Timestamp?)?.toDate();
+      // tarih filtresi: createdAt üzerinden (eski davranışın aynısı)
+      final createdAt = _jobCreatedAt(job);
       if (createdAt == null) return false;
-      if (createdAt.isBefore(_dateRange!.start) ||
-          createdAt.isAfter(_dateRange!.end)) {
+
+      final start = DateTime(_dateRange!.start.year, _dateRange!.start.month,
+          _dateRange!.start.day);
+      final end = DateTime(_dateRange!.end.year, _dateRange!.end.month,
+          _dateRange!.end.day, 23, 59, 59);
+
+      if (createdAt.isBefore(start) || createdAt.isAfter(end)) {
         return false;
       }
     }
@@ -140,17 +205,14 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                   ),
                   const SizedBox(height: 12),
 
-                  // 🗓️ RANGE CALENDAR
                   SizedBox(
                     height: 300,
                     child: CalendarDatePicker2(
                       config: CalendarDatePicker2Config(
                         calendarType: CalendarDatePicker2Type.range,
                         selectedDayHighlightColor: primary,
-                        selectedRangeHighlightColor:
-                        primary.withOpacity(0.25),
-                        dayTextStyle:
-                        const TextStyle(color: textDark),
+                        selectedRangeHighlightColor: primary.withOpacity(0.25),
+                        dayTextStyle: const TextStyle(color: textDark),
                         weekdayLabelTextStyle:
                         const TextStyle(fontWeight: FontWeight.w600),
                         controlsTextStyle:
@@ -159,9 +221,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                       ),
                       value: tempValues,
                       onValueChanged: (values) {
-                        setModalState(() {
-                          tempValues = values;
-                        });
+                        setModalState(() => tempValues = values);
                       },
                     ),
                   ),
@@ -234,9 +294,21 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
             );
           }
 
-          final allJobs = snapshot.data!.docs
-              .map((e) => e.data() as Map<String, dynamic>)
-              .toList();
+          // docId lazım (detay sayfasında işine yarar)
+          final allJobs = snapshot.data!.docs.map((doc) {
+            final m = (doc.data() as Map<String, dynamic>?) ?? {};
+            return {
+              ...m,
+              'id': doc.id,
+            };
+          }).toList();
+
+          // client-side sort (timestamps.completedAt > timestamps.reviewedAt > createdAt)
+          allJobs.sort((a, b) {
+            final da = _jobCompletedAt(a) ?? _jobCreatedAt(a) ?? DateTime(1970);
+            final db = _jobCompletedAt(b) ?? _jobCreatedAt(b) ?? DateTime(1970);
+            return db.compareTo(da);
+          });
 
           final visibleJobs = _applySearchAndPagination(allJobs);
 
@@ -257,11 +329,12 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                     const Text(
                       "Tamamlanan İşler Özeti",
                       style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    _summaryRow(
-                        "Toplam İş", allJobs.length.toString()),
+                    _summaryRow("Toplam İş", allJobs.length.toString()),
                   ],
                 ),
               ),
@@ -272,8 +345,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                 child: Column(
                   children: [
                     Container(
-                      padding:
-                      const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
@@ -283,8 +355,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                         controller: _searchController,
                         decoration: const InputDecoration(
                           hintText: "Yükleme veya varış limanı ara",
-                          prefixIcon:
-                          Icon(Icons.search, color: textMuted),
+                          prefixIcon: Icon(Icons.search, color: textMuted),
                           border: InputBorder.none,
                         ),
                       ),
@@ -310,9 +381,9 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                           IconButton(
                             onPressed: _clearDateFilter,
                             icon: const Icon(Icons.close),
-                          )
+                          ),
                       ],
-                    )
+                    ),
                   ],
                 ),
               ),
@@ -323,22 +394,23 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
               Expanded(
                 child: visibleJobs.isEmpty
                     ? _buildListEmptyState(
-                  isFiltered:
-                  _searchQuery.isNotEmpty || _dateRange != null,
+                  isFiltered: _searchQuery.isNotEmpty || _dateRange != null,
                 )
                     : ListView.separated(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemCount: visibleJobs.length,
-                  separatorBuilder: (_, __) =>
-                  const SizedBox(height: 12),
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, i) {
                     final job = visibleJobs[i];
+
+                    final title = job['referenceNo'] ?? '-';
+                    final subtitle =
+                        "${_loadPort(job)} → ${_unloadPort(job)}";
+
                     return Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius:
-                        BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: border),
                       ),
                       child: ListTile(
@@ -347,21 +419,20 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                           color: primary,
                         ),
                         title: Text(
-                          job['cargoInfo'] ?? '-',
+                          title,
                           style: const TextStyle(
-                              fontWeight: FontWeight.w600),
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                        subtitle: Text(
-                            "${job['loadPort']} → ${job['unloadPort']}"),
-                        trailing:
-                        const Icon(Icons.chevron_right),
+                        subtitle: Text(subtitle),
+                        trailing: const Icon(Icons.chevron_right),
                         onTap: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) =>
-                                  CompletedJobDetailsPage(
-                                      job: job),
+                              builder: (_) => CompletedJobDetailsPage(
+                                job: job, // job + id
+                              ),
                             ),
                           );
                         },
@@ -386,9 +457,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            isFiltered
-                ? Icons.search_off_outlined
-                : Icons.inbox_outlined,
+            isFiltered ? Icons.search_off_outlined : Icons.inbox_outlined,
             size: 64,
             color: Colors.grey[400],
           ),
@@ -407,20 +476,25 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-        Expanded(
-        flex: 3,
-        child: Text(label,
-            style: const TextStyle(
-                fontSize: 13, color: textMuted)),
-      ),
-      Expanded(
-        flex: 5,
-        child: Text(value,
-            style: const TextStyle(
+          Expanded(
+            flex: 3,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13, color: textMuted),
+            ),
+          ),
+          Expanded(
+            flex: 5,
+            child: Text(
+              value,
+              style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: textDark)),
-      ),],
+                color: textDark,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -431,18 +505,14 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
 
     return Container(
       margin: const EdgeInsets.all(16),
-      padding:
-      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-        BorderRadius.circular(12),
-        border:
-        Border.all(color: border),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
       ),
       child: Row(
-        mainAxisAlignment:
-        MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text("Sayfa $_currentPage / $totalPages"),
           Row(

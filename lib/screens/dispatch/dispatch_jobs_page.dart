@@ -1,14 +1,11 @@
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:lojistik/services/firestore_service.dart';
 import 'dispatch_job_detail_page.dart';
 
 class DispatchJobsPage extends StatefulWidget {
-  final String dispatchUid;
-
-  const DispatchJobsPage({
-    super.key,
-    required this.dispatchUid,
-  });
+  const DispatchJobsPage({super.key});
 
   @override
   State<DispatchJobsPage> createState() => _DispatchJobsPageState();
@@ -17,17 +14,18 @@ class DispatchJobsPage extends StatefulWidget {
 class _DispatchJobsPageState extends State<DispatchJobsPage> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
-  String _selectedTab = "pending"; // pending, declined, approved, completed
+  String _selectedStatus = FirestoreService.statusPending;
 
-  bool loadingDrivers = true;
-  final Map<String, Map<String, String>> drivers = {};
+  bool _loading = true;
+  final Map<String, String> _driverNameCache = {};
+  final Map<String, String> _vehiclePlateCache = {};
 
   bool get isDesktop => MediaQuery.of(context).size.width > 900;
 
   @override
   void initState() {
     super.initState();
-    _loadDrivers();
+    _loadCaches();
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.toLowerCase();
@@ -41,52 +39,68 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
     super.dispose();
   }
 
-  Future<void> _loadDrivers() async {
-    final snap = await FirebaseFirestore.instance
-        .collection("users")
-        .where("role", isEqualTo: "driver")
-        .get();
+  Future<void> _loadCaches() async {
+    try {
+      final driverCache = await FirestoreService.fetchDriverCache();
+      final vehicleCache = await FirestoreService.fetchVehicleCache();
 
-    for (var d in snap.docs) {
-      drivers[d.id] = {
-        "name": d["name"] ?? "-",
-        "plate": d["plateNumber"] ?? "-",
-      };
+      setState(() {
+        _driverNameCache.addAll(driverCache);
+        _vehiclePlateCache.addAll(vehicleCache);
+        _loading = false;
+      });
+    } catch (e) {
+      print('Cache load error: $e');
+      setState(() => _loading = false);
     }
-
-    setState(() => loadingDrivers = false);
   }
 
   Stream<QuerySnapshot> _jobsStream() {
-    return FirebaseFirestore.instance
-        .collection("jobs")
-        .where("assignedByUid", isEqualTo: widget.dispatchUid)
-        .where("status", isEqualTo: _selectedTab)
-        .orderBy("createdAt", descending: true)
-        .snapshots();
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUid == null) {
+      return const Stream.empty();
+    }
+
+    return FirestoreService.getDispatchJobsStream(
+      userId: currentUid,
+      status: _selectedStatus,
+    );
   }
 
   List<QueryDocumentSnapshot> _filterJobs(List<QueryDocumentSnapshot> docs) {
     if (_searchQuery.isEmpty) return docs;
 
-    return docs.where((d) {
-      final j = d.data() as Map<String, dynamic>;
-      final driverUid = j["assignedToUid"];
-      final drv = drivers[driverUid];
+    return docs.where((doc) {
+      final job = doc.data() as Map<String, dynamic>;
 
-      if (drv == null) return false;
+      // Driver bilgileri
+      final driverId = job["driverId"];
+      final driverName = _driverNameCache[driverId]?.toLowerCase() ?? "";
 
-      final name = drv["name"]!.toLowerCase();
-      final plate = drv["plate"]!.toLowerCase();
-      final cargoInfo = (j["cargoInfo"] ?? "").toLowerCase();
-      final loadPort = (j["loadPort"] ?? "").toLowerCase();
-      final unloadPort = (j["unloadPort"] ?? "").toLowerCase();
+      // Vehicle bilgileri
+      final vehicleId = job["vehicleId"];
+      final vehiclePlate = _vehiclePlateCache[vehicleId]?.toLowerCase() ?? "";
 
-      return name.contains(_searchQuery) ||
-          plate.contains(_searchQuery) ||
-          cargoInfo.contains(_searchQuery) ||
+      // Route bilgileri
+      final route = job["route"] as Map<String, dynamic>? ?? {};
+      final loadPort = route["loadPort"]?.toString().toLowerCase() ?? "";
+      final unloadPort = route["unloadPort"]?.toString().toLowerCase() ?? "";
+
+      // Cargo bilgileri
+      final cargo = job["cargo"] as Map<String, dynamic>? ?? {};
+      final cargoType = cargo["type"]?.toString().toLowerCase() ?? "";
+      final cargoDesc = cargo["description"]?.toString().toLowerCase() ?? "";
+
+      // Reference No
+      final refNo = job["referenceNo"]?.toString().toLowerCase() ?? "";
+
+      return driverName.contains(_searchQuery) ||
+          vehiclePlate.contains(_searchQuery) ||
           loadPort.contains(_searchQuery) ||
-          unloadPort.contains(_searchQuery);
+          unloadPort.contains(_searchQuery) ||
+          cargoType.contains(_searchQuery) ||
+          cargoDesc.contains(_searchQuery) ||
+          refNo.contains(_searchQuery);
     }).toList();
   }
 
@@ -97,21 +111,23 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
         builder: (_) => DispatchJobDetailPage(
           jobId: jobId,
           data: job,
-          canEdit: job["status"] == "declined",
+          // canEdit: job["status"] == FirestoreService.statusPending,
+          driverName: _driverNameCache[job["driverId"]] ?? "Bilinmiyor",
+          vehiclePlate: _vehiclePlateCache[job["vehicleId"]] ?? "Bilinmiyor",
         ),
       ),
     );
   }
 
   String _getPageTitle() {
-    switch (_selectedTab) {
-      case "pending":
+    switch (_selectedStatus) {
+      case FirestoreService.statusPending:
         return "Bekleyen İşler";
-      case "declined":
+      case FirestoreService.statusRejected:
         return "Reddedilen İşler";
-      case "approved":
+      case FirestoreService.statusApproved:
         return "Yoldaki İşler";
-      case "completed":
+      case FirestoreService.statusCompleted:
         return "Tamamlanan İşler";
       default:
         return "İş Takibi";
@@ -119,14 +135,14 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
   }
 
   String _getPageSubtitle() {
-    switch (_selectedTab) {
-      case "pending":
+    switch (_selectedStatus) {
+      case FirestoreService.statusPending:
         return "Onay bekleyen işleriniz";
-      case "declined":
+      case FirestoreService.statusRejected:
         return "Şoförler tarafından reddedilen işler";
-      case "approved":
-        return "Şu anda devam eden işler";
-      case "completed":
+      case FirestoreService.statusApproved:
+        return "Onaylanmış ve yolda olan işler";
+      case FirestoreService.statusCompleted:
         return "Başarıyla tamamlanan işler";
       default:
         return "Tüm işleriniz";
@@ -134,18 +150,60 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
   }
 
   IconData _getPageIcon() {
-    switch (_selectedTab) {
-      case "pending":
+    switch (_selectedStatus) {
+      case FirestoreService.statusPending:
         return Icons.pending_outlined;
-      case "declined":
+      case FirestoreService.statusRejected:
         return Icons.cancel_outlined;
-      case "approved":
+      case FirestoreService.statusApproved:
         return Icons.local_shipping_outlined;
-      case "completed":
-        return Icons.check_circle_outline;
+      case FirestoreService.statusCompleted:
+        return Icons.check_circle;
       default:
         return Icons.assignment_outlined;
     }
+  }
+
+  Widget _buildStatusTabButton(String status, String label, IconData icon) {
+    final selected = _selectedStatus == status;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedStatus = status;
+          });
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF1E3A5F) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: selected ? Colors.white : const Color(0xFF64748B),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  color: selected ? Colors.white : const Color(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -228,7 +286,7 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
                 child: TextField(
                   controller: _searchController,
                   decoration: const InputDecoration(
-                    hintText: "Şoför adı, plaka veya yük ile ara...",
+                    hintText: "Şoför, plaka, yük veya güzergah ile ara...",
                     hintStyle: TextStyle(
                       color: Color(0xFF94A3B8),
                       fontSize: 14,
@@ -241,7 +299,7 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
               ),
               const SizedBox(height: 20),
 
-              // Four Tab Buttons
+              // Status Tabs
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
@@ -259,32 +317,36 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
                 child: isDesktop
                     ? Row(
                   children: [
+                    // Pending
                     Expanded(
-                      child: _buildTabButton(
-                        "pending",
+                      child: _buildStatusTabButton(
+                        FirestoreService.statusPending,
                         "Bekleyen",
                         Icons.pending_outlined,
                       ),
                     ),
+                    // Rejected
                     Expanded(
-                      child: _buildTabButton(
-                        "declined",
+                      child: _buildStatusTabButton(
+                        FirestoreService.statusRejected,
                         "Reddedilen",
                         Icons.cancel_outlined,
                       ),
                     ),
+                    // Approved (Yolda)
                     Expanded(
-                      child: _buildTabButton(
-                        "approved",
+                      child: _buildStatusTabButton(
+                        FirestoreService.statusApproved,
                         "Yolda",
                         Icons.local_shipping_outlined,
                       ),
                     ),
+                    // Completed
                     Expanded(
-                      child: _buildTabButton(
-                        "completed",
+                      child: _buildStatusTabButton(
+                        FirestoreService.statusCompleted,
                         "Tamamlanan",
-                        Icons.check_circle_outline,
+                        Icons.check_circle,
                       ),
                     ),
                   ],
@@ -294,15 +356,15 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
                     Row(
                       children: [
                         Expanded(
-                          child: _buildTabButton(
-                            "pending",
+                          child: _buildStatusTabButton(
+                            FirestoreService.statusPending,
                             "Bekleyen",
                             Icons.pending_outlined,
                           ),
                         ),
                         Expanded(
-                          child: _buildTabButton(
-                            "declined",
+                          child: _buildStatusTabButton(
+                            FirestoreService.statusRejected,
                             "Reddedilen",
                             Icons.cancel_outlined,
                           ),
@@ -313,17 +375,17 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
                     Row(
                       children: [
                         Expanded(
-                          child: _buildTabButton(
-                            "approved",
+                          child: _buildStatusTabButton(
+                            FirestoreService.statusApproved,
                             "Yolda",
                             Icons.local_shipping_outlined,
                           ),
                         ),
                         Expanded(
-                          child: _buildTabButton(
-                            "completed",
+                          child: _buildStatusTabButton(
+                            FirestoreService.statusCompleted,
                             "Tamamlanan",
-                            Icons.check_circle_outline,
+                            Icons.check_circle,
                           ),
                         ),
                       ],
@@ -333,11 +395,12 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
               ),
               const SizedBox(height: 12),
 
+              // Jobs List/Grid
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
                   stream: _jobsStream(),
-                  builder: (context, snap) {
-                    if (!snap.hasData || loadingDrivers) {
+                  builder: (context, snapshot) {
+                    if (_loading) {
                       return const Center(
                         child: CircularProgressIndicator(
                           valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
@@ -345,12 +408,20 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
                       );
                     }
 
-                    final allDocs = snap.data!.docs;
-                    final filtered = _filterJobs(allDocs);
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+                        ),
+                      );
+                    }
 
-                    if (allDocs.isEmpty) {
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                       return _buildEmptyState();
                     }
+
+                    final allDocs = snapshot.data!.docs;
+                    final filtered = _filterJobs(allDocs);
 
                     if (_searchQuery.isNotEmpty && filtered.isEmpty) {
                       return _buildNoResultsState();
@@ -360,48 +431,6 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
                         ? _buildDesktopGrid(filtered)
                         : _buildMobileList(filtered);
                   },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabButton(String key, String label, IconData icon) {
-    final selected = _selectedTab == key;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _selectedTab = key;
-          });
-        },
-        borderRadius: BorderRadius.circular(8),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: selected ? const Color(0xFF1E3A5F) : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: selected ? Colors.white : const Color(0xFF64748B),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  color: selected ? Colors.white : const Color(0xFF64748B),
                 ),
               ),
             ],
@@ -500,9 +529,9 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
       ),
       itemCount: docs.length,
       itemBuilder: (context, index) {
-        final d = docs[index];
-        final j = d.data() as Map<String, dynamic>;
-        return _buildJobCard(j, d.id);
+        final doc = docs[index];
+        final job = doc.data() as Map<String, dynamic>;
+        return _buildJobCard(job, doc.id);
       },
     );
   }
@@ -513,44 +542,33 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
       padding: const EdgeInsets.only(bottom: 32),
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        final d = docs[index];
-        final j = d.data() as Map<String, dynamic>;
-        return _buildJobCard(j, d.id);
+        final doc = docs[index];
+        final job = doc.data() as Map<String, dynamic>;
+        return _buildJobCard(job, doc.id);
       },
     );
   }
 
-  Widget _buildJobCard(Map<String, dynamic> j, String jobId) {
-    final driverUid = j["assignedToUid"] ?? "";
-    final info = drivers[driverUid] ?? {"name": "-", "plate": "-"};
-    final status = j["status"];
+  Widget _buildJobCard(Map<String, dynamic> job, String jobId) {
+    final status = job["status"];
+    final statusColor = FirestoreService.getStatusColor(status);
+    final statusText = FirestoreService.getStatusText(status);
 
-    Color statusColor = Colors.grey;
-    String statusText = "";
-    IconData statusIcon = Icons.info_outline;
+    final driverId = job["driverId"];
+    final driverName = _driverNameCache[driverId] ?? "Bilinmiyor";
 
-    switch (status) {
-      case "pending":
-        statusColor = const Color(0xFFF59E0B);
-        statusText = "BEKLEYEN";
-        statusIcon = Icons.pending_outlined;
-        break;
-      case "declined":
-        statusColor = const Color(0xFFDC2626);
-        statusText = "REDDEDİLDİ";
-        statusIcon = Icons.cancel_outlined;
-        break;
-      case "approved":
-        statusColor = const Color(0xFF3B82F6);
-        statusText = "YOLDA";
-        statusIcon = Icons.local_shipping_outlined;
-        break;
-      case "completed":
-        statusColor = const Color(0xFF059669);
-        statusText = "TAMAMLANDI";
-        statusIcon = Icons.check_circle;
-        break;
-    }
+    final vehicleId = job["vehicleId"];
+    final vehiclePlate = _vehiclePlateCache[vehicleId] ?? "Bilinmiyor";
+
+    final route = job["route"] as Map<String, dynamic>? ?? {};
+    final loadPort = route["loadPort"] ?? "-";
+    final unloadPort = route["unloadPort"] ?? "-";
+
+    final cargo = job["cargo"] as Map<String, dynamic>? ?? {};
+    final cargoType = cargo["type"] ?? "-";
+    final cargoWeight = cargo["weightKg"] != null
+        ? "${cargo["weightKg"]} kg"
+        : "-";
 
     return Container(
       decoration: BoxDecoration(
@@ -568,13 +586,14 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => _openDetail(j, jobId),
+          onTap: () => _openDetail(job, jobId),
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Header with Ref No and Status
                 Row(
                   children: [
                     Container(
@@ -591,15 +610,28 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        j["cargoInfo"] ?? "-",
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF0F172A),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            job["referenceNo"] ?? "REF-XXX",
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1E3A5F),
+                            ),
+                          ),
+                          Text(
+                            cargoType,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0F172A),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
                     Container(
@@ -611,45 +643,48 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
                         color: statusColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            statusIcon,
-                            size: 14,
-                            color: statusColor,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            statusText,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: statusColor,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        statusText,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: statusColor,
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
+
+                // Driver Info
                 _buildInfoRow(
                   Icons.person_outline,
                   "Şoför",
-                  info["name"]!,
+                  driverName,
                 ),
                 const SizedBox(height: 8),
+
+                // Vehicle Info
                 _buildInfoRow(
-                  Icons.car_rental_outlined,
-                  "Plaka",
-                  info["plate"]!,
+                  Icons.local_shipping_outlined,
+                  "Araç",
+                  vehiclePlate,
                 ),
                 const SizedBox(height: 8),
+
+                // Route Info
                 _buildInfoRow(
-                  Icons.location_on_outlined,
+                  Icons.route_outlined,
                   "Güzergah",
-                  "${j["loadPort"]} → ${j["unloadPort"]}",
+                  "$loadPort → $unloadPort",
+                ),
+                const SizedBox(height: 8),
+
+                // Cargo Weight
+                _buildInfoRow(
+                  Icons.scale_outlined,
+                  "Ağırlık",
+                  cargoWeight,
                 ),
               ],
             ),

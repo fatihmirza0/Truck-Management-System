@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import '../../services/firestore_service.dart';
 
 class AddUserPage extends StatefulWidget {
   const AddUserPage({super.key});
@@ -35,28 +34,14 @@ class _AddUserPageState extends State<AddUserPage> {
     setState(() => _loading = true);
 
     try {
-      // 1) Auth oluştur
-      final auth = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: _email.text.trim(),
-        password: _pass.text.trim(),
+      await FirestoreService.createUserHttp(
+        name: _name.text,
+        email: _email.text,
+        password: _pass.text,
+        phone: _phone.text,
+        role: _role,
+        plate: _role == "driver" ? _plate.text : null,
       );
-
-      final uid = auth.user!.uid;
-
-      // 2) Firestore kayıt (plateNumber sadece driver ise ekleniyor)
-      final data = {
-        "name": _name.text.trim(),
-        "email": _email.text.trim(),
-        "phone": _phone.text.trim(),
-        "role": _role,
-        "createdAt": FieldValue.serverTimestamp(),
-      };
-
-      if (_role == "driver") {
-        data["plateNumber"] = _plate.text.trim().toUpperCase();
-      }
-
-      await FirebaseFirestore.instance.collection("users").doc(uid).set(data);
 
       _clear();
       _snack("Kullanıcı başarıyla eklendi", true);

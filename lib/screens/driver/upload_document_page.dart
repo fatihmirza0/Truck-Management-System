@@ -80,21 +80,34 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
       final jobRef =
       FirebaseFirestore.instance.collection("jobs").doc(widget.jobId);
       final jobSnap = await jobRef.get();
-      final driverUid = jobSnap.data()?["assignedToUid"];
 
-      if (driverUid == null) throw "assignedToUid bulunamadı";
+      if (!jobSnap.exists) {
+        throw "Job bulunamadı";
+      }
 
-      List<String> urls = [];
+      final jobData = (jobSnap.data() as Map<String, dynamic>?) ?? {};
+      final driverUid = (jobData["driverId"] ?? "").toString();
+      if (driverUid.isEmpty) throw "driverId bulunamadı";
+
+      // (opsiyonel) zaten completed ise double submit engelle
+      final status = (jobData["status"] ?? "").toString();
+      if (status == "completed") {
+        throw "Bu iş zaten tamamlanmış görünüyor.";
+      }
+
+      final List<String> urls = [];
 
       for (int i = 0; i < selectedFiles.length; i++) {
         final file = selectedFiles[i];
+
         final path =
             "jobDocuments/${widget.jobId}/${DateTime.now().millisecondsSinceEpoch}_${file.name}";
         final ref = FirebaseStorage.instance.ref().child(path);
 
         final uploadTask = ref.putFile(File(file.path));
         uploadTask.snapshotEvents.listen((snap) {
-          final p = snap.bytesTransferred / snap.totalBytes;
+          final p = snap.totalBytes == 0 ? 0.0 : snap.bytesTransferred / snap.totalBytes;
+          if (!mounted) return;
           setState(() {
             uploadProgress =
                 (i / selectedFiles.length) + (p / selectedFiles.length);
@@ -105,16 +118,12 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
         urls.add(await ref.getDownloadURL());
       }
 
+      // ✅ Job update (new schema)
       await jobRef.update({
-        "documents": FieldValue.arrayUnion(urls),
+        "documents": FieldValue.arrayUnion(urls), // senin mevcut kullanımın
         "status": "completed",
-        "completedAt": FieldValue.serverTimestamp(),
+        "timestamps.completedAt": FieldValue.serverTimestamp(),
       });
-
-      await FirebaseFirestore.instance
-          .collection("users")
-          .doc(driverUid)
-          .update({"jobStatus": "available"});
 
       if (!mounted) return;
 
@@ -157,7 +166,6 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
                     height: 120,
                     repeat: false,
                     onLoaded: (composition) {
-                      // ✅ ANİMASYON BİTİNCE DIALOG'U KAPAT
                       Future.delayed(composition.duration, () {
                         if (Navigator.canPop(dialogContext)) {
                           Navigator.of(dialogContext).pop();
@@ -243,8 +251,7 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
                 : GridView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: selectedFiles.length,
-              gridDelegate:
-              const SliverGridDelegateWithFixedCrossAxisCount(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
@@ -311,8 +318,11 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
               ),
               child: const Text(
                 "Yüklemeyi Tamamla",
-                style:
-                TextStyle(fontSize: 16, fontWeight: FontWeight.w600,color: Colors.white),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
@@ -326,8 +336,7 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.upload_file_outlined,
-              size: 64, color: Colors.grey[400]),
+          Icon(Icons.upload_file_outlined, size: 64, color: Colors.grey[400]),
           const SizedBox(height: 12),
           const Text(
             "Henüz evrak seçilmedi",

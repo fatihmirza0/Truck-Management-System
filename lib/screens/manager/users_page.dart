@@ -1,9 +1,10 @@
 // ============================================
 // MODERN ENTERPRISE USERS PAGE
-// With Dynamic View Modes
+// FULL RESTORED UI + FirestoreService
+// + Role-based search hint + refined card sizing
 // ============================================
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:lojistik/services/firestore_service.dart';
 import 'user_detail_page.dart';
 
 class UsersPage extends StatefulWidget {
@@ -15,11 +16,19 @@ class UsersPage extends StatefulWidget {
 
 class _UsersPageState extends State<UsersPage> {
   final TextEditingController _searchController = TextEditingController();
+
   String _role = "driver";
   String search = "";
   int _viewMode = 2; // 1: Detailed List, 2: Compact Grid, 3: Dense Grid
 
   bool get isDesktop => MediaQuery.of(context).size.width > 900;
+
+  String get _searchHint {
+    if (_role == "dispatch") {
+      return "İsim, e-posta veya telefon ile ara...";
+    }
+    return "İsim, e-posta veya plaka ile ara...";
+  }
 
   @override
   void initState() {
@@ -66,7 +75,7 @@ class _UsersPageState extends State<UsersPage> {
                 ],
               ),
               const SizedBox(height: 24),
-              Expanded(child: _buildUserList(_role)),
+              Expanded(child: _buildUserList()),
             ],
           ),
         ),
@@ -74,6 +83,9 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // HEADER
+  // ---------------------------------------------------------------------------
   Widget _buildHeader() {
     return Row(
       children: [
@@ -126,6 +138,9 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // SEARCH BAR (role-based hint)
+  // ---------------------------------------------------------------------------
   Widget _buildSearchBar() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -148,14 +163,14 @@ class _UsersPageState extends State<UsersPage> {
           Expanded(
             child: TextField(
               controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: "İsim, e-posta veya plaka ile ara...",
-                hintStyle: TextStyle(
+              decoration: InputDecoration(
+                hintText: _searchHint,
+                hintStyle: const TextStyle(
                   color: Color(0xFF94A3B8),
                   fontSize: 14,
                 ),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(vertical: 16),
+                contentPadding: const EdgeInsets.symmetric(vertical: 16),
               ),
             ),
           ),
@@ -170,6 +185,9 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // ROLE SEGMENTED CONTROL
+  // ---------------------------------------------------------------------------
   Widget _buildSegmentedControl() {
     return Container(
       padding: const EdgeInsets.all(4),
@@ -202,7 +220,13 @@ class _UsersPageState extends State<UsersPage> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => setState(() => _role = key),
+          onTap: () {
+            setState(() {
+              _role = key;
+              // UX: role değişince mevcut arama kalsın istiyorsan kaldırma
+              // ama hint değişsin diye rebuild zaten oluyor.
+            });
+          },
           borderRadius: BorderRadius.circular(8),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
@@ -235,6 +259,9 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // VIEW MODE SELECTOR
+  // ---------------------------------------------------------------------------
   Widget _buildViewModeSelector() {
     return Container(
       padding: const EdgeInsets.all(4),
@@ -287,12 +314,12 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
-  Widget _buildUserList(String role) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .where('role', isEqualTo: role)
-          .snapshots(),
+  // ---------------------------------------------------------------------------
+  // USER LIST (FirestoreService)
+  // ---------------------------------------------------------------------------
+  Widget _buildUserList() {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: FirestoreService.streamUsersWithVehicle(_role),
       builder: (_, snap) {
         if (!snap.hasData) {
           return const Center(
@@ -302,21 +329,25 @@ class _UsersPageState extends State<UsersPage> {
           );
         }
 
-        final filtered = snap.data!.docs.where((d) {
-          final u = d.data();
-          final name = (u['name'] ?? "").toLowerCase();
-          final plate = (u['plateNumber'] ?? "").toLowerCase();
-          final email = (u['email'] ?? "").toLowerCase();
-          return name.contains(search) ||
-              plate.contains(search) ||
-              email.contains(search);
+        final filtered = snap.data!.where((u) {
+          final name = (u['name'] ?? "").toString().toLowerCase();
+          final email = (u['email'] ?? "").toString().toLowerCase();
+          final phone = (u['phone'] ?? "").toString().toLowerCase();
+          final plate = (u['plateNumber'] ?? "").toString().toLowerCase();
+
+          // role bazlı arama: dispatch'te plaka araması anlamsız
+          if (_role == "dispatch") {
+            return name.contains(search) || email.contains(search) || phone.contains(search);
+          }
+          return name.contains(search) || email.contains(search) || plate.contains(search) || phone.contains(search);
         }).toList();
 
         if (filtered.isEmpty) {
           return _buildEmptyState(
-              search.isNotEmpty
-                  ? "Arama sonucu bulunamadı"
-                  : "Henüz ${role == 'driver' ? 'şoför' : 'dispatch'} kaydı yok");
+            search.isNotEmpty
+                ? "Arama sonucu bulunamadı"
+                : "Henüz ${_role == 'driver' ? 'şoför' : 'dispatch'} kaydı yok",
+          );
         }
 
         if (!isDesktop || _viewMode == 1) {
@@ -330,17 +361,18 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
-  // MODE 1: Detailed List - All info visible
-  Widget _buildDetailedList(
-      List<QueryDocumentSnapshot<Map<String, dynamic>>> users) {
+  // ---------------------------------------------------------------------------
+  // MODE 1: Detailed List (refined sizing)
+  // ---------------------------------------------------------------------------
+  Widget _buildDetailedList(List<Map<String, dynamic>> users) {
     return ListView.separated(
       padding: const EdgeInsets.only(top: 8),
       itemCount: users.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (_, i) {
-        final u = users[i].data();
-        final uid = users[i].id;
-        final isDriver = u['role'] == 'driver';
+        final u = users[i];
+        final uid = (u["uid"] ?? "").toString();
+        final isDriver = (u['role'] ?? "") == 'driver';
 
         return Container(
           decoration: BoxDecoration(
@@ -361,52 +393,54 @@ class _UsersPageState extends State<UsersPage> {
               onTap: () => _navigateToDetail(uid, u),
               borderRadius: BorderRadius.circular(12),
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 child: Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(9),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
-                        isDriver
-                            ? Icons.local_shipping_outlined
-                            : Icons.support_agent_outlined,
-                        size: 22,
+                        isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
+                        size: 20,
                         color: const Color(0xFF1E3A5F),
                       ),
                     ),
-                    const SizedBox(width: 14),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            u['name'] ?? "-",
+                            (u['name'] ?? "-").toString(),
                             style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
                               color: Color(0xFF0F172A),
+                              height: 1.1,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 6),
-                          _buildInfoRow(Icons.email_outlined, u['email']),
-                          const SizedBox(height: 3),
-                          _buildInfoRow(Icons.phone_outlined, u['phone']),
-                          if (isDriver && (u['plateNumber'] ?? "").isNotEmpty) ...[
-                            const SizedBox(height: 3),
-                            _buildInfoRow(Icons.car_rental_outlined, u['plateNumber']),
-                          ],
+                          Wrap(
+                            runSpacing: 4,
+                            spacing: 10,
+                            children: [
+                              _chipInfo(Icons.email_outlined, (u['email'] ?? "-").toString()),
+                              _chipInfo(Icons.phone_outlined, (u['phone'] ?? "-").toString()),
+                              // ✅ plaka sadece driver’da
+                              if (isDriver && (u['plateNumber'] ?? "").toString().trim().isNotEmpty)
+                                _chipInfo(Icons.car_rental_outlined, (u['plateNumber'] ?? "-").toString()),
+                            ],
+                          ),
                         ],
                       ),
                     ),
-                    const Icon(
-                      Icons.chevron_right,
-                      color: Color(0xFF94A3B8),
-                      size: 20,
-                    ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.chevron_right, color: Color(0xFF94A3B8), size: 20),
                   ],
                 ),
               ),
@@ -417,32 +451,34 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
-  // MODE 2: Compact Grid - Name, phone, email (2 columns)
-  Widget _buildCompactGrid(
-      List<QueryDocumentSnapshot<Map<String, dynamic>>> users) {
+  // ---------------------------------------------------------------------------
+  // MODE 2: Compact Grid (refined sizing)
+  // ---------------------------------------------------------------------------
+  Widget _buildCompactGrid(List<Map<String, dynamic>> users) {
     return GridView.builder(
       padding: const EdgeInsets.only(top: 8),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
-        childAspectRatio: 4.2,
+        // daha rahat okunsun diye hafif uzattık
+        childAspectRatio: 3.9,
       ),
       itemCount: users.length,
       itemBuilder: (_, i) {
-        final u = users[i].data();
-        final uid = users[i].id;
-        final isDriver = u['role'] == 'driver';
+        final u = users[i];
+        final uid = (u["uid"] ?? "").toString();
+        final isDriver = (u['role'] ?? "") == 'driver';
 
         return Container(
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: const Color(0xFFE2E8F0)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.02),
-                blurRadius: 4,
+                blurRadius: 5,
                 offset: const Offset(0, 1),
               ),
             ],
@@ -451,22 +487,20 @@ class _UsersPageState extends State<UsersPage> {
             color: Colors.transparent,
             child: InkWell(
               onTap: () => _navigateToDetail(uid, u),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 child: Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(6),
+                      padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
-                        isDriver
-                            ? Icons.local_shipping_outlined
-                            : Icons.support_agent_outlined,
-                        size: 16,
+                        isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
+                        size: 18,
                         color: const Color(0xFF1E3A5F),
                       ),
                     ),
@@ -477,27 +511,29 @@ class _UsersPageState extends State<UsersPage> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            u['name'] ?? "-",
+                            (u['name'] ?? "-").toString(),
                             style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
                               color: Color(0xFF0F172A),
+                              height: 1.1,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
+                          const SizedBox(height: 6),
+                          _buildCompactInfo(Icons.phone_outlined, (u['phone'] ?? "-").toString()),
                           const SizedBox(height: 3),
-                          _buildCompactInfo(Icons.phone_outlined, u['phone']),
-                          const SizedBox(height: 2),
-                          _buildCompactInfo(Icons.email_outlined, u['email']),
+                          _buildCompactInfo(Icons.email_outlined, (u['email'] ?? "-").toString()),
+                          // ✅ plaka sadece driver’da (compact'ta küçük şekilde)
+                          if (isDriver && (u['plateNumber'] ?? "").toString().trim().isNotEmpty) ...[
+                            const SizedBox(height: 3),
+                            _buildCompactInfo(Icons.car_rental_outlined, (u['plateNumber'] ?? "-").toString()),
+                          ],
                         ],
                       ),
                     ),
-                    const Icon(
-                      Icons.chevron_right,
-                      color: Color(0xFFCBD5E1),
-                      size: 16,
-                    ),
+                    const Icon(Icons.chevron_right, color: Color(0xFFCBD5E1), size: 18),
                   ],
                 ),
               ),
@@ -508,27 +544,28 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
-  // MODE 3: Dense Grid - Name & Plate only (3 columns)
-  Widget _buildDenseGrid(
-      List<QueryDocumentSnapshot<Map<String, dynamic>>> users) {
+  // ---------------------------------------------------------------------------
+  // MODE 3: Dense Grid (keep dense, just readable)
+  // ---------------------------------------------------------------------------
+  Widget _buildDenseGrid(List<Map<String, dynamic>> users) {
     return GridView.builder(
       padding: const EdgeInsets.only(top: 8),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: 4.5,
+        childAspectRatio: 4.4,
       ),
       itemCount: users.length,
       itemBuilder: (_, i) {
-        final u = users[i].data();
-        final uid = users[i].id;
-        final isDriver = u['role'] == 'driver';
+        final u = users[i];
+        final uid = (u["uid"] ?? "").toString();
+        final isDriver = (u['role'] ?? "") == 'driver';
 
         return Container(
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(color: const Color(0xFFE2E8F0)),
             boxShadow: [
               BoxShadow(
@@ -542,22 +579,20 @@ class _UsersPageState extends State<UsersPage> {
             color: Colors.transparent,
             child: InkWell(
               onTap: () => _navigateToDetail(uid, u),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(10),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                 child: Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(5),
+                      padding: const EdgeInsets.all(7),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(5),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
-                        isDriver
-                            ? Icons.local_shipping_outlined
-                            : Icons.support_agent_outlined,
-                        size: 14,
+                        isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
+                        size: 15,
                         color: const Color(0xFF1E3A5F),
                       ),
                     ),
@@ -568,31 +603,29 @@ class _UsersPageState extends State<UsersPage> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            u['name'] ?? "-",
+                            (u['name'] ?? "-").toString(),
                             style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
                               color: Color(0xFF0F172A),
+                              height: 1.1,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          if (isDriver && (u['plateNumber'] ?? "").isNotEmpty) ...[
-                            const SizedBox(height: 2),
+                          if (isDriver && (u['plateNumber'] ?? "").toString().trim().isNotEmpty) ...[
+                            const SizedBox(height: 4),
                             Row(
                               children: [
-                                const Icon(
-                                  Icons.car_rental_outlined,
-                                  size: 10,
-                                  color: Color(0xFF64748B),
-                                ),
-                                const SizedBox(width: 3),
+                                const Icon(Icons.car_rental_outlined, size: 12, color: Color(0xFF64748B)),
+                                const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
-                                    u['plateNumber'] ?? "-",
+                                    (u['plateNumber'] ?? "-").toString(),
                                     style: const TextStyle(
-                                      fontSize: 10,
+                                      fontSize: 11,
                                       color: Color(0xFF64748B),
+                                      height: 1.1,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -614,7 +647,42 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String? text) {
+  // ---------------------------------------------------------------------------
+  // UI HELPERS
+  // ---------------------------------------------------------------------------
+  Widget _chipInfo(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFF64748B)),
+          const SizedBox(width: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 260),
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: Color(0xFF475569),
+                fontWeight: FontWeight.w500,
+                height: 1.1,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactInfo(IconData icon, String? text) {
     return Row(
       children: [
         Icon(icon, size: 13, color: const Color(0xFF64748B)),
@@ -626,29 +694,9 @@ class _UsersPageState extends State<UsersPage> {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Color(0xFF64748B),
-              fontSize: 13,
-              fontWeight: FontWeight.w400,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCompactInfo(IconData icon, String? text) {
-    return Row(
-      children: [
-        Icon(icon, size: 11, color: const Color(0xFF64748B)),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(
-            text ?? "-",
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFF64748B),
-              fontSize: 11,
-              fontWeight: FontWeight.w400,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              height: 1.1,
             ),
           ),
         ),
@@ -668,9 +716,7 @@ class _UsersPageState extends State<UsersPage> {
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
-              search.isNotEmpty
-                  ? Icons.search_off_outlined
-                  : Icons.people_outline,
+              search.isNotEmpty ? Icons.search_off_outlined : Icons.people_outline,
               size: 64,
               color: Colors.grey[400],
             ),
@@ -686,9 +732,7 @@ class _UsersPageState extends State<UsersPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            search.isNotEmpty
-                ? "Farklı bir arama terimi deneyin"
-                : "Yeni kullanıcılar eklemek için admin panelini kullanın",
+            search.isNotEmpty ? "Farklı bir arama terimi deneyin" : "Yeni kullanıcılar eklemek için admin panelini kullanın",
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey[500],
@@ -703,10 +747,7 @@ class _UsersPageState extends State<UsersPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => UserDetailPage(
-          userId: uid,
-          data: data,
-        ),
+        builder: (_) => UserDetailPage(userId: uid, data: data),
       ),
     );
   }

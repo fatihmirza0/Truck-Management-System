@@ -56,7 +56,7 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
   List<Widget> get pages => [
     const CreateJobPage(),
     const AddDriverPage(),
-    DispatchJobsPage(dispatchUid: dispatchUid!),
+    DispatchJobsPage(),
   ];
 
   List<String> get titles => [

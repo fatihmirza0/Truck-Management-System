@@ -1,25 +1,20 @@
-import 'dart:io';
-
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_downloader/flutter_downloader.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:lojistik/screens/manager/jobs/full_screen_gallery.dart';
-import 'package:lojistik/screens/manager/jobs/download_helper.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:lojistik/services/firestore_service.dart';
 
 class DispatchJobDetailPage extends StatefulWidget {
   final String jobId;
   final Map<String, dynamic> data;
-  final bool canEdit;
+  final String? driverName;
+  final String? vehiclePlate;
 
   const DispatchJobDetailPage({
     super.key,
     required this.jobId,
     required this.data,
-    required this.canEdit,
+    this.driverName,
+    this.vehiclePlate,
   });
 
   @override
@@ -27,334 +22,327 @@ class DispatchJobDetailPage extends StatefulWidget {
 }
 
 class _DispatchJobDetailPageState extends State<DispatchJobDetailPage> {
-  late final TextEditingController _cargoCtrl;
-  late final TextEditingController _loadCtrl;
-  late final TextEditingController _unloadCtrl;
-  late final TextEditingController _notesCtrl;
-
-  bool _editing = false;
+  late bool _editing = false;
   bool _saving = false;
+  bool _loading = true;
 
-  bool _driversLoading = true;
+  // Form controllers
+  late TextEditingController _cargoTypeCtrl;
+  late TextEditingController _cargoDescCtrl;
+  late TextEditingController _cargoWeightCtrl;
+  late TextEditingController _loadPortCtrl;
+  late TextEditingController _unloadPortCtrl;
+  late TextEditingController _referenceNoCtrl;
+
+  // Dropdown values
   List<Map<String, dynamic>> _drivers = [];
-  String? _selectedDriverUid;
+  List<Map<String, dynamic>> _vehicles = [];
+  String? _selectedDriverId;
+  String? _selectedVehicleId;
+
+  // Şoföre göre filtreli araçlar
+  List<Map<String, dynamic>> _filteredVehicles = [];
 
   @override
   void initState() {
     super.initState();
 
-    _cargoCtrl = TextEditingController(text: widget.data['cargoInfo'] ?? '');
-    _loadCtrl = TextEditingController(text: widget.data['loadPort'] ?? '');
-    _unloadCtrl = TextEditingController(text: widget.data['unloadPort'] ?? '');
-    _notesCtrl = TextEditingController(text: widget.data['notes'] ?? '');
+    // Initialize form controllers with existing data
+    _cargoTypeCtrl = TextEditingController(text: widget.data['cargo']?['type'] ?? '');
+    _cargoDescCtrl = TextEditingController(text: widget.data['cargo']?['description'] ?? '');
+    _cargoWeightCtrl = TextEditingController(text: widget.data['cargo']?['weightKg']?.toString() ?? '');
+    _loadPortCtrl = TextEditingController(text: widget.data['route']?['loadPort'] ?? '');
+    _unloadPortCtrl = TextEditingController(text: widget.data['route']?['unloadPort'] ?? '');
+    _referenceNoCtrl = TextEditingController(text: widget.data['referenceNo'] ?? '');
 
-    _selectedDriverUid = widget.data['assignedToUid'];
-    _editing = widget.canEdit;
+    _selectedDriverId = widget.data['driverId'];
+    _selectedVehicleId = widget.data['vehicleId'];
 
-    _loadDrivers();
+    _loadDriversAndVehicles();
   }
 
-  // ---------------------------------------------------------------------------
-  // DRIVER LOAD
-  // ---------------------------------------------------------------------------
-  Future<void> _loadDrivers() async {
+  @override
+  void dispose() {
+    _cargoTypeCtrl.dispose();
+    _cargoDescCtrl.dispose();
+    _cargoWeightCtrl.dispose();
+    _loadPortCtrl.dispose();
+    _unloadPortCtrl.dispose();
+    _referenceNoCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadDriversAndVehicles() async {
     try {
-      final snap = await FirebaseFirestore.instance
+      // Load active drivers
+      final driversSnap = await FirebaseFirestore.instance
           .collection('users')
           .where('role', isEqualTo: 'driver')
+          .where('softDeleted', isEqualTo: false)
+          .where('isActive', isEqualTo: true)
           .get();
 
-      _drivers = snap.docs.map((d) {
-        final data = d.data();
+      _drivers = driversSnap.docs.map((doc) {
+        final data = doc.data();
         return {
-          'uid': d.id,
+          'uid': doc.id,
           'name': data['name'] ?? '',
-          'plate': data['plateNumber'] ?? '-',
-          'jobStatus': data['jobStatus'] ?? 'available',
+          'email': data['email'] ?? '',
         };
       }).toList();
+
+      // Load all active vehicles
+      final vehiclesSnap = await FirebaseFirestore.instance
+          .collection('vehicles')
+          .where('isActive', isEqualTo: true)
+          .get();
+
+      _vehicles = vehiclesSnap.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'vehicleId': doc.id,
+          'plate': data['plate'] ?? '',
+          'type': data['type'] ?? '',
+          'assignedDriverId': data['assignedDriverId'],
+        };
+      }).toList();
+
+      // Başlangıçta seçili şoförün araçlarını filtrele
+      _filterVehiclesByDriver(_selectedDriverId);
+
     } catch (e) {
-      debugPrint("Driver load error: $e");
+      debugPrint('Load drivers/vehicles error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  void _filterVehiclesByDriver(String? driverId) {
+    if (driverId == null) {
+      _filteredVehicles = [];
+    } else {
+      _filteredVehicles = _vehicles.where((vehicle) {
+        return vehicle['assignedDriverId'] == driverId;
+      }).toList();
     }
 
-    if (mounted) setState(() => _driversLoading = false);
+    // Eğer mevcut seçili araç şoföre ait değilse, araç seçimini sıfırla
+    if (_selectedVehicleId != null) {
+      final currentVehicle = _vehicles.firstWhere(
+            (v) => v['vehicleId'] == _selectedVehicleId,
+        orElse: () => {},
+      );
+
+      if (currentVehicle.isEmpty || currentVehicle['assignedDriverId'] != driverId) {
+        _selectedVehicleId = null;
+      }
+    }
+
+    if (mounted) {
+      setState(() {});
+    }
   }
 
-  // ---------------------------------------------------------------------------
-  // DRIVER NAME FINDER
-  // ---------------------------------------------------------------------------
-  String _driverNameFor(String? uid) {
-    if (uid == null) return "-";
-
-    final match = _drivers.firstWhere(
-          (d) => d["uid"] == uid,
-      orElse: () => {},
-    );
-
-    if (match.isEmpty) return "-";
-    return match["name"] ?? "-";
+  bool get _canEdit {
+    final status = widget.data['status'];
+    // Sadece pending veya rejected durumunda düzenleyebilir
+    return status == FirestoreService.statusPending ||
+        status == FirestoreService.statusRejected;
   }
 
-  // ---------------------------------------------------------------------------
-  // SAVE JOB
-  // ---------------------------------------------------------------------------
-  Future<void> _save() async {
-    if (_selectedDriverUid == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("Şoför seçmelisiniz.")));
+  Future<void> _saveChanges() async {
+    // Validation
+    if (_selectedDriverId == null || _selectedDriverId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen şoför seçiniz')),
+      );
+      return;
+    }
+
+    if (_selectedVehicleId == null || _selectedVehicleId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen araç seçiniz')),
+      );
+      return;
+    }
+
+    if (_cargoTypeCtrl.text.isEmpty || _loadPortCtrl.text.isEmpty || _unloadPortCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen zorunlu alanları doldurunuz')),
+      );
+      return;
+    }
+
+    final weight = double.tryParse(_cargoWeightCtrl.text);
+    if (weight == null || weight <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen geçerli bir ağırlık giriniz')),
+      );
       return;
     }
 
     setState(() => _saving = true);
 
     try {
+      final currentUid = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUid == null) {
+        throw Exception('Kullanıcı oturumu bulunamadı');
+      }
+
+      final updateData = {
+        'driverId': _selectedDriverId,
+        'vehicleId': _selectedVehicleId,
+        // REFERENCE NO DEĞİŞTİRİLEMEZ! (sabit kalır)
+        'status': FirestoreService.statusPending, // Her düzenlemede pending'e çek
+        'rejectionReason': null, // Red sebebini temizle
+        'route': {
+          'loadPort': _loadPortCtrl.text.trim(),
+          'unloadPort': _unloadPortCtrl.text.trim(),
+        },
+        'cargo': {
+          'type': _cargoTypeCtrl.text.trim(),
+          'description': _cargoDescCtrl.text.trim(),
+          'weightKg': weight,
+        },
+        'timestamps.reviewedAt': null, // Review tarihini sıfırla
+      };
+
       await FirebaseFirestore.instance
-          .collection("jobs")
+          .collection('jobs')
           .doc(widget.jobId)
-          .update({
-        "cargoInfo": _cargoCtrl.text.trim(),
-        "loadPort": _loadCtrl.text.trim(),
-        "unloadPort": _unloadCtrl.text.trim(),
-        "notes": _notesCtrl.text.trim(),
-        "assignedToUid": _selectedDriverUid,
-        "updatedAt": FieldValue.serverTimestamp(),
+          .update(updateData);
+
+      // Add edit log
+      await FirebaseFirestore.instance
+          .collection('jobs')
+          .doc(widget.jobId)
+          .collection('logs')
+          .add({
+        'action': 'updated',
+        'performedBy': currentUid,
+        'performedAt': FieldValue.serverTimestamp(),
+        'note': 'İş bilgileri güncellendi ve onay için gönderildi',
       });
 
-      setState(() => _editing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('İş güncellendi ve onay için gönderildi'),
+          backgroundColor: Colors.green,
+        ),
+      );
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("İş güncellendi")));
+      // Sayfayı kapat ve ana sayfaya dön
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Hata: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Hata: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
-      setState(() => _saving = false);
+      if (mounted) {
+        setState(() => _saving = false);
+      }
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // UI BUILD MODE
-  // ---------------------------------------------------------------------------
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1E3A5F),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Row(
+  void _deleteJob() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
           children: [
-            const Icon(Icons.description, size: 20),
-            const SizedBox(width: 10),
-            const Text(
-              "İş Detayları",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(width: 10),
-            _statusChip(widget.data['status']),
+            Icon(Icons.delete_outline, color: Colors.red),
+            SizedBox(width: 10),
+            Text('İşi Sil'),
           ],
         ),
+        content: const Text('Bu işi silmek istediğinize emin misiniz? Bu işlem geri alınamaz.'),
         actions: [
-          if (widget.canEdit && !_editing)
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: () => setState(() => _editing = true),
-            )
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await FirestoreService.deleteJob(widget.jobId);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('İş silindi'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+                if (mounted) Navigator.pop(context);
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Hata: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text('Sil'),
+          ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: !_editing ? _buildViewMode() : _buildEditMode(),
+    );
+  }
+
+  Widget _buildStatusChip(String status) {
+    final statusColor = FirestoreService.getStatusColor(status);
+    final statusText = FirestoreService.getStatusText(status);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: statusColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: statusColor.withOpacity(0.3), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: statusColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            statusText,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: statusColor,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // VIEW MODE
-  // ---------------------------------------------------------------------------
-  Widget _buildViewMode() {
-    final createdAt = widget.data['createdAt'] != null
-        ? widget.data['createdAt'].toDate().toString().substring(0, 16)
-        : "-";
-
-    return Column(
-      children: [
-        _buildMinimalCard(
-          "Yük Bilgisi",
-          _cargoCtrl.text,
-          Icons.inventory_2_outlined,
-        ),
-        const SizedBox(height: 12),
-        _buildMinimalCard(
-          "Şoför",
-          _driverNameFor(widget.data['assignedToUid']),
-          Icons.person_outline,
-        ),
-        const SizedBox(height: 12),
-        _buildMinimalCard(
-          "Plaka",
-          _drivers.firstWhere(
-                (d) => d["uid"] == widget.data['assignedToUid'],
-            orElse: () => {"plate": "-"},
-          )["plate"] ?? "-",
-          Icons.drive_eta_outlined,
-        ),
-        const SizedBox(height: 12),
-        _buildMinimalCard(
-          "Yükleme Noktası",
-          _loadCtrl.text,
-          Icons.location_on_outlined,
-        ),
-        const SizedBox(height: 12),
-        _buildMinimalCard(
-          "Varış Noktası",
-          _unloadCtrl.text,
-          Icons.flag_outlined,
-        ),
-        const SizedBox(height: 12),
-        _buildMinimalCard(
-          "Oluşturma Tarihi",
-          createdAt,
-          Icons.calendar_today_outlined,
-        ),
-        const SizedBox(height: 12),
-        if (_notesCtrl.text.isNotEmpty)
-          _buildMinimalCard(
-            "Notlar",
-            _notesCtrl.text,
-            Icons.note_outlined,
-          ),
-        const SizedBox(height: 24),
-        _documentsSection(),
-      ],
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // EDIT MODE
-  // ---------------------------------------------------------------------------
-  Widget _buildEditMode() {
-    return Column(
-      children: [
-        _buildEditCard(
-          "Yük Bilgisi",
-          Icons.inventory_2_outlined,
-          TextField(
-            controller: _cargoCtrl,
-            decoration: _inputDecoration("Yük bilgisi girin"),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildEditCard(
-          "Şoför",
-          Icons.person_outline,
-          _driversLoading
-              ? const LinearProgressIndicator()
-              : DropdownButtonFormField<String>(
-            value: _selectedDriverUid,
-            decoration: _inputDecoration("Şoför seçin"),
-            items: _drivers.map((d) {
-              return DropdownMenuItem<String>(
-                value: d["uid"] as String,
-                child: Text("${d["name"]} (${d["plate"]})"),
-              );
-            }).toList(),
-            onChanged: (v) => setState(() => _selectedDriverUid = v),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildEditCard(
-          "Yükleme Noktası",
-          Icons.location_on_outlined,
-          TextField(
-            controller: _loadCtrl,
-            decoration: _inputDecoration("Yükleme noktası girin"),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildEditCard(
-          "Varış Noktası",
-          Icons.flag_outlined,
-          TextField(
-            controller: _unloadCtrl,
-            decoration: _inputDecoration("Varış noktası girin"),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildEditCard(
-          "Notlar",
-          Icons.note_outlined,
-          TextField(
-            controller: _notesCtrl,
-            maxLines: 3,
-            decoration: _inputDecoration("Notlar (opsiyonel)"),
-          ),
-        ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => setState(() => _editing = false),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFE53E3E),
-                  side: const BorderSide(color: Color(0xFFE53E3E), width: 1.5),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  "İptal",
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: _saving ? null : _save,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF38A169),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: _saving
-                    ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
-                    : const Text(
-                  "Kaydet",
-                  style: TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // MINIMAL CARD (VIEW MODE)
-  // ---------------------------------------------------------------------------
-  Widget _buildMinimalCard(String title, dynamic value, IconData icon) {
+  Widget _buildInfoCard(String title, String value, IconData icon) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.03),
@@ -366,18 +354,14 @@ class _DispatchJobDetailPageState extends State<DispatchJobDetailPage> {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFFEDF2F7),
-              borderRadius: BorderRadius.circular(14),
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(
-              icon,
-              size: 24,
-              color: const Color(0xFF4A5568),
-            ),
+            child: Icon(icon, size: 20, color: const Color(0xFF475569)),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -385,21 +369,21 @@ class _DispatchJobDetailPageState extends State<DispatchJobDetailPage> {
                 Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF718096),
-                    fontWeight: FontWeight.w400,
-                    letterSpacing: 0.2,
+                    fontSize: 12,
+                    color: Color(0xFF64748B),
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  value?.toString() ?? "-",
+                  value,
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 15,
+                    color: Color(0xFF1E293B),
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF2D3748),
-                    letterSpacing: -0.2,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -409,313 +393,626 @@ class _DispatchJobDetailPageState extends State<DispatchJobDetailPage> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // EDIT CARD (EDIT MODE)
-  // ---------------------------------------------------------------------------
-  Widget _buildEditCard(String title, IconData icon, Widget field) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEDF2F7),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  icon,
-                  size: 18,
-                  color: const Color(0xFF4A5568),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF4A5568),
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.2,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          field,
-        ],
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // INPUT DECORATION
-  // ---------------------------------------------------------------------------
-  InputDecoration _inputDecoration(String hint) {
-    return InputDecoration(
-      hintText: hint,
-      filled: true,
-      fillColor: const Color(0xFFF7FAFC),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF2C5282), width: 2),
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // DOCUMENTS SECTION
-  // ---------------------------------------------------------------------------
-  Widget _documentsSection() {
-    if (widget.data['status'] != "completed") return const SizedBox();
-
-    final docs = (widget.data["documents"] ?? []) as List;
-
-    if (docs.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: const Center(
-          child: Text(
-            "Bu iş için evrak bulunmuyor.",
-            style: TextStyle(
-              color: Color(0xFF718096),
-              fontSize: 14,
-            ),
-          ),
-        ),
-      );
-    }
-
+  Widget _buildTextField(TextEditingController controller, String label, IconData icon, {bool enabled = true}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.attachment_outlined,
-                    size: 20, color: Color(0xFF4A5568)),
-                SizedBox(width: 8),
-                Text(
-                  "Belgeler",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF2D3748),
-                  ),
-                ),
-              ],
-            ),
-            if (docs.length > 1)
-              TextButton.icon(
-                icon: const Icon(Icons.download_rounded, size: 18),
-                label: const Text("Tümünü indir"),
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF2C5282),
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                onPressed: () => DownloadHelper.downloadAll(context, docs),
-              )
-          ],
-        ),
-        const SizedBox(height: 16),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 1,
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            color: Color(0xFF475569),
+            fontWeight: FontWeight.w500,
           ),
-          itemCount: docs.length,
-          itemBuilder: (_, i) => _documentItem(docs[i], i, docs),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: TextField(
+            controller: controller,
+            enabled: enabled,
+            decoration: InputDecoration(
+              prefixIcon: Icon(icon, size: 20, color: const Color(0xFF64748B)),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            ),
+          ),
         ),
       ],
     );
   }
 
-  Widget _documentItem(String url, int index, List docs) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+  Widget _buildDriverDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Şoför *',
+          style: TextStyle(
+            fontSize: 13,
+            color: Color(0xFF475569),
+            fontWeight: FontWeight.w500,
           ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => FullScreenGalleryViewer(
-                    images: docs,
-                    initialIndex: index,
-                  ),
-                ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: DropdownButton<String>(
+              value: _selectedDriverId,
+              isExpanded: true,
+              underline: const SizedBox(),
+              icon: const Icon(Icons.arrow_drop_down),
+              hint: Row(
+                children: [
+                  const Icon(Icons.person_outline, size: 20, color: Color(0xFF64748B)),
+                  const SizedBox(width: 8),
+                  Text('Şoför seçin...', style: TextStyle(color: Colors.grey[600])),
+                ],
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  url,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: const Color(0xFFF7FAFC),
-                    child: const Center(
-                      child: Icon(
-                        Icons.broken_image_rounded,
-                        size: 48,
-                        color: Color(0xFFCBD5E0),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              items: _drivers.map((driver) {
+                return DropdownMenuItem<String>(
+                  value: driver['uid'],
+                  child: Text(driver['name'] ?? ''),
+                );
+              }).toList(),
+              onChanged: (value) {
+                setState(() {
+                  _selectedDriverId = value;
+                  _selectedVehicleId = null; // Şoför değişince araç seçimini sıfırla
+                  _filterVehiclesByDriver(value);
+                });
+              },
             ),
           ),
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withOpacity(0.3),
-                  ],
-                  stops: const [0.6, 1.0],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 10,
-            child: Center(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => DownloadHelper.downloadOne(context, url),
-                    borderRadius: BorderRadius.circular(10),
-                    child: const Padding(
-                      padding: EdgeInsets.all(10),
-                      child: Icon(
-                        Icons.download_rounded,
-                        color: Color(0xFF2C5282),
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // STATUS CHIP
-  // ---------------------------------------------------------------------------
-  Widget _statusChip(String? status) {
-    status ??= "-";
+  Widget _buildVehicleDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Araç *',
+          style: TextStyle(
+            fontSize: 13,
+            color: Color(0xFF475569),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: DropdownButton<String>(
+              value: _selectedVehicleId,
+              isExpanded: true,
+              underline: const SizedBox(),
+              icon: const Icon(Icons.arrow_drop_down),
+              hint: Row(
+                children: [
+                  const Icon(Icons.local_shipping_outlined, size: 20, color: Color(0xFF64748B)),
+                  const SizedBox(width: 8),
+                  if (_selectedDriverId == null)
+                    Text('Önce şoför seçin...', style: TextStyle(color: Colors.grey[600]))
+                  else if (_filteredVehicles.isEmpty)
+                    Text('Bu şoföre ait araç yok', style: TextStyle(color: Colors.orange[600]))
+                  else
+                    Text('Araç seçin...', style: TextStyle(color: Colors.grey[600])),
+                ],
+              ),
+              items: _filteredVehicles.map((vehicle) {
+                return DropdownMenuItem<String>(
+                  value: vehicle['vehicleId'],
+                  child: Text('${vehicle['plate']} (${vehicle['type']})'),
+                );
+              }).toList(),
+              onChanged: (_selectedDriverId == null || _filteredVehicles.isEmpty)
+                  ? null
+                  : (value) {
+                setState(() {
+                  _selectedVehicleId = value;
+                });
+              },
+            ),
+          ),
+        ),
+        if (_selectedDriverId != null && _filteredVehicles.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Seçili şoföre ait aktif araç bulunmuyor',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.orange[600],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 
-    Color bg, text;
+  @override
+  Widget build(BuildContext context) {
+    final status = widget.data['status'] ?? FirestoreService.statusPending;
 
-    switch (status) {
-      case "pending":
-        bg = Colors.orange.shade100;
-        text = Colors.orange.shade800;
-        break;
-      case "declined":
-        bg = Colors.red.shade100;
-        text = Colors.red.shade800;
-        break;
-      case "approved":
-        bg = Colors.blue.shade100;
-        text = Colors.blue.shade800;
-        break;
-      case "completed":
-        bg = Colors.green.shade100;
-        text = Colors.green.shade800;
-        break;
-      default:
-        bg = Colors.grey.shade200;
-        text = Colors.grey.shade800;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(50),
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1E3A5F),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Row(
+          children: [
+            const Icon(Icons.description_outlined, size: 22),
+            const SizedBox(width: 12),
+            const Text(
+              "İş Detayları",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 12),
+            _buildStatusChip(status),
+          ],
+        ),
+        actions: [
+          if (_canEdit && !_editing)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () => setState(() => _editing = true),
+              tooltip: 'Düzenle',
+            ),
+          if (_canEdit)
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _deleteJob,
+              tooltip: 'Sil',
+            ),
+        ],
       ),
-      child: Text(
-        status.toUpperCase(),
-        style: TextStyle(
-          color: text,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
+      body: _loading
+          ? const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+        ),
+      )
+          : SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // İş Referans (DEĞİŞTİRİLEMEZ)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.confirmation_number_outlined,
+                      size: 22,
+                      color: Color(0xFF1E3A5F),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.data['referenceNo'] ?? 'REF-XXX',
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1E3A5F),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'İş Referans Numarası (Değiştirilemez)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            if (!_editing) ...[
+              // GÖRÜNÜM MODU
+              // Şoför ve Araç Bilgileri
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildInfoCard(
+                      'Şoför',
+                      widget.driverName ?? 'Bilinmiyor',
+                      Icons.person_outline,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildInfoCard(
+                      'Araç',
+                      widget.vehiclePlate ?? 'Bilinmiyor',
+                      Icons.local_shipping_outlined,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Güzergah
+              _buildInfoCard(
+                'Güzergah',
+                '${widget.data['route']?['loadPort'] ?? '-'} → ${widget.data['route']?['unloadPort'] ?? '-'}',
+                Icons.route_outlined,
+              ),
+              const SizedBox(height: 12),
+
+              // Yük Bilgileri
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Yük Bilgileri',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Yük Türü',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                widget.data['cargo']?['type'] ?? '-',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Ağırlık',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${widget.data['cargo']?['weightKg'] ?? '-'} kg',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Açıklama',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          widget.data['cargo']?['description'] ?? '-',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Color(0xFF475569),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Reddetme Sebebi (sadece rejected durumunda)
+              if (status == FirestoreService.statusRejected &&
+                  widget.data['rejectionReason'] != null)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red.withOpacity(0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Icon(
+                          Icons.info_outline,
+                          size: 18,
+                          color: Colors.red,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Reddetme Sebebi',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.red,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              widget.data['rejectionReason'] ?? '',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Color(0xFF475569),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Düzenleme Butonu (sadece pending veya rejected durumunda)
+              if (_canEdit)
+                Padding(
+                  padding: const EdgeInsets.only(top: 20),
+                  child: ElevatedButton.icon(
+                    onPressed: () => setState(() => _editing = true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E3A5F),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 50),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text(
+                      'İşi Düzenle ve Tekrar Gönder',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+            ] else ...[
+              // DÜZENLEME MODU
+              const Text(
+                'İş Bilgilerini Düzenle',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    // Şoför Seçimi
+                    _buildDriverDropdown(),
+                    const SizedBox(height: 16),
+
+                    // Araç Seçimi
+                    _buildVehicleDropdown(),
+                    const SizedBox(height: 16),
+
+                    // Yük Türü
+                    _buildTextField(_cargoTypeCtrl, 'Yük Türü *', Icons.inventory_2_outlined),
+                    const SizedBox(height: 16),
+
+                    // Yük Açıklaması
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Yük Açıklaması',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF475569),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: TextField(
+                            controller: _cargoDescCtrl,
+                            maxLines: 3,
+                            decoration: const InputDecoration(
+                              hintText: 'Yük açıklaması...',
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.all(12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildTextField(_cargoWeightCtrl, 'Ağırlık (kg) *', Icons.scale_outlined),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildTextField(
+                            _referenceNoCtrl,
+                            'Referans No',
+                            Icons.numbers_outlined,
+                            enabled: false, // DEĞİŞTİRİLEMEZ!
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Yükleme ve Varış Noktaları
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildTextField(_loadPortCtrl, 'Yükleme Noktası *', Icons.location_on_outlined),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildTextField(_unloadPortCtrl, 'Varış Noktası *', Icons.flag_outlined),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Butonlar
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _saving ? null : () => setState(() => _editing = false),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF64748B),
+                              side: const BorderSide(color: Color(0xFFE2E8F0)),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            child: const Text('İptal'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _saving ? null : _saveChanges,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1E3A5F),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            child: _saving
+                                ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                                : const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.send_outlined, size: 18),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Kaydet ve Gönder',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 20),
+          ],
         ),
       ),
     );

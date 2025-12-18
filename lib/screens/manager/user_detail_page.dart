@@ -5,6 +5,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../services/firestore_service.dart';
+
 class UserDetailPage extends StatefulWidget {
   final String userId;
   final Map<String, dynamic> data;
@@ -47,6 +49,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
   }
 
   bool get isDriver => widget.data['role'] == 'driver';
+
   bool get isDesktop => MediaQuery.of(context).size.width > 900;
 
   Future<void> _save() async {
@@ -68,10 +71,14 @@ class _UserDetailPageState extends State<UserDetailPage> {
         updates['plateNumber'] = _plateCtrl.text.trim();
       }
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.userId)
-          .update(updates);
+      await FirestoreService.updateUserHttp(
+        uid: widget.userId,
+        name: _nameCtrl.text,
+        email: _emailCtrl.text,
+        phone: _phoneCtrl.text,
+        plate: isDriver ? _plateCtrl.text : null,
+        role: widget.data['role'],
+      );
 
       setState(() {
         editing = false;
@@ -118,10 +125,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
     if (confirm == true) {
       setState(() => loading = true);
       try {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(widget.userId)
-            .delete();
+        await FirestoreService.softDeleteUserHttp(widget.userId);
 
         if (!mounted) return;
         Navigator.pop(context);
@@ -139,7 +143,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
-        backgroundColor: isError ? const Color(0xFFDC2626) : const Color(0xFF059669),
+        backgroundColor:
+            isError ? const Color(0xFFDC2626) : const Color(0xFF059669),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -166,7 +171,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
             children: [
               // Fixed Header Bar
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   border: Border(
@@ -194,7 +200,9 @@ class _UserDetailPageState extends State<UserDetailPage> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
-                        isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
+                        isDriver
+                            ? Icons.local_shipping_outlined
+                            : Icons.support_agent_outlined,
                         size: 24,
                         color: const Color(0xFF1E3A5F),
                       ),
@@ -231,7 +239,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF1E3A5F),
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 12),
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -256,7 +265,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFF64748B),
                           side: const BorderSide(color: Color(0xFFE2E8F0)),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -270,7 +280,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF059669),
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 12),
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -286,7 +297,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFFDC2626),
                         side: const BorderSide(color: Color(0xFFDC2626)),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -331,7 +343,10 @@ class _UserDetailPageState extends State<UserDetailPage> {
                                 ),
                               ),
                               const SizedBox(height: 24),
-                              if (editing) _buildEditForm() else _buildViewMode(),
+                              if (editing)
+                                _buildEditForm()
+                              else
+                                _buildViewMode(),
                             ],
                           ),
                         ),
@@ -385,7 +400,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
     );
   }
 
-  Widget _buildInfoCard(String title, IconData icon, String value, Color color) {
+  Widget _buildInfoCard(
+      String title, IconData icon, String value, Color color) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -547,7 +563,9 @@ class _UserDetailPageState extends State<UserDetailPage> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
-              isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
+              isDriver
+                  ? Icons.local_shipping_outlined
+                  : Icons.support_agent_outlined,
               size: 32,
               color: const Color(0xFF1E3A5F),
             ),
@@ -587,7 +605,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
         _infoTile(Icons.person_outline, "İsim", _nameCtrl.text),
         _infoTile(Icons.email_outlined, "E-posta", _emailCtrl.text),
         _infoTile(Icons.phone_outlined, "Telefon", _phoneCtrl.text),
-        if (isDriver) _infoTile(Icons.car_rental_outlined, "Plaka", _plateCtrl.text),
+        if (isDriver)
+          _infoTile(Icons.car_rental_outlined, "Plaka", _plateCtrl.text),
       ],
     );
   }
@@ -729,7 +748,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
           decoration: InputDecoration(
             filled: true,
             fillColor: Colors.white,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: const BorderSide(color: Color(0xFFE2E8F0)),

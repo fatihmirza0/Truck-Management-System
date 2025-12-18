@@ -25,16 +25,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? userId;
   String? userRole;
 
+  // Vehicle (NEW)
+  String? vehicleId; // driver'a atanmış aktif araç
+  String? originalVehiclePlate;
+
   // Original values to compare
   String? originalName;
   String? originalPhone;
-  String? originalPlate;
 
   bool get isDesktop => MediaQuery.of(context).size.width > 900;
+
   bool get hasChanges {
     if (originalName != _nameController.text.trim()) return true;
     if (originalPhone != _phoneController.text.trim()) return true;
-    if (userRole == "driver" && originalPlate != _plateController.text.trim()) {
+    if (userRole == "driver" &&
+        (originalVehiclePlate ?? "") != _plateController.text.trim()) {
       return true;
     }
     return false;
@@ -73,6 +78,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
 
       userId = user.uid;
+
       final doc = await FirebaseFirestore.instance
           .collection("users")
           .doc(userId)
@@ -80,22 +86,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (doc.exists) {
         final data = doc.data()!;
-        originalName = data["name"] ?? "";
-        originalPhone = data["phone"] ?? "";
-        originalPlate = data["plateNumber"] ?? "";
+        userRole = (data["role"] ?? "").toString();
+
+        originalName = (data["name"] ?? "").toString();
+        originalPhone = (data["phone"] ?? "").toString();
 
         _nameController.text = originalName!;
         _emailController.text = user.email ?? "";
         _phoneController.text = originalPhone!;
-        _plateController.text = originalPlate!;
-        userRole = data["role"];
+
+        // NEW: driver plaka vehicles’dan gelir
+        if (userRole == "driver") {
+          await _loadDriverVehiclePlate(userId!);
+        }
       }
 
+      if (!mounted) return;
       setState(() => loading = false);
     } catch (e) {
+      if (!mounted) return;
       setState(() => loading = false);
       _showError("Kullanıcı bilgileri yüklenemedi");
     }
+  }
+
+  Future<void> _loadDriverVehiclePlate(String uid) async {
+    // driver'a atanmış aktif aracı bul
+    final q = await FirebaseFirestore.instance
+        .collection("vehicles")
+        .where("assignedDriverId", isEqualTo: uid)
+        .where("isActive", isEqualTo: true)
+        .limit(1)
+        .get();
+
+    if (q.docs.isEmpty) {
+      vehicleId = null;
+      originalVehiclePlate = "";
+      _plateController.text = "";
+      return;
+    }
+
+    final vDoc = q.docs.first;
+    vehicleId = vDoc.id;
+    final v = vDoc.data();
+
+    originalVehiclePlate = (v["plate"] ?? "").toString();
+    _plateController.text = originalVehiclePlate!;
   }
 
   Future<void> _saveProfile() async {
@@ -104,27 +140,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => saving = true);
 
     try {
-      final updates = {
+      final updates = <String, dynamic>{
         "name": _nameController.text.trim(),
         "phone": _phoneController.text.trim(),
       };
 
-      if (userRole == "driver") {
-        updates["plateNumber"] = _plateController.text.trim();
-      }
-
+      // users update (NEW schema)
       await FirebaseFirestore.instance
           .collection("users")
           .doc(userId)
           .update(updates);
 
+      // driver ise plaka -> vehicles update
+      if (userRole == "driver") {
+        final newPlate = _plateController.text.trim();
+
+        // sadece driver'a atanmış vehicle varsa update et
+        if (vehicleId != null && vehicleId!.isNotEmpty) {
+          await FirebaseFirestore.instance
+              .collection("vehicles")
+              .doc(vehicleId)
+              .update({"plate": newPlate});
+
+          originalVehiclePlate = newPlate;
+        } else {
+          // araç yoksa plate kaydetmeye çalışma (UI'da zaten disabled yapıyoruz)
+          originalVehiclePlate = originalVehiclePlate ?? "";
+        }
+      }
+
       // Update original values
       originalName = _nameController.text.trim();
       originalPhone = _phoneController.text.trim();
-      if (userRole == "driver") {
-        originalPlate = _plateController.text.trim();
-      }
 
+      if (!mounted) return;
       setState(() {
         isEditing = false;
         saving = false;
@@ -140,6 +189,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => saving = false);
       _showError("Profil güncellenemedi");
     }
@@ -147,10 +197,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _cancelEdit() {
     setState(() {
-      _nameController.text = originalName!;
-      _phoneController.text = originalPhone!;
+      _nameController.text = originalName ?? "";
+      _phoneController.text = originalPhone ?? "";
       if (userRole == "driver") {
-        _plateController.text = originalPlate!;
+        _plateController.text = originalVehiclePlate ?? "";
       }
       isEditing = false;
     });
@@ -275,18 +325,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // --- UI aynı, sadece plaka alanı enable logic değişti ---
   Widget _buildDesktopSidebar() {
     return Container(
       width: 320,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(
-          right: BorderSide(color: const Color(0xFFE2E8F0), width: 1),
+          right: BorderSide(color: Color(0xFFE2E8F0), width: 1),
         ),
       ),
       child: Column(
         children: [
-          // Header
           Container(
             padding: const EdgeInsets.all(32),
             child: Row(
@@ -310,8 +360,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
-
-          // Profile Avatar & Info
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Column(
@@ -348,11 +396,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        _getRoleIcon(),
-                        size: 16,
-                        color: _getRoleColor(),
-                      ),
+                      Icon(_getRoleIcon(), size: 16, color: _getRoleColor()),
                       const SizedBox(width: 6),
                       Text(
                         _getRoleName(),
@@ -368,31 +412,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
-
           const SizedBox(height: 40),
-
-          // Menu Items
-          _buildMenuItem(
-            icon: Icons.person_outline,
-            title: "Hesap Bilgileri",
-            isActive: true,
-          ),
-          _buildMenuItem(
-            icon: Icons.security_outlined,
-            title: "Güvenlik",
-            isActive: false,
-            onTap: () {},
-          ),
-          _buildMenuItem(
-            icon: Icons.notifications_outlined,
-            title: "Bildirimler",
-            isActive: false,
-            onTap: () {},
-          ),
-
+          _buildMenuItem(icon: Icons.person_outline, title: "Hesap Bilgileri", isActive: true),
+          _buildMenuItem(icon: Icons.security_outlined, title: "Güvenlik", isActive: false, onTap: () {}),
+          _buildMenuItem(icon: Icons.notifications_outlined, title: "Bildirimler", isActive: false, onTap: () {}),
           const Spacer(),
-
-          // Logout Button
           Padding(
             padding: const EdgeInsets.all(32),
             child: OutlinedButton(
@@ -401,19 +425,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 foregroundColor: const Color(0xFFDC2626),
                 side: const BorderSide(color: Color(0xFFDC2626)),
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.logout_outlined, size: 20),
                   SizedBox(width: 8),
-                  Text(
-                    "Çıkış Yap",
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                  ),
+                  Text("Çıkış Yap", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -444,11 +463,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             child: Row(
               children: [
-                Icon(
-                  icon,
-                  size: 20,
-                  color: isActive ? const Color(0xFF1E3A5F) : const Color(0xFF64748B),
-                ),
+                Icon(icon, size: 20, color: isActive ? const Color(0xFF1E3A5F) : const Color(0xFF64748B)),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Text(
@@ -480,7 +495,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildMainContent() {
     return CustomScrollView(
       slivers: [
-        // Mobile App Bar
         if (!isDesktop)
           SliverAppBar(
             backgroundColor: Colors.white,
@@ -499,10 +513,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             actions: [
               if (isEditing)
-                TextButton(
-                  onPressed: _cancelEdit,
-                  child: const Text("İptal"),
-                )
+                TextButton(onPressed: _cancelEdit, child: const Text("İptal"))
               else
                 IconButton(
                   onPressed: () => setState(() => isEditing = true),
@@ -511,14 +522,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(width: 8),
             ],
           ),
-
         SliverPadding(
           padding: EdgeInsets.all(isDesktop ? 48.0 : 24.0),
           sliver: SliverToConstrainedBox(
             maxExtent: 800,
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // Mobile Profile Header
                 if (!isDesktop) ...[
                   Center(
                     child: Column(
@@ -529,11 +538,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             color: _getRoleColor().withOpacity(0.1),
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(
-                            _getRoleIcon(),
-                            size: 48,
-                            color: _getRoleColor(),
-                          ),
+                          child: Icon(_getRoleIcon(), size: 48, color: _getRoleColor()),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -565,8 +570,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 32),
                 ],
-
-                // Desktop Edit Header
                 if (isDesktop)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -600,21 +603,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF1E3A5F),
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 14,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                         ),
                     ],
                   ),
-
                 if (isDesktop) const SizedBox(height: 32),
 
-                // Form
                 Container(
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
@@ -659,7 +655,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             controller: _plateController,
                             label: "Plaka",
                             icon: Icons.car_rental_outlined,
-                            enabled: isEditing,
+                            enabled: isEditing && (vehicleId != null),
+                            helperText: vehicleId == null
+                                ? "Size atanmış aktif araç bulunamadı"
+                                : null,
                           ),
                         ],
 
@@ -727,7 +726,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
 
-                // Mobile Logout Button
                 if (!isDesktop) ...[
                   const SizedBox(height: 24),
                   OutlinedButton(
@@ -798,10 +796,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               size: 20,
             ),
             helperText: helperText,
-            helperStyle: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF64748B),
-            ),
+            helperStyle: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
             filled: true,
             fillColor: enabled ? const Color(0xFFF8FAFC) : const Color(0xFFF1F5F9),
             border: OutlineInputBorder(
@@ -872,11 +867,13 @@ class _RenderSliverToConstrainedBox extends RenderProxySliver {
   @override
   void performLayout() {
     final parentWidth = constraints.crossAxisExtent;
-    final horizontalPadding = (parentWidth - maxExtent).clamp(0.0, double.infinity) / 2;
+    final horizontalPadding =
+        (parentWidth - maxExtent).clamp(0.0, double.infinity) / 2;
 
     child!.layout(
       constraints.copyWith(
-        crossAxisExtent: (parentWidth - horizontalPadding * 2).clamp(0.0, maxExtent),
+        crossAxisExtent:
+        (parentWidth - horizontalPadding * 2).clamp(0.0, maxExtent),
       ),
       parentUsesSize: true,
     );

@@ -7,16 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:lojistik/utils/report_exporter.dart';
-
-// ------------------------------------------------------------
-//  MODERN ENTERPRISE REPORT SCREEN
-//  Fully Responsive & Professional Design
-// ------------------------------------------------------------
-import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:fl_chart/fl_chart.dart';
-import 'package:flutter/material.dart';
-import 'package:lojistik/utils/report_exporter.dart';
+import 'package:lojistik/services/firestore_service.dart';
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
@@ -59,12 +50,11 @@ class _ReportScreenState extends State<ReportScreen> {
 
   Future<void> _load() async {
     try {
-      final userSnap =
-          await FirebaseFirestore.instance.collection("users").get();
-      final jobSnap = await FirebaseFirestore.instance.collection("jobs").get();
+      users = await FirestoreService.fetchAllUsers();
+      jobs = await FirestoreService.fetchAllJobs();
 
-      users = userSnap.docs;
-      jobs = jobSnap.docs;
+      driverIndex.clear();
+      dispatchIndex.clear();
 
       for (final doc in users) {
         final d = doc.data() as Map<String, dynamic>;
@@ -73,6 +63,7 @@ class _ReportScreenState extends State<ReportScreen> {
         if (d["role"] == "driver") {
           driverIndex[uid] = d;
         }
+
         if (d["role"] == "dispatch") {
           dispatchIndex[uid] = d;
         }
@@ -80,10 +71,14 @@ class _ReportScreenState extends State<ReportScreen> {
 
       await _calculateStats();
 
-      if (mounted) setState(() => loading = false);
+      if (mounted) {
+        setState(() => loading = false);
+      }
     } catch (e) {
-      print("Report load error → $e");
-      if (mounted) setState(() => loading = false);
+      debugPrint("Report load error → $e");
+      if (mounted) {
+        setState(() => loading = false);
+      }
     }
   }
 

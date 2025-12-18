@@ -2,27 +2,75 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class JobService {
-  static Future<void> update(String id, Map<String, dynamic> data) async {
-    await FirebaseFirestore.instance.collection("jobs").doc(id).update(data);
+  static final _firestore = FirebaseFirestore.instance;
+
+  static Future<void> _update(String id, Map<String, dynamic> data) async {
+    await _firestore.collection("jobs").doc(id).update(data);
   }
 
-  static Future<void> approveJob(String id) async {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
+  static Future<void> _addLog(
+      String jobId,
+      String action,
+      String? note,
+      ) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
 
-    await update(id, {
+    await _firestore
+        .collection("jobs")
+        .doc(jobId)
+        .collection("logs")
+        .add({
+      "action": action,
+      "performedBy": uid,
+      "performedAt": FieldValue.serverTimestamp(),
+      "note": note,
+    });
+  }
+
+  static Future<void> approveJob(String jobId) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    await _update(jobId, {
       "status": "approved",
-      "approvedByUid": uid,
-      "approvedAt": FieldValue.serverTimestamp(),
+      "timestamps.reviewedAt": FieldValue.serverTimestamp(),
+    });
+
+    await _addLog(jobId, "approved", null);
+  }
+
+  static Future<void> rejectJob(String jobId, String reason) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    await _update(jobId, {
+      "status": "rejected",
+      "rejectionReason": reason,
+      "timestamps.reviewedAt": FieldValue.serverTimestamp(),
+    });
+
+    await _addLog(jobId, "rejected", reason);
+  }
+
+  static Future<void> deleteJob(String jobId) async {
+    await _update(jobId, {
+      "softDeleted": true,
     });
   }
 
-  static Future<void> rejectJob(String id) async {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
+  static Future<Map<String, dynamic>?> getJobDetails(String jobId) async {
+    final doc = await _firestore.collection("jobs").doc(jobId).get();
+    if (!doc.exists) return null;
+    return doc.data();
+  }
 
-    await update(id, {
-      "status": "declined",
-      "declinedByUid": uid,
-      "declinedAt": FieldValue.serverTimestamp(),
-    });
+  static Stream<QuerySnapshot> getJobLogs(String jobId) {
+    return _firestore
+        .collection("jobs")
+        .doc(jobId)
+        .collection("logs")
+        .orderBy("performedAt", descending: true)
+        .snapshots();
   }
 }

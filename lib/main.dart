@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_downloader/flutter_downloader.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'firebase_options.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+
 
 // Screens
 import 'screens/login_screen.dart';
@@ -21,7 +23,11 @@ void main() async {
       debug: true,
       ignoreSsl: true,
     );
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: AndroidProvider.debug,
+    );
   }
+
 
   runApp(const MyApp());
 }

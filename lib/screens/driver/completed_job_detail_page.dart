@@ -16,19 +16,59 @@ class CompletedJobDetailsPage extends StatelessWidget {
   static const Color textDark = Color(0xFF0F172A);
   static const Color textMuted = Color(0xFF64748B);
 
+  // ======================================================
+  // HELPERS (NEW SCHEMA SAFE READ)
+  // ======================================================
+  Map<String, dynamic> _map(dynamic v) =>
+      (v is Map) ? v.cast<String, dynamic>() : <String, dynamic>{};
+
+  DateTime? _ts(dynamic v) => v is Timestamp ? v.toDate() : null;
+
+  String _loadPort() {
+    final route = _map(job['route']);
+    return (route['loadPort'] ?? job['loadPort'] ?? "-").toString();
+  }
+
+  String _unloadPort() {
+    final route = _map(job['route']);
+    return (route['unloadPort'] ?? job['unloadPort'] ?? "-").toString();
+  }
+
+  String? _dispatchUid() {
+    // new: createdBy, old: assignedByUid
+    final v = (job['createdBy'] ?? job['assignedByUid'] ?? '').toString();
+    return v.isEmpty ? null : v;
+  }
+
+  DateTime? _createdAt() {
+    final ts = _map(job['timestamps']);
+    return _ts(ts['createdAt']) ?? _ts(job['createdAt']);
+  }
+
+  DateTime? _approvedAt() {
+    // new schema: reviewedAt (approved/rejected)
+    final ts = _map(job['timestamps']);
+    return _ts(ts['reviewedAt']) ?? _ts(job['approvedAt']);
+  }
+
+  DateTime? _completedAt() {
+    final ts = _map(job['timestamps']);
+    return _ts(ts['completedAt']) ?? _ts(job['completedAt']);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final createdAt = (job['createdAt'] as Timestamp?)?.toDate();
-    final approvedAt = (job['approvedAt'] as Timestamp?)?.toDate();
-    final completedAt = (job['completedAt'] as Timestamp?)?.toDate();
-    final distanceKm = job['distanceKm'];
-    final documents = job['documents'];
+    final createdAt = _createdAt();
+    final approvedAt = _approvedAt();
+    final completedAt = _completedAt();
+
+    final distanceKm = job['distanceKm']; // opsiyonel (şemanda yok)
+    final documents = job['documents']; // opsiyonel (şemanda yok)
 
     String durationText = "-";
     if (createdAt != null && completedAt != null) {
       final diff = completedAt.difference(createdAt);
-      durationText =
-      "${diff.inHours} saat ${diff.inMinutes.remainder(60)} dk";
+      durationText = "${diff.inHours} saat ${diff.inMinutes.remainder(60)} dk";
     }
 
     return Scaffold(
@@ -57,20 +97,20 @@ class CompletedJobDetailsPage extends StatelessWidget {
                   _infoRow(
                     icon: Icons.location_on_outlined,
                     label: "Yükleme",
-                    value: job['loadPort'] ?? "-",
+                    value: _loadPort(),
                   ),
                   const Divider(height: 24),
                   _infoRow(
                     icon: Icons.flag_outlined,
                     label: "Varış",
-                    value: job['unloadPort'] ?? "-",
+                    value: _unloadPort(),
                   ),
                   if (distanceKm != null) ...[
                     const Divider(height: 24),
                     _infoRow(
                       icon: Icons.route_outlined,
                       label: "Toplam Mesafe",
-                      value: "$distanceKm km",
+                      value: "${distanceKm.toString()} km",
                     ),
                   ]
                 ],
@@ -83,7 +123,7 @@ class CompletedJobDetailsPage extends StatelessWidget {
             // DISPATCH
             // ===================================================
             _sectionTitle("Dispatch"),
-            _dispatchInfo(job['assignedByUid']),
+            _dispatchInfo(_dispatchUid()),
 
             const SizedBox(height: 20),
 
@@ -95,7 +135,7 @@ class CompletedJobDetailsPage extends StatelessWidget {
               child: Column(
                 children: [
                   _dateRow("Oluşturulma", createdAt),
-                  _dateRow("Onaylanma", approvedAt),
+                  _dateRow("İnceleme/Onay", approvedAt),
                   _dateRow("Tamamlanma", completedAt),
                 ],
               ),
@@ -150,20 +190,20 @@ class CompletedJobDetailsPage extends StatelessWidget {
           return _card(child: const Text("Dispatch bulunamadı"));
         }
 
-        final data = snap.data!.data() as Map<String, dynamic>;
+        final data = (snap.data!.data() as Map<String, dynamic>?) ?? {};
         return _card(
           child: Column(
             children: [
               _infoRow(
                 icon: Icons.person_outline,
                 label: "İsim",
-                value: data['name'] ?? "-",
+                value: (data['name'] ?? "-").toString(),
               ),
               const Divider(height: 24),
               _infoRow(
                 icon: Icons.phone_outlined,
                 label: "Telefon",
-                value: data['phone'] ?? "-",
+                value: (data['phone'] ?? "-").toString(),
               ),
             ],
           ),
@@ -180,8 +220,7 @@ class CompletedJobDetailsPage extends StatelessWidget {
       return _card(
         child: Column(
           children: const [
-            Icon(Icons.insert_drive_file_outlined,
-                size: 42, color: textMuted),
+            Icon(Icons.insert_drive_file_outlined, size: 42, color: textMuted),
             SizedBox(height: 10),
             Text(
               "Bu iş için evrak yüklenmemiş",

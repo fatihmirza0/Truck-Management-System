@@ -1,7 +1,6 @@
-import 'dart:ui';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:lojistik/services/firestore_service.dart';
 
 class CreateJobPage extends StatefulWidget {
   const CreateJobPage({super.key});
@@ -10,23 +9,33 @@ class CreateJobPage extends StatefulWidget {
   State<CreateJobPage> createState() => _CreateJobPageState();
 }
 
-class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateMixin {
+class _CreateJobPageState extends State<CreateJobPage>
+    with TickerProviderStateMixin {
   final TextEditingController _loadPortController = TextEditingController();
   final TextEditingController _unloadPortController = TextEditingController();
-  final TextEditingController _cargoInfoController = TextEditingController();
-  final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _cargoTypeController = TextEditingController();
+  final TextEditingController _cargoDescriptionController =
+  TextEditingController();
+  final TextEditingController _cargoWeightController = TextEditingController();
+  final TextEditingController _driverSearchController = TextEditingController();
+  final TextEditingController _vehicleSearchController =
+  TextEditingController();
 
   String? _selectedDriverUid;
   Map<String, dynamic>? _selectedDriver;
+  String? _selectedVehicleId;
+  Map<String, dynamic>? _selectedVehicle;
+
   bool _isCreatingJob = false;
   bool _showDriverPanel = false;
-  String _searchQuery = '';
+  bool _showVehiclePanel = false;
+  String _driverSearchQuery = '';
+  String _vehicleSearchQuery = '';
 
-  String? _dispatchUid;
-  bool _isLoadingDispatch = true;
-
-  late AnimationController _panelController;
-  late Animation<double> _panelAnimation;
+  late AnimationController _driverPanelController;
+  late Animation<double> _driverPanelAnimation;
+  late AnimationController _vehiclePanelController;
+  late Animation<double> _vehiclePanelAnimation;
 
   bool get isDesktop => MediaQuery.of(context).size.width >= 900;
 
@@ -44,14 +53,22 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _loadDispatchUid();
 
-    _panelController = AnimationController(
+    _driverPanelController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 350),
     );
-    _panelAnimation = CurvedAnimation(
-      parent: _panelController,
+    _driverPanelAnimation = CurvedAnimation(
+      parent: _driverPanelController,
+      curve: Curves.easeOutCubic,
+    );
+
+    _vehiclePanelController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _vehiclePanelAnimation = CurvedAnimation(
+      parent: _vehiclePanelController,
       curve: Curves.easeOutCubic,
     );
   }
@@ -60,119 +77,123 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
   void dispose() {
     _loadPortController.dispose();
     _unloadPortController.dispose();
-    _cargoInfoController.dispose();
-    _searchController.dispose();
-    _panelController.dispose();
+    _cargoTypeController.dispose();
+    _cargoDescriptionController.dispose();
+    _cargoWeightController.dispose();
+    _driverSearchController.dispose();
+    _vehicleSearchController.dispose();
+    _driverPanelController.dispose();
+    _vehiclePanelController.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadDispatchUid() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        _dispatchUid = user.uid;
-      }
-    } finally {
-      if (mounted) setState(() => _isLoadingDispatch = false);
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> _fetchDrivers() async {
-    final snap = await FirebaseFirestore.instance
-        .collection('users')
-        .where('role', isEqualTo: 'driver')
-        .get();
-
-    return snap.docs.map((doc) {
-      final d = doc.data();
-      return {
-        'uid': doc.id,
-        'name': d['name'] ?? '-',
-        'plate': d['plateNumber'] ?? '-',
-        'jobStatus': d['jobStatus'] ?? 'available',
-      };
-    }).toList();
   }
 
   Future<void> _createJob() async {
     final loadPort = _loadPortController.text.trim();
     final unloadPort = _unloadPortController.text.trim();
-    final cargoInfo = _cargoInfoController.text.trim();
+    final cargoType = _cargoTypeController.text.trim();
+    final cargoDescription = _cargoDescriptionController.text.trim();
+    final cargoWeightStr = _cargoWeightController.text.trim();
 
-    if (loadPort.isEmpty || unloadPort.isEmpty || cargoInfo.isEmpty || _selectedDriverUid == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text("Lütfen tüm alanları doldurun ve şoför seçin"),
-          backgroundColor: const Color(0xFFEF4444),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
+    // Validation
+    if (loadPort.isEmpty ||
+        unloadPort.isEmpty ||
+        cargoType.isEmpty ||
+        cargoDescription.isEmpty ||
+        cargoWeightStr.isEmpty ||
+        _selectedDriverUid == null ||
+        _selectedVehicleId == null) {
+      _showSnackBar(
+        "Lütfen tüm alanları doldurun ve şoför/araç seçin",
+        isError: true,
       );
       return;
     }
 
-    if (_dispatchUid == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Dispatch UID okunamadı")),
-      );
+    final cargoWeight = double.tryParse(cargoWeightStr);
+    if (cargoWeight == null || cargoWeight <= 0) {
+      _showSnackBar("Lütfen geçerli bir ağırlık girin", isError: true);
       return;
     }
 
     setState(() => _isCreatingJob = true);
 
     try {
-      await FirebaseFirestore.instance.collection('jobs').add({
-        'loadPort': loadPort,
-        'unloadPort': unloadPort,
-        'cargoInfo': cargoInfo,
-        'assignedToUid': _selectedDriverUid,
-        'assignedByUid': _dispatchUid,
-        'status': 'pending',
-        'createdAt': Timestamp.now(),
-      });
+      await FirestoreService.createJob(
+        driverId: _selectedDriverUid!,
+        vehicleId: _selectedVehicleId!,
+        loadPort: loadPort,
+        unloadPort: unloadPort,
+        cargoType: cargoType,
+        cargoDescription: cargoDescription,
+        cargoWeightKg: cargoWeight,
+      );
 
-      await FirebaseFirestore.instance
-          .collection("users")
-          .doc(_selectedDriverUid)
-          .update({'jobStatus': 'busy'});
-
+      // Clear form
       _loadPortController.clear();
       _unloadPortController.clear();
-      _cargoInfoController.clear();
+      _cargoTypeController.clear();
+      _cargoDescriptionController.clear();
+      _cargoWeightController.clear();
+
       setState(() {
         _selectedDriverUid = null;
         _selectedDriver = null;
+        _selectedVehicleId = null;
+        _selectedVehicle = null;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text("✓ Görev başarıyla oluşturuldu"),
-          backgroundColor: success,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      );
+      _showSnackBar("✓ Görev başarıyla oluşturuldu", isError: false);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Hata: $e")),
-      );
+      _showSnackBar("Hata: $e", isError: true);
     } finally {
       setState(() => _isCreatingJob = false);
     }
   }
 
+  void _showSnackBar(String message, {required bool isError}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? const Color(0xFFEF4444) : success,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
   void _openDriverPanel() {
     setState(() => _showDriverPanel = true);
-    _panelController.forward();
+    _driverPanelController.forward();
   }
 
   void _closeDriverPanel() {
-    _panelController.reverse().then((_) {
+    _driverPanelController.reverse().then((_) {
       if (mounted) {
         setState(() {
           _showDriverPanel = false;
-          _searchQuery = '';
-          _searchController.clear();
+          _driverSearchQuery = '';
+          _driverSearchController.clear();
+        });
+      }
+    });
+  }
+
+  void _openVehiclePanel() {
+    if (_selectedDriverUid == null) {
+      _showSnackBar("Lütfen önce şoför seçin", isError: true);
+      return;
+    }
+    setState(() => _showVehiclePanel = true);
+    _vehiclePanelController.forward();
+  }
+
+  void _closeVehiclePanel() {
+    _vehiclePanelController.reverse().then((_) {
+      if (mounted) {
+        setState(() {
+          _showVehiclePanel = false;
+          _vehicleSearchQuery = '';
+          _vehicleSearchController.clear();
         });
       }
     });
@@ -182,8 +203,19 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
     setState(() {
       _selectedDriverUid = driver['uid'];
       _selectedDriver = driver;
+      // Reset vehicle selection when driver changes
+      _selectedVehicleId = null;
+      _selectedVehicle = null;
     });
     _closeDriverPanel();
+  }
+
+  void _selectVehicle(Map<String, dynamic> vehicle) {
+    setState(() {
+      _selectedVehicleId = vehicle['vehicleId'];
+      _selectedVehicle = vehicle;
+    });
+    _closeVehiclePanel();
   }
 
   InputDecoration _input(String label, IconData icon) {
@@ -225,7 +257,8 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
         child: _selectedDriver == null
             ? Row(
           children: const [
-            Icon(Icons.person_add_outlined, color: Color(0xFF1E3A5F), size: 22),
+            Icon(Icons.person_add_outlined,
+                color: Color(0xFF1E3A5F), size: 22),
             SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -249,7 +282,8 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
                 color: accent,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.local_shipping, color: Colors.white, size: 22),
+              child: const Icon(Icons.person,
+                  color: Colors.white, size: 22),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -266,7 +300,82 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    _selectedDriver!['plate'],
+                    _selectedDriver!['email'] ?? '-',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.check_circle, color: accent, size: 22),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVehicleSelectionCard() {
+    return GestureDetector(
+      onTap: _openVehiclePanel,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _selectedVehicle == null ? cardBg : accentLight,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _selectedVehicle == null ? border : accent,
+            width: _selectedVehicle == null ? 1 : 2,
+          ),
+        ),
+        child: _selectedVehicle == null
+            ? Row(
+          children: const [
+            Icon(Icons.local_shipping_outlined,
+                color: Color(0xFF1E3A5F), size: 22),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                "Araç Seç",
+                style: TextStyle(
+                  fontSize: 15,
+                  color: textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, color: textSecondary, size: 16),
+          ],
+        )
+            : Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: accent,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.local_shipping,
+                  color: Colors.white, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _selectedVehicle!['plate'],
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _selectedVehicle!['type'] ?? '-',
                     style: const TextStyle(
                       fontSize: 13,
                       color: textSecondary,
@@ -289,10 +398,11 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
         GestureDetector(
           onTap: _closeDriverPanel,
           child: AnimatedBuilder(
-            animation: _panelAnimation,
+            animation: _driverPanelAnimation,
             builder: (context, child) {
               return Container(
-                color: Colors.black.withOpacity(0.4 * _panelAnimation.value),
+                color:
+                Colors.black.withOpacity(0.4 * _driverPanelAnimation.value),
               );
             },
           ),
@@ -302,24 +412,26 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
         Align(
           alignment: isDesktop ? Alignment.center : Alignment.bottomCenter,
           child: AnimatedBuilder(
-            animation: _panelAnimation,
+            animation: _driverPanelAnimation,
             builder: (context, child) {
               return Transform.translate(
                 offset: Offset(
                   0,
                   isDesktop
-                      ? (1 - _panelAnimation.value) * 50
-                      : (1 - _panelAnimation.value) * 500,
+                      ? (1 - _driverPanelAnimation.value) * 50
+                      : (1 - _driverPanelAnimation.value) * 500,
                 ),
                 child: Opacity(
-                  opacity: _panelAnimation.value,
+                  opacity: _driverPanelAnimation.value,
                   child: child,
                 ),
               );
             },
             child: Container(
               width: isDesktop ? 600 : double.infinity,
-              height: isDesktop ? 500 : MediaQuery.of(context).size.height * 0.7,
+              height: isDesktop
+                  ? 500
+                  : MediaQuery.of(context).size.height * 0.7,
               decoration: BoxDecoration(
                 color: bg,
                 borderRadius: isDesktop
@@ -345,7 +457,7 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
                       color: cardBg,
                       borderRadius: BorderRadius.only(
                         topLeft: Radius.circular(isDesktop ? 16 : 24),
-                        topRight:  Radius.circular(isDesktop ? 16 : 24),
+                        topRight: Radius.circular(isDesktop ? 16 : 24),
                       ),
                       border: const Border(bottom: BorderSide(color: border)),
                     ),
@@ -371,7 +483,8 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
                                 color: accentLight,
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: const Icon(Icons.local_shipping, color: Color(0xFF1E3A5F), size: 20),
+                              child: const Icon(Icons.person,
+                                  color: Color(0xFF1E3A5F), size: 20),
                             ),
                             const SizedBox(width: 12),
                             const Expanded(
@@ -393,15 +506,18 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
                         ),
                         const SizedBox(height: 12),
                         TextField(
-                          controller: _searchController,
-                          onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+                          controller: _driverSearchController,
+                          onChanged: (v) =>
+                              setState(() => _driverSearchQuery = v.toLowerCase()),
                           decoration: InputDecoration(
                             hintText: "Ara...",
                             hintStyle: const TextStyle(fontSize: 14),
-                            prefixIcon: const Icon(Icons.search, color: textSecondary, size: 20),
+                            prefixIcon: const Icon(Icons.search,
+                                color: textSecondary, size: 20),
                             filled: true,
                             fillColor: bg,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
                               borderSide: BorderSide.none,
@@ -415,16 +531,23 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
                   // Driver List
                   Expanded(
                     child: FutureBuilder<List<Map<String, dynamic>>>(
-                      future: _fetchDrivers(),
+                      future: FirestoreService.fetchDrivers(),
                       builder: (context, snap) {
                         if (!snap.hasData) {
-                          return const Center(child: CircularProgressIndicator());
+                          return const Center(
+                              child: CircularProgressIndicator());
                         }
 
                         final drivers = snap.data!.where((d) {
-                          if (_searchQuery.isEmpty) return true;
-                          return d['name'].toString().toLowerCase().contains(_searchQuery) ||
-                              d['plate'].toString().toLowerCase().contains(_searchQuery);
+                          if (_driverSearchQuery.isEmpty) return true;
+                          return d['name']
+                              .toString()
+                              .toLowerCase()
+                              .contains(_driverSearchQuery) ||
+                              d['email']
+                                  .toString()
+                                  .toLowerCase()
+                                  .contains(_driverSearchQuery);
                         }).toList();
 
                         if (drivers.isEmpty) {
@@ -432,11 +555,13 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: const [
-                                Icon(Icons.search_off, size: 48, color: textSecondary),
+                                Icon(Icons.search_off,
+                                    size: 48, color: textSecondary),
                                 SizedBox(height: 12),
                                 Text(
                                   "Şoför bulunamadı",
-                                  style: TextStyle(fontSize: 15, color: textSecondary),
+                                  style: TextStyle(
+                                      fontSize: 15, color: textSecondary),
                                 ),
                               ],
                             ),
@@ -448,8 +573,8 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
                           itemCount: drivers.length,
                           itemBuilder: (context, i) {
                             final driver = drivers[i];
-                            final busy = driver['jobStatus'] == 'busy';
-                            final isSelected = driver['uid'] == _selectedDriverUid;
+                            final isSelected =
+                                driver['uid'] == _selectedDriverUid;
 
                             return Container(
                               margin: const EdgeInsets.only(bottom: 10),
@@ -464,7 +589,7 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
                               child: Material(
                                 color: Colors.transparent,
                                 child: InkWell(
-                                  onTap: busy ? null : () => _selectDriver(driver),
+                                  onTap: () => _selectDriver(driver),
                                   borderRadius: BorderRadius.circular(12),
                                   child: Padding(
                                     padding: const EdgeInsets.all(14),
@@ -474,31 +599,33 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
                                           width: 48,
                                           height: 48,
                                           decoration: BoxDecoration(
-                                            color: busy ? Colors.grey.shade300 : accent,
-                                            borderRadius: BorderRadius.circular(10),
+                                            color: accent,
+                                            borderRadius:
+                                            BorderRadius.circular(10),
                                           ),
-                                          child: Icon(
-                                            Icons.local_shipping_outlined,
-                                            color: busy ? Colors.grey.shade600 : Colors.white,
+                                          child: const Icon(
+                                            Icons.person_outlined,
+                                            color: Colors.white,
                                             size: 24,
                                           ),
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                             children: [
                                               Text(
                                                 driver['name'],
-                                                style: TextStyle(
+                                                style: const TextStyle(
                                                   fontSize: 15,
                                                   fontWeight: FontWeight.w600,
-                                                  color: busy ? textSecondary : textPrimary,
+                                                  color: textPrimary,
                                                 ),
                                               ),
                                               const SizedBox(height: 3),
                                               Text(
-                                                driver['plate'],
+                                                driver['email'],
                                                 style: const TextStyle(
                                                   fontSize: 13,
                                                   color: textSecondary,
@@ -507,48 +634,281 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
                                             ],
                                           ),
                                         ),
+                                        if (isSelected)
+                                          const Icon(
+                                            Icons.check_circle,
+                                            color: accent,
+                                            size: 22,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVehiclePanel() {
+    return Stack(
+      children: [
+        // Backdrop
+        GestureDetector(
+          onTap: _closeVehiclePanel,
+          child: AnimatedBuilder(
+            animation: _vehiclePanelAnimation,
+            builder: (context, child) {
+              return Container(
+                color: Colors.black
+                    .withOpacity(0.4 * _vehiclePanelAnimation.value),
+              );
+            },
+          ),
+        ),
+
+        // Panel
+        Align(
+          alignment: isDesktop ? Alignment.center : Alignment.bottomCenter,
+          child: AnimatedBuilder(
+            animation: _vehiclePanelAnimation,
+            builder: (context, child) {
+              return Transform.translate(
+                offset: Offset(
+                  0,
+                  isDesktop
+                      ? (1 - _vehiclePanelAnimation.value) * 50
+                      : (1 - _vehiclePanelAnimation.value) * 500,
+                ),
+                child: Opacity(
+                  opacity: _vehiclePanelAnimation.value,
+                  child: child,
+                ),
+              );
+            },
+            child: Container(
+              width: isDesktop ? 600 : double.infinity,
+              height: isDesktop
+                  ? 500
+                  : MediaQuery.of(context).size.height * 0.7,
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: isDesktop
+                    ? BorderRadius.circular(16)
+                    : const BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 30,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: cardBg,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(isDesktop ? 16 : 24),
+                        topRight: Radius.circular(isDesktop ? 16 : 24),
+                      ),
+                      border: const Border(bottom: BorderSide(color: border)),
+                    ),
+                    child: Column(
+                      children: [
+                        if (!isDesktop)
+                          Center(
+                            child: Container(
+                              width: 36,
+                              height: 4,
+                              margin: const EdgeInsets.only(bottom: 16),
+                              decoration: BoxDecoration(
+                                color: border,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: accentLight,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.local_shipping,
+                                  color: Color(0xFF1E3A5F), size: 20),
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Text(
+                                "Araç Seç",
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: textPrimary,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: _closeVehiclePanel,
+                              icon: const Icon(Icons.close, size: 22),
+                              color: textSecondary,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _vehicleSearchController,
+                          onChanged: (v) => setState(
+                                  () => _vehicleSearchQuery = v.toLowerCase()),
+                          decoration: InputDecoration(
+                            hintText: "Ara...",
+                            hintStyle: const TextStyle(fontSize: 14),
+                            prefixIcon: const Icon(Icons.search,
+                                color: textSecondary, size: 20),
+                            filled: true,
+                            fillColor: bg,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Vehicle List
+                  Expanded(
+                    child: FutureBuilder<List<Map<String, dynamic>>>(
+                      future: FirestoreService.fetchVehiclesByDriver(
+                          _selectedDriverUid!),
+                      builder: (context, snap) {
+                        if (!snap.hasData) {
+                          return const Center(
+                              child: CircularProgressIndicator());
+                        }
+
+                        final vehicles = snap.data!.where((v) {
+                          if (_vehicleSearchQuery.isEmpty) return true;
+                          return v['plate']
+                              .toString()
+                              .toLowerCase()
+                              .contains(_vehicleSearchQuery) ||
+                              v['type']
+                                  .toString()
+                                  .toLowerCase()
+                                  .contains(_vehicleSearchQuery);
+                        }).toList();
+
+                        if (vehicles.isEmpty) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                Icon(Icons.search_off,
+                                    size: 48, color: textSecondary),
+                                SizedBox(height: 12),
+                                Text(
+                                  "Bu şoföre atanmış araç bulunamadı",
+                                  style: TextStyle(
+                                      fontSize: 15, color: textSecondary),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
+                        return ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: vehicles.length,
+                          itemBuilder: (context, i) {
+                            final vehicle = vehicles[i];
+                            final isSelected =
+                                vehicle['vehicleId'] == _selectedVehicleId;
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              decoration: BoxDecoration(
+                                color: isSelected ? accentLight : cardBg,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSelected ? accent : border,
+                                  width: isSelected ? 2 : 1,
+                                ),
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () => _selectVehicle(vehicle),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(14),
+                                    child: Row(
+                                      children: [
                                         Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 5,
-                                          ),
+                                          width: 48,
+                                          height: 48,
                                           decoration: BoxDecoration(
-                                            color: busy
-                                                ? warning.withOpacity(0.1)
-                                                : success.withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(6),
+                                            color: accent,
+                                            borderRadius:
+                                            BorderRadius.circular(10),
                                           ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
+                                          child: const Icon(
+                                            Icons.local_shipping_outlined,
+                                            color: Colors.white,
+                                            size: 24,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                             children: [
-                                              Container(
-                                                width: 6,
-                                                height: 6,
-                                                decoration: BoxDecoration(
-                                                  color: busy ? warning : success,
-                                                  shape: BoxShape.circle,
+                                              Text(
+                                                vehicle['plate'],
+                                                style: const TextStyle(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: textPrimary,
                                                 ),
                                               ),
-                                              const SizedBox(width: 5),
+                                              const SizedBox(height: 3),
                                               Text(
-                                                busy ? "Meşgul" : "Müsait",
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: busy ? warning : success,
+                                                "${vehicle['type']} - ${vehicle['ownership']}",
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  color: textSecondary,
                                                 ),
                                               ),
                                             ],
                                           ),
                                         ),
                                         if (isSelected)
-                                          const Padding(
-                                            padding: EdgeInsets.only(left: 8),
-                                            child: Icon(
-                                              Icons.check_circle,
-                                              color: accent,
-                                              size: 22,
-                                            ),
+                                          const Icon(
+                                            Icons.check_circle,
+                                            color: accent,
+                                            size: 22,
                                           ),
                                       ],
                                     ),
@@ -572,10 +932,6 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoadingDispatch) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
     return Stack(
       children: [
         // Main Content
@@ -594,7 +950,10 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Color(0xFF1E3A5F), primary.withOpacity(0.85)],
+                          colors: [
+                            const Color(0xFF1E3A5F),
+                            primary.withOpacity(0.85)
+                          ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -685,14 +1044,16 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
                                 Expanded(
                                   child: TextField(
                                     controller: _loadPortController,
-                                    decoration: _input("Alış Limanı", Icons.anchor),
+                                    decoration:
+                                    _input("Yükleme Noktası", Icons.location_on_outlined),
                                   ),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: TextField(
                                     controller: _unloadPortController,
-                                    decoration: _input("Varış Limanı", Icons.flag),
+                                    decoration:
+                                    _input("Varış Noktası", Icons.flag_outlined),
                                   ),
                                 ),
                               ],
@@ -700,27 +1061,51 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
                           else ...[
                             TextField(
                               controller: _loadPortController,
-                              decoration: _input("Alış Limanı", Icons.anchor),
+                              decoration:
+                              _input("Yükleme Noktası", Icons.location_on_outlined),
                             ),
                             const SizedBox(height: 12),
                             TextField(
                               controller: _unloadPortController,
-                              decoration: _input("Varış Limanı", Icons.flag),
+                              decoration:
+                              _input("Varış Noktası", Icons.flag_outlined),
                             ),
                           ],
 
                           const SizedBox(height: 12),
 
                           TextField(
-                            controller: _cargoInfoController,
+                            controller: _cargoTypeController,
+                            decoration:
+                            _input("Yük Tipi", Icons.inventory_2_outlined),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          TextField(
+                            controller: _cargoDescriptionController,
                             maxLines: 2,
-                            decoration: _input("Yük Bilgisi", Icons.inventory_2_outlined),
+                            decoration: _input(
+                                "Yük Açıklaması", Icons.description_outlined),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          TextField(
+                            controller: _cargoWeightController,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                  RegExp(r'^\d+\.?\d{0,2}')),
+                            ],
+                            decoration:
+                            _input("Ağırlık (kg)", Icons.scale_outlined),
                           ),
 
                           const SizedBox(height: 20),
 
                           const Text(
-                            "Şoför Ataması",
+                            "Atama Bilgileri",
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
@@ -731,6 +1116,10 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
 
                           _buildDriverSelectionCard(),
 
+                          const SizedBox(height: 12),
+
+                          _buildVehicleSelectionCard(),
+
                           const SizedBox(height: 24),
 
                           SizedBox(
@@ -739,7 +1128,7 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
                             child: ElevatedButton(
                               onPressed: _isCreatingJob ? null : _createJob,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Color(0xFF1E3A5F),
+                                backgroundColor: const Color(0xFF1E3A5F),
                                 foregroundColor: Colors.white,
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
@@ -776,6 +1165,9 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
 
         // Driver Selection Panel Overlay
         if (_showDriverPanel) _buildDriverPanel(),
+
+        // Vehicle Selection Panel Overlay
+        if (_showVehiclePanel) _buildVehiclePanel(),
       ],
     );
   }

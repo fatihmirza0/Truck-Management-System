@@ -1,7 +1,6 @@
 import 'dart:ui';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:lojistik/services/firestore_service.dart';
 
 class AddDriverPage extends StatefulWidget {
   const AddDriverPage({super.key});
@@ -19,9 +18,6 @@ class _AddDriverPageState extends State<AddDriverPage> with TickerProviderStateM
 
   bool _isLoading = false;
   bool _passwordVisible = false;
-
-  String? _dispatchUid;
-  bool _isLoadingDispatch = true;
 
   late AnimationController _formController;
   late Animation<double> _formAnimation;
@@ -41,7 +37,6 @@ class _AddDriverPageState extends State<AddDriverPage> with TickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _loadDispatchUid();
 
     _formController = AnimationController(
       vsync: this,
@@ -66,14 +61,6 @@ class _AddDriverPageState extends State<AddDriverPage> with TickerProviderStateM
     super.dispose();
   }
 
-  Future<void> _loadDispatchUid() async {
-    try {
-      _dispatchUid = FirebaseAuth.instance.currentUser?.uid;
-    } finally {
-      if (mounted) setState(() => _isLoadingDispatch = false);
-    }
-  }
-
   Future<void> _addDriver() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
@@ -81,68 +68,110 @@ class _AddDriverPageState extends State<AddDriverPage> with TickerProviderStateM
     final phone = _phoneController.text.trim();
     final plate = _plateController.text.trim();
 
-    if ([name, email, password, phone, plate].any((e) => e.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text("Lütfen tüm alanları doldurun"),
-          backgroundColor: const Color(0xFFEF4444),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      );
+    // Validation
+    if (name.isEmpty) {
+      _showError("Lütfen isim soyisim giriniz");
       return;
     }
 
-    if (_dispatchUid == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Dispatch bilgisi bulunamadı")),
-      );
+    if (email.isEmpty || !email.contains('@')) {
+      _showError("Lütfen geçerli bir e-posta adresi giriniz");
+      return;
+    }
+
+    if (password.isEmpty || password.length < 6) {
+      _showError("Şifre en az 6 karakter olmalıdır");
+      return;
+    }
+
+    if (phone.isEmpty) {
+      _showError("Lütfen telefon numarası giriniz");
+      return;
+    }
+
+    if (plate.isEmpty) {
+      _showError("Lütfen plaka giriniz");
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      // Call FirestoreService to create driver
+      await FirestoreService.createDriverHttp(
+        name: name,
         email: email,
         password: password,
+        phone: phone,
+        plate: plate,
       );
 
-      final driverUid = credential.user!.uid;
-
-      await FirebaseFirestore.instance.collection('users').doc(driverUid).set({
-        'uid': driverUid,
-        'role': 'driver',
-        'name': name,
-        'email': email,
-        'phone': phone,
-        'plateNumber': plate,
-        'createdBy': _dispatchUid,
-        'createdAt': Timestamp.now(),
-        'jobStatus': 'available',
-      });
-
+      // Clear form
       _nameController.clear();
       _emailController.clear();
       _passwordController.clear();
       _phoneController.clear();
       _plateController.clear();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("✓ $name başarıyla eklendi"),
-          backgroundColor: success,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      );
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("✓ $name başarıyla eklendi"),
+            backgroundColor: success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Hata: $e")),
-      );
+      // Show error message
+      if (mounted) {
+        String errorMessage = "Bir hata oluştu";
+
+        if (e.toString().contains('email-already-in-use')) {
+          errorMessage = "Bu e-posta adresi zaten kullanımda";
+        } else if (e.toString().contains('weak-password')) {
+          errorMessage = "Şifre çok zayıf";
+        } else if (e.toString().contains('invalid-email')) {
+          errorMessage = "Geçersiz e-posta adresi";
+        } else if (e.toString().contains('Sadece dispatch')) {
+          errorMessage = "Sadece dispatch kullanıcıları şoför ekleyebilir";
+        } else {
+          errorMessage = "Hata: ${e.toString()}";
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: const Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFFEF4444),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
   }
 
   InputDecoration _input(String label, IconData icon, {bool isPassword = false}) {
@@ -208,10 +237,6 @@ class _AddDriverPageState extends State<AddDriverPage> with TickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoadingDispatch) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
     return Container(
       color: bg,
       child: SingleChildScrollView(
@@ -364,7 +389,7 @@ class _AddDriverPageState extends State<AddDriverPage> with TickerProviderStateM
 
                           _buildFormField(
                             controller: _passwordController,
-                            label: "Şifre",
+                            label: "Şifre (min. 6 karakter)",
                             icon: Icons.lock_outline,
                             isPassword: true,
                             delay: 200,
@@ -394,6 +419,7 @@ class _AddDriverPageState extends State<AddDriverPage> with TickerProviderStateM
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
+                                  disabledBackgroundColor: Colors.grey.shade300,
                                 ),
                                 child: _isLoading
                                     ? const SizedBox(
@@ -438,7 +464,7 @@ class _AddDriverPageState extends State<AddDriverPage> with TickerProviderStateM
                         const SizedBox(width: 12),
                         const Expanded(
                           child: Text(
-                            "Eklenen şoför otomatik olarak sisteme kaydedilir ve giriş yapabilir.",
+                            "Eklenen şoför için otomatik olarak bir kullanıcı hesabı ve araç kaydı oluşturulur.",
                             style: TextStyle(
                               fontSize: 13,
                               color: textSecondary,
