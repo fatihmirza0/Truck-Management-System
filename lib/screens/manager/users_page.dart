@@ -732,7 +732,7 @@ class _UsersPageState extends State<UsersPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            search.isNotEmpty ? "Farklı bir arama terimi deneyin" : "Yeni kullanıcılar eklemek için admin panelini kullanın",
+            search.isNotEmpty ? "Farklı bir arama terimi deneyin" : "Yeni kullanıcılar eklemek için yönetim panelini kullanın",
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey[500],

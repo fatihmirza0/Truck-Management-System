@@ -191,13 +191,13 @@ class _JobsPageState extends State<JobsPage> {
       endDrawer: _selectedJob == null
           ? null
           : JobDetailPanel(
-        job: _selectedJob!,
-        jobId: _selectedId!,
-        userName: userName,
-        vehiclePlate: vehiclePlate,
-        onApprove: () => JobService.approveJob(_selectedId!),
-        onReject: (reason) => JobService.rejectJob(_selectedId!, reason),
-      ),
+              job: _selectedJob!,
+              jobId: _selectedId!,
+              userName: userName,
+              vehiclePlate: vehiclePlate,
+              onApprove: () => JobService.approveJob(_selectedId!),
+              onReject: (reason) => JobService.rejectJob(_selectedId!, reason),
+            ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(32.0),
@@ -274,7 +274,8 @@ class _JobsPageState extends State<JobsPage> {
                 child: TextField(
                   controller: _searchController,
                   decoration: const InputDecoration(
-                    hintText: "Referans no, şoför, plaka, yük bilgisi ile ara...",
+                    hintText:
+                        "Referans no, şoför, plaka, yük bilgisi ile ara...",
                     hintStyle: TextStyle(
                       color: Color(0xFF94A3B8),
                       fontSize: 14,
@@ -308,12 +309,10 @@ class _JobsPageState extends State<JobsPage> {
                     children: [
                       _buildTabButton(
                           "pending", "Onay Bekleyen", Icons.pending_outlined),
-                      _buildTabButton("approved", "Onaylanan",
-                          Icons.check_circle_outline),
-                      _buildTabButton(
-                          "completed", "Tamamlanan", Icons.done_all_outlined),
                       _buildTabButton(
                           "rejected", "Reddedilen", Icons.cancel_outlined),
+                      _buildTabButton(
+                          "approved", "Onaylanan", Icons.check_circle_outline),
                     ],
                   ),
                 ),
@@ -327,8 +326,7 @@ class _JobsPageState extends State<JobsPage> {
                     if (!snap.hasData) {
                       return const Center(
                         child: CircularProgressIndicator(
-                          valueColor:
-                          AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+                          valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
                         ),
                       );
                     }
@@ -356,32 +354,32 @@ class _JobsPageState extends State<JobsPage> {
                             _searchQuery.isEmpty
                                 ? allDocs.length
                                 : allDocs.where((doc) {
-                              final job =
-                              doc.data() as Map<String, dynamic>;
-                              final driverName =
-                              userName(job["driverId"]).toLowerCase();
-                              final dispatchName =
-                              userName(job["createdBy"])
-                                  .toLowerCase();
-                              final vehiclePlateNo =
-                              vehiclePlate(job["vehicleId"])
-                                  .toLowerCase();
-                              final referenceNo =
-                              (job["referenceNo"] ?? "")
-                                  .toLowerCase();
-                              final cargoType =
-                              (job["cargo"]?["type"] ?? "")
-                                  .toLowerCase();
-                              final cargoDesc =
-                              (job["cargo"]?["description"] ?? "")
-                                  .toLowerCase();
-                              return driverName.contains(_searchQuery) ||
-                                  dispatchName.contains(_searchQuery) ||
-                                  vehiclePlateNo.contains(_searchQuery) ||
-                                  referenceNo.contains(_searchQuery) ||
-                                  cargoType.contains(_searchQuery) ||
-                                  cargoDesc.contains(_searchQuery);
-                            }).length,
+                                    final job =
+                                        doc.data() as Map<String, dynamic>;
+                                    final driverName =
+                                        userName(job["driverId"]).toLowerCase();
+                                    final dispatchName =
+                                        userName(job["createdBy"])
+                                            .toLowerCase();
+                                    final vehiclePlateNo =
+                                        vehiclePlate(job["vehicleId"])
+                                            .toLowerCase();
+                                    final referenceNo =
+                                        (job["referenceNo"] ?? "")
+                                            .toLowerCase();
+                                    final cargoType =
+                                        (job["cargo"]?["type"] ?? "")
+                                            .toLowerCase();
+                                    final cargoDesc =
+                                        (job["cargo"]?["description"] ?? "")
+                                            .toLowerCase();
+                                    return driverName.contains(_searchQuery) ||
+                                        dispatchName.contains(_searchQuery) ||
+                                        vehiclePlateNo.contains(_searchQuery) ||
+                                        referenceNo.contains(_searchQuery) ||
+                                        cargoType.contains(_searchQuery) ||
+                                        cargoDesc.contains(_searchQuery);
+                                  }).length,
                           ),
                       ],
                     );
@@ -557,7 +555,7 @@ class _JobsPageState extends State<JobsPage> {
               ),
               ...List.generate(
                 totalPages > 5 ? 5 : totalPages,
-                    (index) {
+                (index) {
                   int pageNum;
                   if (totalPages <= 5) {
                     pageNum = index + 1;
@@ -637,7 +635,7 @@ class _JobsPageState extends State<JobsPage> {
             constraints: const BoxConstraints(minWidth: 1200),
             child: DataTable(
               headingRowColor:
-              MaterialStateProperty.all(const Color(0xFFF8FAFC)),
+                  MaterialStateProperty.all(const Color(0xFFF8FAFC)),
               headingRowHeight: 56,
               dataRowHeight: 64,
               horizontalMargin: 24,
@@ -660,42 +658,42 @@ class _JobsPageState extends State<JobsPage> {
 
                 return DataRow(
                   cells: [
-                    _buildDataCell(j["referenceNo"], false,
-                            () => _openDetail(j, d.id)),
+                    _buildDataCell(
+                        j["referenceNo"], false, () => _openDetail(j, d.id)),
                     _buildDataCell(userName(j["driverId"]), false,
-                            () => _openDetail(j, d.id)),
+                        () => _openDetail(j, d.id)),
                     _buildDataCell(vehiclePlate(j["vehicleId"]), false,
-                            () => _openDetail(j, d.id)),
-                    _buildDataCell(cargo?["type"], false,
-                            () => _openDetail(j, d.id)),
+                        () => _openDetail(j, d.id)),
+                    _buildDataCell(
+                        cargo?["type"], false, () => _openDetail(j, d.id)),
                     _buildDataCell(
                         "${route?["loadPort"] ?? "-"} → ${route?["unloadPort"] ?? "-"}",
                         false,
-                            () => _openDetail(j, d.id)),
-                    _buildDataCell(cargo?["weightKg"], false,
-                            () => _openDetail(j, d.id)),
+                        () => _openDetail(j, d.id)),
+                    _buildDataCell(
+                        cargo?["weightKg"], false, () => _openDetail(j, d.id)),
                     _buildDataCell(userName(j["createdBy"]), false,
-                            () => _openDetail(j, d.id)),
+                        () => _openDetail(j, d.id)),
                     DataCell(
                       Row(
                         children: [
                           _buildActionButton(
                             Icons.visibility_outlined,
                             const Color(0xFF64748B),
-                                () => _openDetail(j, d.id),
+                            () => _openDetail(j, d.id),
                           ),
                           if (_status == "pending") ...[
                             const SizedBox(width: 8),
                             _buildActionButton(
                               Icons.check_circle_outline,
                               const Color(0xFF059669),
-                                  () => JobService.approveJob(d.id),
+                              () => JobService.approveJob(d.id),
                             ),
                             const SizedBox(width: 8),
                             _buildActionButton(
                               Icons.cancel_outlined,
                               const Color(0xFFDC2626),
-                                  () => _showRejectDialog(d.id),
+                              () => _showRejectDialog(d.id),
                             ),
                           ],
                         ],
@@ -862,8 +860,7 @@ class _JobsPageState extends State<JobsPage> {
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () => _showRejectDialog(d.id),
-                              icon:
-                              const Icon(Icons.cancel_outlined, size: 18),
+                              icon: const Icon(Icons.cancel_outlined, size: 18),
                               label: const Text("Reddet"),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFFDC2626),

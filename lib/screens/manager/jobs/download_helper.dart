@@ -2,23 +2,27 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_downloader/flutter_downloader.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 class DownloadHelper {
-  /// Tek dosya
-  static Future<void> downloadOne(BuildContext ctx, String url) async {
+  // ===========================================================
+  // SINGLE FILE
+  // ===========================================================
+  static Future<void> downloadOne(
+      BuildContext ctx,
+      String url, {
+        required String fileName,
+      }) async {
     try {
-      final fileName =
-          "${DateTime.now().millisecondsSinceEpoch}.jpg";
-
+      // WEB
       if (kIsWeb) {
         await launchUrl(Uri.parse(url));
         return;
       }
 
+      // MOBILE
       if (Platform.isAndroid || Platform.isIOS) {
         await FlutterDownloader.enqueue(
           url: url,
@@ -30,44 +34,51 @@ class DownloadHelper {
         return;
       }
 
+      // DESKTOP
       final folder = await FilePicker.platform.getDirectoryPath(
-          dialogTitle: "Klasör Seç:");
+        dialogTitle: "Kayıt klasörü seç",
+      );
 
       if (folder == null) return;
 
-      final req = await http.get(Uri.parse(url));
+      final response = await http.get(Uri.parse(url));
       final file = File("$folder/$fileName");
-      await file.writeAsBytes(req.bodyBytes);
+      await file.writeAsBytes(response.bodyBytes);
 
       if (ctx.mounted) {
         ScaffoldMessenger.of(ctx).showSnackBar(
-            SnackBar(content: Text("Kaydedildi → $folder/$fileName")));
+          SnackBar(content: Text("Kaydedildi → $fileName")),
+        );
       }
     } catch (e) {
-      if (ctx.mounted) {
-        ScaffoldMessenger.of(ctx)
-            .showSnackBar(SnackBar(content: Text("Hata: $e")));
-      }
+      _error(ctx, e);
     }
   }
 
-  /// Tüm dosyalar
-  static Future<void> downloadAll(BuildContext ctx, List files) async {
+  // ===========================================================
+  // MULTIPLE FILES
+  // ===========================================================
+  static Future<void> downloadAll(
+      BuildContext ctx,
+      List<String> urls,
+      String referenceNo,
+      ) async {
     try {
+      // WEB
       if (kIsWeb) {
-        for (var url in files) {
+        for (final url in urls) {
           await launchUrl(Uri.parse(url));
         }
         return;
       }
 
+      // MOBILE
       if (Platform.isAndroid || Platform.isIOS) {
-        for (var url in files) {
+        for (int i = 0; i < urls.length; i++) {
           await FlutterDownloader.enqueue(
-            url: url,
+            url: urls[i],
             savedDir: "/storage/emulated/0/Download",
-            fileName:
-            "${DateTime.now().millisecondsSinceEpoch}.jpg",
+            fileName: "$referenceNo-${i + 1}.jpg",
             showNotification: true,
             openFileFromNotification: true,
           );
@@ -75,28 +86,39 @@ class DownloadHelper {
         return;
       }
 
+      // DESKTOP
       final folder = await FilePicker.platform.getDirectoryPath(
-          dialogTitle: "Kayıt Klasörü Seç");
+        dialogTitle: "Kayıt klasörü seç",
+      );
 
       if (folder == null) return;
 
-      for (var url in files) {
-        final req = await http.get(Uri.parse(url));
-        final name =
-            "${DateTime.now().microsecondsSinceEpoch}.jpg";
-        final file = File("$folder/$name");
-        await file.writeAsBytes(req.bodyBytes);
+      for (int i = 0; i < urls.length; i++) {
+        final response = await http.get(Uri.parse(urls[i]));
+        final file =
+        File("$folder/$referenceNo-${i + 1}.jpg");
+        await file.writeAsBytes(response.bodyBytes);
       }
 
       if (ctx.mounted) {
         ScaffoldMessenger.of(ctx).showSnackBar(
-            SnackBar(content: Text("Tüm dosyalar indirildi → $folder")));
+          SnackBar(
+            content: Text("Tüm belgeler indirildi → $referenceNo"),
+          ),
+        );
       }
     } catch (e) {
-      if (ctx.mounted) {
-        ScaffoldMessenger.of(ctx)
-            .showSnackBar(SnackBar(content: Text("Hata: $e")));
-      }
+      _error(ctx, e);
     }
+  }
+
+  // ===========================================================
+  // ERROR HANDLER
+  // ===========================================================
+  static void _error(BuildContext ctx, Object e) {
+    if (!ctx.mounted) return;
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      SnackBar(content: Text("İndirme hatası: $e")),
+    );
   }
 }

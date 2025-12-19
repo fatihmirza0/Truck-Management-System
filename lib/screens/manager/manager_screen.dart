@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:lojistik/screens/manager/jobs/completed_jobs_page.dart';
 
 import '../login_screen.dart';
 import '../profile_screen.dart';
@@ -24,15 +25,17 @@ class _ManagerScreenState extends State<ManagerScreen> {
 
   bool get isDesktop => MediaQuery.of(context).size.width >= 900;
 
-  final List<Widget> _pages = const [
-    JobsPage(),
-    AddUserPage(),
-    UsersPage(),
-    ReportScreen(),
+  final List<Widget> _pages = [
+    const JobsPage(),
+    CompletedJobsPage(), // 🔥 YENİ
+    const AddUserPage(),
+    const UsersPage(),
+    const ReportScreen(),
   ];
 
   final List<String> _titles = [
     "İş Yönetimi",
+    "Tamamlanan İşler", // 🔥
     "Personel Ekle",
     "Kullanıcılar",
     "Raporlar",
@@ -40,6 +43,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
 
   final List<String> _subTitles = [
     "Görevler",
+    "Filtre & Export", // 🔥
     "Yeni Kullanıcı",
     "Kullanıcı Listesi",
     "İş Raporları",
@@ -47,6 +51,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
 
   final List<IconData> _icons = [
     Icons.dashboard_customize_outlined,
+    Icons.task_alt_outlined, // 🔥
     Icons.person_add_outlined,
     Icons.people_alt_outlined,
     Icons.bar_chart_outlined,
@@ -61,7 +66,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const LoginScreen()),
-              (_) => false,
+          (_) => false,
         );
       });
       return const Scaffold(
@@ -148,6 +153,10 @@ class _ManagerScreenState extends State<ManagerScreen> {
             label: "Kullanıcılar",
           ),
           BottomNavigationBarItem(
+            icon: Icon(Icons.task_alt_outlined),
+            label: "Tamamlanan",
+          ),
+          BottomNavigationBarItem(
             icon: Icon(Icons.bar_chart_outlined),
             label: "Rapor",
           ),
@@ -174,9 +183,10 @@ class _ManagerScreenState extends State<ManagerScreen> {
                 _sidebarHeader(),
                 const SizedBox(height: 32),
                 _menuItem("İş Yönetimi", Icons.dashboard_customize_outlined, 0),
-                _menuItem("Personel Ekle", Icons.person_add_outlined, 1),
-                _menuItem("Kullanıcılar", Icons.people_alt_outlined, 2),
-                _menuItem("Raporlar", Icons.bar_chart_outlined, 3),
+                _menuItem("Tamamlanan İşler", Icons.task_alt_outlined, 1), // 🔥
+                _menuItem("Personel Ekle", Icons.person_add_outlined, 2),
+                _menuItem("Kullanıcılar", Icons.people_alt_outlined, 3),
+                _menuItem("Raporlar", Icons.bar_chart_outlined, 4),
                 const Spacer(),
                 _sidebarProfile(),
               ],
@@ -216,8 +226,8 @@ class _ManagerScreenState extends State<ManagerScreen> {
               color: ManagerScreen.accent,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.local_shipping_outlined,
-                color: Colors.white),
+            child:
+                const Icon(Icons.local_shipping_outlined, color: Colors.white),
           ),
           const SizedBox(width: 12),
           const Text(
@@ -268,10 +278,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
         ),
         child: Row(
           children: [
-            Icon(icon,
-                color: selected
-                    ? ManagerScreen.accent
-                    : Colors.white54),
+            Icon(icon, color: selected ? ManagerScreen.accent : Colors.white54),
             const SizedBox(width: 12),
             Text(
               text,

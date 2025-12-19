@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:ui';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
+// import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
@@ -12,7 +12,7 @@ class FirestoreService {
 
   static const _baseUrl =
       "https://us-central1-truck-dispatch-system.cloudfunctions.net";
-  static final _functions = FirebaseFunctions.instance;
+  // static final _functions = FirebaseFunctions.instance;
 
   static Future<Map<String, String>> _headers() async {
     final user = _auth.currentUser;
@@ -229,7 +229,7 @@ class FirestoreService {
     try {
       final snap = await _firestore
           .collection("users")
-          .where("softDeleted", isEqualTo: false)
+          .where("softDeleted", isEqualTo: false,)
           .get();
       return snap.docs;
     } catch (e) {
@@ -596,13 +596,12 @@ class FirestoreService {
 
   /// Fetch all jobs (for reports)
   static Future<List<DocumentSnapshot>> fetchAllJobs() async {
-    try {
-      final snap = await _firestore.collection("jobs").get();
-      return snap.docs;
-    } catch (e) {
-      print('Fetch all jobs error: $e');
-      return [];
-    }
+    final snap = await FirebaseFirestore.instance
+        .collection("jobs")
+        .where("softDeleted", isEqualTo: false)
+        .get();
+
+    return snap.docs;
   }
 
   /// Stream job logs
