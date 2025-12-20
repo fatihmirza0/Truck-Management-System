@@ -64,6 +64,8 @@ exports.createDriverHttp = functions.https.onRequest((req, res) => {
         softDeleted: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         lastLoginAt: null,
+        activePlate: plate ?? null, // 🔥 varsa yaz
+        jobStatus: "available", // 🔥 BU
       });
 
       batch.set(db.collection("vehicles").doc(), {
@@ -128,6 +130,8 @@ exports.createUserHttp = functions.https.onRequest((req, res) => {
           type: "truck",
           isActive: true,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          jobStatus: "available", // 🔥 BU
+          activePlate: plate ?? null, // 🔥 varsa yaz
         });
       }
 
@@ -281,3 +285,56 @@ exports.jobActionHttp = functions.https.onRequest((req, res) => {
     }
   });
 });
+exports.syncActivePlateFromVehicles = functions.https.onRequest(
+  async (req, res) => {
+    try {
+      const vehiclesSnap = await admin.firestore()
+        .collection("vehicles")
+        .where("assignedDriverId", "!=", null)
+        .get();
+
+      const batch = admin.firestore().batch();
+      let updated = 0;
+      let skipped = 0;
+
+      for (const vehicleDoc of vehiclesSnap.docs) {
+        const v = vehicleDoc.data();
+        const driverId = v.assignedDriverId;
+
+        if (!driverId) continue;
+
+        const driverRef = admin.firestore()
+          .collection("users")
+          .doc(driverId);
+
+        const driverSnap = await driverRef.get();
+
+        // 🚨 USER YOKSA SKIP
+        if (!driverSnap.exists) {
+          console.warn(`Driver not found: ${driverId}`);
+          skipped++;
+          continue;
+        }
+
+        batch.update(driverRef, {
+          activePlate: v.plate,
+          activeVehicleId: vehicleDoc.id,
+        });
+
+        updated++;
+      }
+
+      if (updated > 0) await batch.commit();
+
+      res.json({
+        success: true,
+        syncedDrivers: updated,
+        skippedVehicles: skipped,
+      });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: e.message });
+    }
+  }
+);
+

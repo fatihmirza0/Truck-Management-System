@@ -90,6 +90,7 @@ class FirestoreService {
         "password": password,
         "phone": phone,
         "plate": plate,
+        "jobStatus": "available", // 🔥 EKLE
       }),
     );
 
@@ -161,6 +162,14 @@ class FirestoreService {
       throw Exception(res.body);
     }
   }
+  static Future<String> getDriverStatus(String driverId) async {
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(driverId)
+        .get();
+
+    return doc.data()?['jobStatus'] ?? 'available';
+  }
 
   // ============================================
   // JOB OPERATIONS (HTTP)
@@ -215,7 +224,8 @@ class FirestoreService {
           'name': d['name'] ?? '-',
           'email': d['email'] ?? '-',
           'phone': d['phone'] ?? '-',
-          'isActive': d['isActive'] ?? true,
+          'jobStatus': d['jobStatus'] ?? 'available', // 🔥
+          'activePlate': d['activePlate'],             // 🔥
         };
       }).toList();
     } catch (e) {
@@ -435,6 +445,8 @@ class FirestoreService {
     required String cargoType,
     required String cargoDescription,
     required double cargoWeightKg,
+    required double distanceKm, // 🆕 BUNU EKLE
+
   }) async {
     try {
       final currentUid = currentUserUid;
@@ -461,11 +473,13 @@ class FirestoreService {
           'description': cargoDescription.trim(),
           'weightKg': cargoWeightKg,
         },
+        'distanceKm': distanceKm, // 🆕
         'timestamps': {
           'createdAt': FieldValue.serverTimestamp(),
           'reviewedAt': null,
         },
         'softDeleted': false,
+
       });
 
       // Add creation log

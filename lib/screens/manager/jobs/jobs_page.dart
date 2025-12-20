@@ -162,13 +162,13 @@ class _JobsPageState extends State<JobsPage> {
                   jobId: id,
                   userName: userName,
                   vehiclePlate: vehiclePlate,
-                  onApprove: () {
-                    JobService.approveJob(id);
-                    Navigator.pop(context);
+                  onApprove: () async {
+                    await JobService.approveJob(_selectedId!);
+                    _closeDetailPanel();
                   },
-                  onReject: (reason) {
-                    JobService.rejectJob(id, reason);
-                    Navigator.pop(context);
+                  onReject: (reason) async {
+                    await JobService.rejectJob(_selectedId!, reason);
+                    _closeDetailPanel();
                   },
                 ),
               );
@@ -195,8 +195,14 @@ class _JobsPageState extends State<JobsPage> {
               jobId: _selectedId!,
               userName: userName,
               vehiclePlate: vehiclePlate,
-              onApprove: () => JobService.approveJob(_selectedId!),
-              onReject: (reason) => JobService.rejectJob(_selectedId!, reason),
+              onApprove: () async {
+                await JobService.approveJob(_selectedId!);
+                _closeDetailPanel();
+              },
+              onReject: (reason) async {
+                await JobService.rejectJob(_selectedId!, reason);
+                _closeDetailPanel();
+              },
             ),
       body: SafeArea(
         child: Padding(
@@ -971,5 +977,22 @@ class _JobsPageState extends State<JobsPage> {
         ],
       ),
     );
+  }
+
+  void _closeDetailPanel() {
+    // Drawer açık mı kontrol et
+    if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
+      _scaffoldKey.currentState?.closeEndDrawer();
+    }
+
+    // Mobile bottom sheet ise
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
+
+    setState(() {
+      _selectedJob = null;
+      _selectedId = null;
+    });
   }
 }

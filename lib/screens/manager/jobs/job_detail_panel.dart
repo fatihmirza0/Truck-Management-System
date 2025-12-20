@@ -12,6 +12,7 @@ class JobDetailPanel extends StatefulWidget {
   final VoidCallback onApprove;
   final void Function(String reason) onReject;
 
+
   const JobDetailPanel({
     super.key,
     required this.job,

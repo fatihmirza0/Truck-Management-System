@@ -184,7 +184,6 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
                   const SizedBox(height: 6),
                   const Text("Evraklar başarıyla yüklendi."),
                   const SizedBox(height: 16),
-                  const CircularProgressIndicator(),
                 ],
               ),
             ),
