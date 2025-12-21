@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:lojistik/services/firestore_service.dart';
+import 'package:lojistik/services/firestore_Service.dart';
 import 'dispatch_job_detail_page.dart';
 
 class DispatchJobsPage extends StatefulWidget {

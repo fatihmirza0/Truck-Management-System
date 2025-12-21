@@ -4,7 +4,7 @@
 // + Role-based search hint + refined card sizing
 // ============================================
 import 'package:flutter/material.dart';
-import 'package:lojistik/services/firestore_service.dart';
+import 'package:lojistik/services/firestore_Service.dart';
 import 'user_detail_page.dart';
 
 class UsersPage extends StatefulWidget {

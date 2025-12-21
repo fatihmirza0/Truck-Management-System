@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../services/firestore_service.dart';
+import '../../services/firestore_Service.dart';
 
 class AddUserPage extends StatefulWidget {
   const AddUserPage({super.key});
@@ -346,32 +346,80 @@ class _AddUserPageState extends State<AddUserPage> {
                 borderRadius: BorderRadius.circular(22),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 20,
-                      offset: Offset(0, 6)),
+                    color: Colors.black.withOpacity(0.06),
+                    blurRadius: 20,
+                    offset: const Offset(0, 6),
+                  ),
                 ],
               ),
               child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text("Yeni Kullanıcı Oluştur",
-                        style: TextStyle(
-                            fontSize: 20,
-                            color: Color(0xFF1E293B),
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text("Kullanıcı bilgilerini girin.",
-                        style: TextStyle(
-                            fontSize: 13, color: Colors.grey.shade600)),
-                    const SizedBox(height: 20),
-                    _form(desktop: false),
-                  ]),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 🔥 HEADER (AYNISI)
+                  _buildHeader(),
+                  const SizedBox(height: 20),
+                  // FORM
+                  _form(desktop: false),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
   }
+  Widget _buildHeader() {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E3A5F),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1E3A5F).withOpacity(0.2),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.person_add_outlined,
+            color: Colors.white,
+            size: 28,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Kullanıcı Ekle",
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1E3A5F),
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "Yeni şoför veya dispatch kullanıcısı ekleyin",
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
 
   // ===========================================================================
   // BUILD

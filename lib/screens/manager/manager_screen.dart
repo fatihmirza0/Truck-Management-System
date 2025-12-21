@@ -145,16 +145,16 @@ class _ManagerScreenState extends State<ManagerScreen> {
             label: "İşler",
           ),
           BottomNavigationBarItem(
+            icon: Icon(Icons.task_alt_outlined),
+            label: "Tamamlanan",
+          ),
+          BottomNavigationBarItem(
             icon: Icon(Icons.person_add_outlined),
             label: "Ekle",
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.people_alt_outlined),
             label: "Kullanıcılar",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.task_alt_outlined),
-            label: "Tamamlanan",
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.bar_chart_outlined),

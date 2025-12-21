@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/rendering.dart';
 
+import '../services/auth_Service.dart';
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -252,7 +254,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (res == true) {
-      await FirebaseAuth.instance.signOut();
+      // 🔥 AuthService ile çıkış yap (Firebase + SharedPreferences temizlenir)
+      await AuthService.logout();
+
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
       }
@@ -310,18 +314,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: const Color(0xFFF8FAFC),
       body: loading
           ? const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
-        ),
-      )
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+              ),
+            )
           : SafeArea(
-        child: Row(
-          children: [
-            if (isDesktop) _buildDesktopSidebar(),
-            Expanded(child: _buildMainContent()),
-          ],
-        ),
-      ),
+              child: Row(
+                children: [
+                  if (isDesktop) _buildDesktopSidebar(),
+                  Expanded(child: _buildMainContent()),
+                ],
+              ),
+            ),
     );
   }
 
@@ -378,7 +382,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  _nameController.text.isEmpty ? "Kullanıcı" : _nameController.text,
+                  _nameController.text.isEmpty
+                      ? "Kullanıcı"
+                      : _nameController.text,
                   style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
@@ -388,7 +394,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
                     color: _getRoleColor().withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
@@ -413,9 +420,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 40),
-          _buildMenuItem(icon: Icons.person_outline, title: "Hesap Bilgileri", isActive: true),
-          _buildMenuItem(icon: Icons.security_outlined, title: "Güvenlik", isActive: false, onTap: () {}),
-          _buildMenuItem(icon: Icons.notifications_outlined, title: "Bildirimler", isActive: false, onTap: () {}),
+          _buildMenuItem(
+              icon: Icons.person_outline,
+              title: "Hesap Bilgileri",
+              isActive: true),
+          _buildMenuItem(
+              icon: Icons.security_outlined,
+              title: "Güvenlik",
+              isActive: false,
+              onTap: () {}),
+          _buildMenuItem(
+              icon: Icons.notifications_outlined,
+              title: "Bildirimler",
+              isActive: false,
+              onTap: () {}),
           const Spacer(),
           Padding(
             padding: const EdgeInsets.all(32),
@@ -425,14 +443,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 foregroundColor: const Color(0xFFDC2626),
                 side: const BorderSide(color: Color(0xFFDC2626)),
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.logout_outlined, size: 20),
                   SizedBox(width: 8),
-                  Text("Çıkış Yap", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                  Text("Çıkış Yap",
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -463,7 +484,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             child: Row(
               children: [
-                Icon(icon, size: 20, color: isActive ? const Color(0xFF1E3A5F) : const Color(0xFF64748B)),
+                Icon(icon,
+                    size: 20,
+                    color: isActive
+                        ? const Color(0xFF1E3A5F)
+                        : const Color(0xFF64748B)),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Text(
@@ -471,7 +496,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                      color: isActive ? const Color(0xFF1E3A5F) : const Color(0xFF64748B),
+                      color: isActive
+                          ? const Color(0xFF1E3A5F)
+                          : const Color(0xFF64748B),
                     ),
                   ),
                 ),
@@ -517,7 +544,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               else
                 IconButton(
                   onPressed: () => setState(() => isEditing = true),
-                  icon: const Icon(Icons.edit_outlined, color: Color(0xFF1E3A5F)),
+                  icon:
+                      const Icon(Icons.edit_outlined, color: Color(0xFF1E3A5F)),
                 ),
               const SizedBox(width: 8),
             ],
@@ -538,11 +566,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             color: _getRoleColor().withOpacity(0.1),
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(_getRoleIcon(), size: 48, color: _getRoleColor()),
+                          child: Icon(_getRoleIcon(),
+                              size: 48, color: _getRoleColor()),
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          _nameController.text.isEmpty ? "Kullanıcı" : _nameController.text,
+                          _nameController.text.isEmpty
+                              ? "Kullanıcı"
+                              : _nameController.text,
                           style: const TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.w700,
@@ -551,7 +582,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(height: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
                             color: _getRoleColor().withOpacity(0.1),
                             borderRadius: BorderRadius.circular(20),
@@ -603,14 +635,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF1E3A5F),
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
                           ),
                         ),
                     ],
                   ),
                 if (isDesktop) const SizedBox(height: 32),
-
                 Container(
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
@@ -628,10 +661,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           label: "Ad Soyad",
                           icon: Icons.person_outline,
                           enabled: isEditing,
-                          validator: (v) => v?.isEmpty == true ? "Ad soyad giriniz" : null,
+                          validator: (v) =>
+                              v?.isEmpty == true ? "Ad soyad giriniz" : null,
                         ),
                         const SizedBox(height: 20),
-
                         _buildTextField(
                           controller: _emailController,
                           label: "E-posta",
@@ -640,7 +673,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           helperText: "E-posta adresi değiştirilemez",
                         ),
                         const SizedBox(height: 20),
-
                         _buildTextField(
                           controller: _phoneController,
                           label: "Telefon",
@@ -648,7 +680,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           enabled: isEditing,
                           keyboardType: TextInputType.phone,
                         ),
-
                         if (userRole == "driver") ...[
                           const SizedBox(height: 20),
                           _buildTextField(
@@ -661,7 +692,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 : null,
                           ),
                         ],
-
                         if (isEditing) ...[
                           const SizedBox(height: 32),
                           Row(
@@ -670,11 +700,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 child: OutlinedButton(
                                   onPressed: saving ? null : _cancelEdit,
                                   style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 16),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                    side: const BorderSide(
+                                        color: Color(0xFFE2E8F0)),
                                   ),
                                   child: const Text(
                                     "İptal",
@@ -690,32 +722,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               Expanded(
                                 flex: 2,
                                 child: ElevatedButton(
-                                  onPressed: saving || !hasChanges ? null : _saveProfile,
+                                  onPressed: saving || !hasChanges
+                                      ? null
+                                      : _saveProfile,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFF1E3A5F),
                                     foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 16),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    disabledBackgroundColor: const Color(0xFFE2E8F0),
+                                    disabledBackgroundColor:
+                                        const Color(0xFFE2E8F0),
                                   ),
                                   child: saving
                                       ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation(Colors.white),
-                                    ),
-                                  )
+                                          height: 20,
+                                          width: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation(
+                                                Colors.white),
+                                          ),
+                                        )
                                       : const Text(
-                                    "Değişiklikleri Kaydet",
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
+                                          "Değişiklikleri Kaydet",
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
                                 ),
                               ),
                             ],
@@ -725,7 +762,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                 ),
-
                 if (!isDesktop) ...[
                   const SizedBox(height: 24),
                   OutlinedButton(
@@ -745,7 +781,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         SizedBox(width: 8),
                         Text(
                           "Çıkış Yap",
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -792,13 +829,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           decoration: InputDecoration(
             prefixIcon: Icon(
               icon,
-              color: enabled ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+              color:
+                  enabled ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
               size: 20,
             ),
             helperText: helperText,
-            helperStyle: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+            helperStyle:
+                const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
             filled: true,
-            fillColor: enabled ? const Color(0xFFF8FAFC) : const Color(0xFFF1F5F9),
+            fillColor:
+                enabled ? const Color(0xFFF8FAFC) : const Color(0xFFF1F5F9),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
@@ -823,7 +863,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFFDC2626), width: 2),
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           ),
         ),
       ],
@@ -857,7 +898,9 @@ class _RenderSliverToConstrainedBox extends RenderProxySliver {
       : _maxExtent = maxExtent;
 
   double _maxExtent;
+
   double get maxExtent => _maxExtent;
+
   set maxExtent(double value) {
     if (_maxExtent == value) return;
     _maxExtent = value;
@@ -873,7 +916,7 @@ class _RenderSliverToConstrainedBox extends RenderProxySliver {
     child!.layout(
       constraints.copyWith(
         crossAxisExtent:
-        (parentWidth - horizontalPadding * 2).clamp(0.0, maxExtent),
+            (parentWidth - horizontalPadding * 2).clamp(0.0, maxExtent),
       ),
       parentUsesSize: true,
     );

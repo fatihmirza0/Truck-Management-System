@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:lojistik/services/auth_service.dart';
 import 'dart:math' as math;
 
 class LoginScreen extends StatefulWidget {
@@ -56,26 +55,21 @@ class _LoginScreenState extends State<LoginScreen>
       errorMessage = null;
     });
 
-    try {
-      // 🔥 Firebase Auth login
-      final auth = await FirebaseAuth.instance
-          .signInWithEmailAndPassword(email: email, password: password);
+    // 🔥 AuthService ile giriş yap
+    final result = await AuthService.login(
+      email: email,
+      password: password,
+    );
 
-      final uid = auth.user!.uid;
+    setState(() => isLoading = false);
 
-      // 🔥 Firestore user bilgisi
-      final snap =
-      await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    if (!mounted) return;
 
-      if (!snap.exists) {
-        setState(() => errorMessage = "Kullanıcı verisi bulunamadı");
-        return;
-      }
+    if (result['success'] == true) {
+      final role = result['role'];
+      final uid = result['uid'];
 
-      final data = snap.data()!;
-      final role = data['role'] ?? '';
-
-      // 🔥 UID direkt gönderiliyor, başka ID yok.
+      // Role'e göre yönlendir
       if (role == 'manager') {
         Navigator.pushReplacementNamed(context, '/manager');
       } else if (role == 'dispatch') {
@@ -93,24 +87,8 @@ class _LoginScreenState extends State<LoginScreen>
       } else {
         setState(() => errorMessage = "Bilinmeyen kullanıcı tipi");
       }
-    } on FirebaseAuthException catch (e) {
-      switch (e.code) {
-        case 'user-not-found':
-          setState(() => errorMessage = "Kayıtlı olmayan e-posta");
-          break;
-        case 'invalid-credential':
-          setState(() => errorMessage = "Geçersiz e-posta veya şifre");
-          break;
-        case 'invalid-email':
-          setState(() => errorMessage = "E-posta formatı hatalı");
-          break;
-        default:
-          setState(() => errorMessage = "Hata: ${e.message}");
-      }
-    } catch (e) {
-      setState(() => errorMessage = "Beklenmeyen hata: $e");
-    } finally {
-      setState(() => isLoading = false);
+    } else {
+      setState(() => errorMessage = result['message'] ?? 'Giriş başarısız');
     }
   }
 
