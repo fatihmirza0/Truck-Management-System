@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 import 'job_detail_panel.dart';
 import 'job_service.dart';
@@ -661,6 +660,7 @@ class _JobsPageState extends State<JobsPage> {
                 final j = d.data() as Map<String, dynamic>;
                 final cargo = j["cargo"] as Map<String, dynamic>?;
                 final route = j["route"] as Map<String, dynamic>?;
+                final jobStatus = j["status"];
 
                 return DataRow(
                   cells: [
@@ -688,7 +688,7 @@ class _JobsPageState extends State<JobsPage> {
                             const Color(0xFF64748B),
                             () => _openDetail(j, d.id),
                           ),
-                          if (_status == "pending") ...[
+                          if (jobStatus == "pending") ...[
                             const SizedBox(width: 8),
                             _buildActionButton(
                               Icons.check_circle_outline,
@@ -780,6 +780,7 @@ class _JobsPageState extends State<JobsPage> {
         final j = d.data() as Map<String, dynamic>;
         final cargo = j["cargo"] as Map<String, dynamic>?;
         final route = j["route"] as Map<String, dynamic>?;
+        final jobStatus = j["status"];
 
         return Container(
           decoration: BoxDecoration(
@@ -857,7 +858,7 @@ class _JobsPageState extends State<JobsPage> {
                       "Güzergah",
                       "${route?["loadPort"] ?? "-"} → ${route?["unloadPort"] ?? "-"}",
                     ),
-                    if (_status == "pending") ...[
+                    if (jobStatus == "pending") ...[
                       const SizedBox(height: 12),
                       const Divider(height: 1),
                       const SizedBox(height: 12),

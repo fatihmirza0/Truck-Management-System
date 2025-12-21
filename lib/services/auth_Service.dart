@@ -128,7 +128,7 @@ class AuthService {
           message = 'İnternet bağlantısı yok';
           break;
         default:
-          message = 'Giriş hatası: ${e.message}';
+          message = 'E posta veya şifre yanlış';
       }
 
       return {'success': false, 'message': message};

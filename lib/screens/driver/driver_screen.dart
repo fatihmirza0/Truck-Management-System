@@ -149,42 +149,4 @@ class _DriverScreenState extends State<DriverScreen> {
       ),
     );
   }
-
-  // ======================================================
-  // LOGOUT DIALOG (Kurumsal sade)
-  // ======================================================
-  Future<void> _logoutDialog() async {
-    final res = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        title: const Text("Çıkış Yap"),
-        content: const Text(
-          "Oturumdan çıkmak istediğinize emin misiniz?",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text("İptal"),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("Çıkış Yap"),
-          ),
-        ],
-      ),
-    );
-
-    if (res == true) {
-      await FirebaseAuth.instance.signOut();
-      if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
-    }
-  }
 }

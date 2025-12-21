@@ -30,11 +30,29 @@ class JobService {
 
   static Future<void> approveJob(String jobId) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null) throw Exception("Not authenticated");
 
-    await _update(jobId, {
-      "status": "approved",
-      "timestamps.reviewedAt": FieldValue.serverTimestamp(),
+    final ref = FirebaseFirestore.instance.collection("jobs").doc(jobId);
+
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) {
+        throw Exception("Job not found");
+      }
+
+      final data = snap.data()!;
+      final status = data["status"];
+
+      // 🔐 KİLİT
+      if (status != "pending") {
+        throw Exception("Job already processed");
+      }
+
+      tx.update(ref, {
+        "status": "approved",
+        "timestamps.reviewedAt": FieldValue.serverTimestamp(),
+        "reviewedBy": uid,
+      });
     });
 
     await _addLog(jobId, "approved", null);
@@ -42,12 +60,30 @@ class JobService {
 
   static Future<void> rejectJob(String jobId, String reason) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null) throw Exception("Not authenticated");
 
-    await _update(jobId, {
-      "status": "rejected",
-      "rejectionReason": reason,
-      "timestamps.reviewedAt": FieldValue.serverTimestamp(),
+    final ref = FirebaseFirestore.instance.collection("jobs").doc(jobId);
+
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) {
+        throw Exception("Job not found");
+      }
+
+      final data = snap.data()!;
+      final status = data["status"];
+
+      // 🔐 KİLİT
+      if (status != "pending") {
+        throw Exception("Job already processed");
+      }
+
+      tx.update(ref, {
+        "status": "rejected",
+        "rejectionReason": reason,
+        "timestamps.reviewedAt": FieldValue.serverTimestamp(),
+        "reviewedBy": uid,
+      });
     });
 
     await _addLog(jobId, "rejected", reason);
