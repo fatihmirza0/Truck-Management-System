@@ -1,4 +1,5 @@
 const {onRequest} = require("firebase-functions/v2/https");
+const {onCall} = require("firebase-functions/v2/https");
 const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
 const {setGlobalOptions} = require("firebase-functions/v2");
 const admin = require("firebase-admin");
@@ -240,16 +241,16 @@ exports.softDeleteUserHttp = onRequest((req, res) => {
 });
 
 /* =========================================================
-   JOB ACTIONS (APPROVE / REJECT / COMPLETE)
+   JOB ACTIONS (APPROVE / REJECT / COMPLETE) - CALLABLE
 ========================================================= */
-exports.jobActionHttp = onRequest((req, res) => {
+exports.jobAction = onRequest((req, res) => {
   cors(req, res, async () => {
     try {
       if (req.method !== "POST") return res.status(405).end();
 
       const decoded = await verifyAuth(req);
       const caller = await getUser(decoded.uid);
-      requireRole(caller, ["admin", "manager", "dispatch"]);
+      requireRole(caller, ["admin", "manager", "dispatch", "driver"]);
 
       const { jobId, action, reason } = req.body;
       if (!jobId || !action) throw new Error("jobId & action required");
@@ -265,6 +266,7 @@ exports.jobActionHttp = onRequest((req, res) => {
         batch.update(jobRef, {
           status: "approved",
           "timestamps.reviewedAt": now,
+          reviewedBy: decoded.uid,
         });
       } else if (action === "reject") {
         if (!reason) throw new Error("Rejection reason required");
@@ -272,9 +274,26 @@ exports.jobActionHttp = onRequest((req, res) => {
           status: "rejected",
           rejectionReason: reason,
           "timestamps.reviewedAt": now,
+          reviewedBy: decoded.uid,
         });
       } else if (action === "complete") {
-        batch.update(jobRef, { status: "completed" });
+        // Driver sadece kendi işini tamamlayabilir
+        const job = jobSnap.data();
+        if (caller.role === "driver" && job.driverId !== decoded.uid) {
+          throw new Error("Unauthorized");
+        }
+
+        batch.update(jobRef, {
+          status: "completed",
+          "timestamps.completedAt": now,
+        });
+
+        // Driver'ı müsait yap
+        if (job.driverId) {
+          batch.update(db.collection("users").doc(job.driverId), {
+            jobStatus: "available",
+          });
+        }
       } else {
         throw new Error("Invalid action");
       }
@@ -294,7 +313,6 @@ exports.jobActionHttp = onRequest((req, res) => {
     }
   });
 });
-
 /* =========================================================
    SYNC ACTIVE PLATE FROM VEHICLES
 ========================================================= */

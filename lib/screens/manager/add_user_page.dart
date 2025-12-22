@@ -339,29 +339,31 @@ class _AddUserPageState extends State<AddUserPage> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 500),
-            child: Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
-                    blurRadius: 20,
-                    offset: const Offset(0, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // 🔥 HEADER ARTIK KARTIN DIŞINDA
+                _buildHeader(),
+
+                const SizedBox(height: 16),
+
+                // 🧱 FORM CARD
+                Container(
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 20,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 🔥 HEADER (AYNISI)
-                  _buildHeader(),
-                  const SizedBox(height: 20),
-                  // FORM
-                  _form(desktop: false),
-                ],
-              ),
+                  child: _form(desktop: false),
+                ),
+              ],
             ),
           ),
         ),

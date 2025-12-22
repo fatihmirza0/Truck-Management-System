@@ -133,10 +133,10 @@
         }
 
         // ---- KM (ŞİMDİLİK YOK, ALTYAPI HAZIR)
-        // double km = (j["distanceKm"] ?? 0).toDouble();
-        // if (driverUid != null) {
-        //   driverKm[driverUid] = (driverKm[driverUid] ?? 0) + km;
-        // }
+        double km = (j["distanceKm"] ?? 0).toDouble();
+        if (driverUid != null) {
+          driverKm[driverUid] = (driverKm[driverUid] ?? 0) + km;
+        }
       }
 
       // ---- TOP DRIVER ----

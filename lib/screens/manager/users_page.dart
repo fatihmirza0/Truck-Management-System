@@ -1,7 +1,6 @@
 // ============================================
-// MODERN ENTERPRISE USERS PAGE
-// FULL RESTORED UI + FirestoreService
-// + Role-based search hint + refined card sizing
+// MODERN ENTERPRISE USERS PAGE - REFINED DESIGN
+// Enhanced visual hierarchy & micro-interactions
 // ============================================
 import 'package:flutter/material.dart';
 import 'package:lojistik/services/firestore_Service.dart';
@@ -14,8 +13,9 @@ class UsersPage extends StatefulWidget {
   State<UsersPage> createState() => _UsersPageState();
 }
 
-class _UsersPageState extends State<UsersPage> {
+class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
+  late AnimationController _animController;
 
   String _role = "driver";
   String search = "";
@@ -33,6 +33,12 @@ class _UsersPageState extends State<UsersPage> {
   @override
   void initState() {
     super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _animController.forward();
+
     _searchController.addListener(() {
       setState(() {
         search = _searchController.text.toLowerCase().trim();
@@ -42,6 +48,7 @@ class _UsersPageState extends State<UsersPage> {
 
   @override
   void dispose() {
+    _animController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -58,25 +65,28 @@ class _UsersPageState extends State<UsersPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 24),
-              _buildSearchBar(),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  _buildSegmentedControl(),
-                  const Spacer(),
-                  if (isDesktop) _buildViewModeSelector(),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Expanded(child: _buildUserList()),
-            ],
+        child: FadeTransition(
+          opacity: _animController,
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
+                const SizedBox(height: 32),
+                _buildSearchBar(),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    _buildSegmentedControl(),
+                    const Spacer(),
+                    if (isDesktop) _buildViewModeSelector(),
+                  ],
+                ),
+                const SizedBox(height: 28),
+                Expanded(child: _buildUserList()),
+              ],
+            ),
           ),
         ),
       ),
@@ -84,31 +94,35 @@ class _UsersPageState extends State<UsersPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // HEADER
+  // REFINED HEADER with gradient accent
   // ---------------------------------------------------------------------------
   Widget _buildHeader() {
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E3A5F),
-            borderRadius: BorderRadius.circular(12),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF1E3A5F), Color(0xFF2D4A6F)],
+            ),
+            borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF1E3A5F).withOpacity(0.2),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+                color: const Color(0xFF1E3A5F).withOpacity(0.3),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
           child: const Icon(
-            Icons.people_outline,
+            Icons.people_rounded,
             color: Colors.white,
-            size: 28,
+            size: 32,
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 20),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -116,19 +130,21 @@ class _UsersPageState extends State<UsersPage> {
               const Text(
                 "Kullanıcı Yönetimi",
                 style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 32,
+                  fontWeight: FontWeight.w700,
                   color: Color(0xFF1E3A5F),
-                  letterSpacing: -0.5,
+                  letterSpacing: -0.8,
+                  height: 1.1,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               Text(
                 "Şoför ve dispatch kullanıcılarını yönetin",
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 15,
                   color: Colors.grey[600],
                   fontWeight: FontWeight.w400,
+                  letterSpacing: -0.2,
                 ),
               ),
             ],
@@ -139,45 +155,65 @@ class _UsersPageState extends State<UsersPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // SEARCH BAR (role-based hint)
+  // ENHANCED SEARCH BAR with focus state
   // ---------------------------------------------------------------------------
   Widget _buildSearchBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
             offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Row(
         children: [
-          const Icon(Icons.search, color: Color(0xFF64748B)),
-          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.search_rounded, color: Color(0xFF64748B), size: 22),
+          ),
+          const SizedBox(width: 14),
           Expanded(
             child: TextField(
               controller: _searchController,
+              style: const TextStyle(
+                fontSize: 15,
+                color: Color(0xFF0F172A),
+                fontWeight: FontWeight.w500,
+              ),
               decoration: InputDecoration(
                 hintText: _searchHint,
                 hintStyle: const TextStyle(
                   color: Color(0xFF94A3B8),
-                  fontSize: 14,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w400,
                 ),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                contentPadding: const EdgeInsets.symmetric(vertical: 18),
               ),
             ),
           ),
           if (search.isNotEmpty)
             IconButton(
               onPressed: _clear,
-              icon: const Icon(Icons.close, size: 20),
+              icon: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.close_rounded, size: 18),
+              ),
               color: const Color(0xFF64748B),
             ),
         ],
@@ -186,19 +222,19 @@ class _UsersPageState extends State<UsersPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // ROLE SEGMENTED CONTROL
+  // REFINED SEGMENTED CONTROL with smooth transitions
   // ---------------------------------------------------------------------------
   Widget _buildSegmentedControl() {
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
             offset: const Offset(0, 2),
           ),
         ],
@@ -206,8 +242,9 @@ class _UsersPageState extends State<UsersPage> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildTabButton("driver", "Şoförler", Icons.local_shipping_outlined),
-          _buildTabButton("dispatch", "Dispatch", Icons.support_agent_outlined),
+          _buildTabButton("driver", "Şoförler", Icons.local_shipping_rounded),
+          const SizedBox(width: 4),
+          _buildTabButton("dispatch", "Dispatch", Icons.headset_mic_rounded),
         ],
       ),
     );
@@ -215,44 +252,56 @@ class _UsersPageState extends State<UsersPage> {
 
   Widget _buildTabButton(String key, String label, IconData icon) {
     final selected = _role == key;
-    return Padding(
-      padding: const EdgeInsets.only(right: 4),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            setState(() {
-              _role = key;
-              // UX: role değişince mevcut arama kalsın istiyorsan kaldırma
-              // ama hint değişsin diye rebuild zaten oluyor.
-            });
-          },
-          borderRadius: BorderRadius.circular(8),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: BoxDecoration(
-              color: selected ? const Color(0xFF1E3A5F) : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 18,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _role = key;
+          });
+        },
+        borderRadius: BorderRadius.circular(10),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          decoration: BoxDecoration(
+            gradient: selected
+                ? const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF1E3A5F), Color(0xFF2D4A6F)],
+            )
+                : null,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: selected
+                ? [
+              BoxShadow(
+                color: const Color(0xFF1E3A5F).withOpacity(0.2),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ]
+                : null,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: selected ? Colors.white : const Color(0xFF64748B),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                   color: selected ? Colors.white : const Color(0xFF64748B),
+                  letterSpacing: -0.2,
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    color: selected ? Colors.white : const Color(0xFF64748B),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -260,19 +309,19 @@ class _UsersPageState extends State<UsersPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // VIEW MODE SELECTOR
+  // REFINED VIEW MODE SELECTOR
   // ---------------------------------------------------------------------------
   Widget _buildViewModeSelector() {
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
             offset: const Offset(0, 2),
           ),
         ],
@@ -280,9 +329,11 @@ class _UsersPageState extends State<UsersPage> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildViewButton(1, Icons.view_agenda_outlined, "Detaylı"),
-          _buildViewButton(2, Icons.grid_view_outlined, "Kompakt"),
-          _buildViewButton(3, Icons.apps_outlined, "Yoğun"),
+          _buildViewButton(1, Icons.view_agenda_rounded, "Detaylı"),
+          const SizedBox(width: 4),
+          _buildViewButton(2, Icons.grid_view_rounded, "Kompakt"),
+          const SizedBox(width: 4),
+          _buildViewButton(3, Icons.apps_rounded, "Yoğun"),
         ],
       ),
     );
@@ -296,16 +347,32 @@ class _UsersPageState extends State<UsersPage> {
         color: Colors.transparent,
         child: InkWell(
           onTap: () => setState(() => _viewMode = mode),
-          borderRadius: BorderRadius.circular(6),
-          child: Container(
-            padding: const EdgeInsets.all(8),
+          borderRadius: BorderRadius.circular(8),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: selected ? const Color(0xFF1E3A5F) : Colors.transparent,
-              borderRadius: BorderRadius.circular(6),
+              gradient: selected
+                  ? const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF1E3A5F), Color(0xFF2D4A6F)],
+              )
+                  : null,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: selected
+                  ? [
+                BoxShadow(
+                  color: const Color(0xFF1E3A5F).withOpacity(0.2),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+                  : null,
             ),
             child: Icon(
               icon,
-              size: 18,
+              size: 20,
               color: selected ? Colors.white : const Color(0xFF64748B),
             ),
           ),
@@ -322,9 +389,24 @@ class _UsersPageState extends State<UsersPage> {
       stream: FirestoreService.streamUsersWithVehicle(_role),
       builder: (_, snap) {
         if (!snap.hasData) {
-          return const Center(
-            child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+          return Center(
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 12,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+                strokeWidth: 3,
+              ),
             ),
           );
         }
@@ -335,7 +417,6 @@ class _UsersPageState extends State<UsersPage> {
           final phone = (u['phone'] ?? "").toString().toLowerCase();
           final plate = (u['plateNumber'] ?? "").toString().toLowerCase();
 
-          // role bazlı arama: dispatch'te plaka araması anlamsız
           if (_role == "dispatch") {
             return name.contains(search) || email.contains(search) || phone.contains(search);
           }
@@ -362,88 +443,89 @@ class _UsersPageState extends State<UsersPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // MODE 1: Detailed List (refined sizing)
+  // MODE 1: Detailed List - ENHANCED DESIGN
   // ---------------------------------------------------------------------------
   Widget _buildDetailedList(List<Map<String, dynamic>> users) {
     return ListView.separated(
-      padding: const EdgeInsets.only(top: 8),
       itemCount: users.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
         final u = users[i];
         final uid = (u["uid"] ?? "").toString();
         final isDriver = (u['role'] ?? "") == 'driver';
 
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _navigateToDetail(uid, u),
+        return InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _navigateToDetail(uid, u),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(9),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
-                        size: 20,
-                        color: const Color(0xFF1E3A5F),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            (u['name'] ?? "-").toString(),
-                            style: const TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF0F172A),
-                              height: 1.1,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 6),
-                          Wrap(
-                            runSpacing: 4,
-                            spacing: 10,
-                            children: [
-                              _chipInfo(Icons.email_outlined, (u['email'] ?? "-").toString()),
-                              _chipInfo(Icons.phone_outlined, (u['phone'] ?? "-").toString()),
-                              // ✅ plaka sadece driver’da
-                              if (isDriver && (u['plateNumber'] ?? "").toString().trim().isNotEmpty)
-                                _chipInfo(Icons.car_rental_outlined, (u['plateNumber'] ?? "-").toString()),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.chevron_right, color: Color(0xFF94A3B8), size: 20),
-                  ],
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.025),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
                 ),
-              ),
+              ],
+            ),
+            child: Row(
+              children: [
+                // ICON
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    isDriver
+                        ? Icons.local_shipping_outlined
+                        : Icons.support_agent_outlined,
+                    size: 18,
+                    color: const Color(0xFF1E3A5F),
+                  ),
+                ),
+                const SizedBox(width: 14),
+
+                // NAME + INFO
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        (u['name'] ?? "-").toString(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF111827),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        isDriver
+                            ? "Araç Plakası: ${(u['plateNumber'] ?? "-")}"
+                            : (u['email'] ?? "-").toString(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: Color(0xFF6B7280),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const Icon(Icons.chevron_right,
+                    size: 20, color: Color(0xFF9CA3AF)),
+              ],
             ),
           ),
         );
@@ -452,91 +534,89 @@ class _UsersPageState extends State<UsersPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // MODE 2: Compact Grid (refined sizing)
+  // MODE 2: Compact Grid - ENHANCED
   // ---------------------------------------------------------------------------
   Widget _buildCompactGrid(List<Map<String, dynamic>> users) {
     return GridView.builder(
       padding: const EdgeInsets.only(top: 8),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        // daha rahat okunsun diye hafif uzattık
-        childAspectRatio: 3.9,
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 14,
+        childAspectRatio: 3.6,
       ),
       itemCount: users.length,
       itemBuilder: (_, i) {
         final u = users[i];
         final uid = (u["uid"] ?? "").toString();
-        final isDriver = (u['role'] ?? "") == 'driver';
+        final isDriver = (u['role'] ?? '') == 'driver';
 
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.02),
-                blurRadius: 5,
-                offset: const Offset(0, 1),
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _navigateToDetail(uid, u),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
-                        size: 18,
-                        color: const Color(0xFF1E3A5F),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            (u['name'] ?? "-").toString(),
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF0F172A),
-                              height: 1.1,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 6),
-                          _buildCompactInfo(Icons.phone_outlined, (u['phone'] ?? "-").toString()),
-                          const SizedBox(height: 3),
-                          _buildCompactInfo(Icons.email_outlined, (u['email'] ?? "-").toString()),
-                          // ✅ plaka sadece driver’da (compact'ta küçük şekilde)
-                          if (isDriver && (u['plateNumber'] ?? "").toString().trim().isNotEmpty) ...[
-                            const SizedBox(height: 3),
-                            _buildCompactInfo(Icons.car_rental_outlined, (u['plateNumber'] ?? "-").toString()),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.chevron_right, color: Color(0xFFCBD5E1), size: 18),
-                  ],
+        return InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => _navigateToDetail(uid, u),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
                 ),
-              ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    isDriver
+                        ? Icons.local_shipping_outlined
+                        : Icons.support_agent_outlined,
+                    size: 18,
+                    color: const Color(0xFF1E3A5F),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        (u['name'] ?? "-").toString(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF111827),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        isDriver
+                            ? (u['plateNumber'] ?? "-").toString()
+                            : (u['phone'] ?? "-").toString(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: Color(0xFF6B7280),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -545,101 +625,64 @@ class _UsersPageState extends State<UsersPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // MODE 3: Dense Grid (keep dense, just readable)
+  // MODE 3: Dense Grid - ENHANCED
   // ---------------------------------------------------------------------------
   Widget _buildDenseGrid(List<Map<String, dynamic>> users) {
     return GridView.builder(
       padding: const EdgeInsets.only(top: 8),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
         childAspectRatio: 4.4,
       ),
       itemCount: users.length,
       itemBuilder: (_, i) {
         final u = users[i];
         final uid = (u["uid"] ?? "").toString();
-        final isDriver = (u['role'] ?? "") == 'driver';
+        final isDriver = (u['role'] ?? '') == 'driver';
 
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.02),
-                blurRadius: 3,
-                offset: const Offset(0, 1),
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _navigateToDetail(uid, u),
-              borderRadius: BorderRadius.circular(10),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(7),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
-                        size: 15,
-                        color: const Color(0xFF1E3A5F),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            (u['name'] ?? "-").toString(),
-                            style: const TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF0F172A),
-                              height: 1.1,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (isDriver && (u['plateNumber'] ?? "").toString().trim().isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                const Icon(Icons.car_rental_outlined, size: 12, color: Color(0xFF64748B)),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    (u['plateNumber'] ?? "-").toString(),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Color(0xFF64748B),
-                                      height: 1.1,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
+        return InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _navigateToDetail(uid, u),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isDriver
+                      ? Icons.local_shipping_outlined
+                      : Icons.support_agent_outlined,
+                  size: 16,
+                  color: const Color(0xFF475569),
                 ),
-              ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    (u['name'] ?? "-").toString(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                ),
+                if (isDriver)
+                  Text(
+                    (u['plateNumber'] ?? "-").toString(),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+              ],
             ),
           ),
         );
@@ -648,21 +691,28 @@ class _UsersPageState extends State<UsersPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // UI HELPERS
+  // UI HELPERS - REFINED
   // ---------------------------------------------------------------------------
   Widget _chipInfo(IconData icon, String text) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFFF8FAFC),
+            const Color(0xFFE2E8F0).withOpacity(0.2),
+          ],
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: const Color(0xFF64748B)),
-          const SizedBox(width: 6),
+          Icon(icon, size: 15, color: const Color(0xFF64748B)),
+          const SizedBox(width: 7),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 260),
             child: Text(
@@ -670,10 +720,11 @@ class _UsersPageState extends State<UsersPage> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 12.5,
+                fontSize: 13,
                 color: Color(0xFF475569),
-                fontWeight: FontWeight.w500,
-                height: 1.1,
+                fontWeight: FontWeight.w600,
+                height: 1.2,
+                letterSpacing: -0.1,
               ),
             ),
           ),
@@ -695,8 +746,9 @@ class _UsersPageState extends State<UsersPage> {
             style: const TextStyle(
               color: Color(0xFF64748B),
               fontSize: 12.5,
-              fontWeight: FontWeight.w500,
-              height: 1.1,
+              fontWeight: FontWeight.w600,
+              height: 1.2,
+              letterSpacing: -0.1,
             ),
           ),
         ),
@@ -706,39 +758,52 @@ class _UsersPageState extends State<UsersPage> {
 
   Widget _buildEmptyState(String message) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(16),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    const Color(0xFFF8FAFC),
+                    const Color(0xFFE2E8F0).withOpacity(0.3),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
+              ),
+              child: Icon(
+                search.isNotEmpty ? Icons.search_off_rounded : Icons.people_rounded,
+                size: 72,
+                color: const Color(0xFF94A3B8),
+              ),
             ),
-            child: Icon(
-              search.isNotEmpty ? Icons.search_off_outlined : Icons.people_outline,
-              size: 64,
-              color: Colors.grey[400],
+            const SizedBox(height: 20),
+            Text(
+              message,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF0F172A),
+                letterSpacing: -0.3,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            message,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
+            const SizedBox(height: 10),
+            Text(
+              search.isNotEmpty ? "Farklı bir arama terimi deneyin" : "Yeni kullanıcılar eklemek için yönetim panelini kullanın",
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            search.isNotEmpty ? "Farklı bir arama terimi deneyin" : "Yeni kullanıcılar eklemek için yönetim panelini kullanın",
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[500],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -1,96 +1,102 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class JobService {
   static final _firestore = FirebaseFirestore.instance;
-
-  static Future<void> _update(String id, Map<String, dynamic> data) async {
-    await _firestore.collection("jobs").doc(id).update(data);
-  }
-
-  static Future<void> _addLog(
-      String jobId,
-      String action,
-      String? note,
-      ) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
-    await _firestore
-        .collection("jobs")
-        .doc(jobId)
-        .collection("logs")
-        .add({
-      "action": action,
-      "performedBy": uid,
-      "performedAt": FieldValue.serverTimestamp(),
-      "note": note,
-    });
-  }
+  static const _baseUrl = 'https://us-central1-truck-dispatch-system.cloudfunctions.net';
 
   static Future<void> approveJob(String jobId) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) throw Exception("Not authenticated");
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception("Not authenticated");
 
-    final ref = FirebaseFirestore.instance.collection("jobs").doc(jobId);
+    try {
+      final token = await user.getIdToken();
 
-    await FirebaseFirestore.instance.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      if (!snap.exists) {
-        throw Exception("Job not found");
+      final response = await http.post(
+        Uri.parse('$_baseUrl/jobAction'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'jobId': jobId,
+          'action': 'approve',
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
       }
-
-      final data = snap.data()!;
-      final status = data["status"];
-
-      // 🔐 KİLİT
-      if (status != "pending") {
-        throw Exception("Job already processed");
-      }
-
-      tx.update(ref, {
-        "status": "approved",
-        "timestamps.reviewedAt": FieldValue.serverTimestamp(),
-        "reviewedBy": uid,
-      });
-    });
-
-    await _addLog(jobId, "approved", null);
+    } catch (e) {
+      throw Exception('Job onaylanamadı: $e');
+    }
   }
 
   static Future<void> rejectJob(String jobId, String reason) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) throw Exception("Not authenticated");
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception("Not authenticated");
 
-    final ref = FirebaseFirestore.instance.collection("jobs").doc(jobId);
+    try {
+      final token = await user.getIdToken();
 
-    await FirebaseFirestore.instance.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      if (!snap.exists) {
-        throw Exception("Job not found");
+      final response = await http.post(
+        Uri.parse('$_baseUrl/jobAction'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'jobId': jobId,
+          'action': 'reject',
+          'reason': reason,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
+      }
+    } catch (e) {
+      throw Exception('Job reddedilemedi: $e');
+    }
+  }
+
+  static Future<void> completeJob(String jobId, {String? deliveryProofUrl}) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception("Not authenticated");
+
+    try {
+      if (deliveryProofUrl != null) {
+        await _firestore.collection("jobs").doc(jobId).update({
+          "deliveryProof": deliveryProofUrl,
+        });
       }
 
-      final data = snap.data()!;
-      final status = data["status"];
+      final token = await user.getIdToken();
 
-      // 🔐 KİLİT
-      if (status != "pending") {
-        throw Exception("Job already processed");
+      final response = await http.post(
+        Uri.parse('$_baseUrl/jobAction'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'jobId': jobId,
+          'action': 'complete',
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
       }
-
-      tx.update(ref, {
-        "status": "rejected",
-        "rejectionReason": reason,
-        "timestamps.reviewedAt": FieldValue.serverTimestamp(),
-        "reviewedBy": uid,
-      });
-    });
-
-    await _addLog(jobId, "rejected", reason);
+    } catch (e) {
+      throw Exception('Job tamamlanamadı: $e');
+    }
   }
 
   static Future<void> deleteJob(String jobId) async {
-    await _update(jobId, {
+    await _firestore.collection("jobs").doc(jobId).update({
       "softDeleted": true,
     });
   }

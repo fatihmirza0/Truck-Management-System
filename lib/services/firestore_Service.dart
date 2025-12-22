@@ -839,4 +839,10 @@ class FirestoreService {
       print('Create log error: $e');
     }
   }
+  static Future<void> updateDriverStatus(String driverUid, String status) async {
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(driverUid)
+        .update({'jobStatus': status});
+  }
 }

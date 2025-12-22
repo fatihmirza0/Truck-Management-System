@@ -108,7 +108,7 @@ class _CreateJobPageState extends State<CreateJobPage>
     try {
       // Şoför status kontrolü
       final driverStatus =
-          await FirestoreService.getDriverStatus(_selectedDriverUid!);
+      await FirestoreService.getDriverStatus(_selectedDriverUid!);
       if (driverStatus == 'busy') {
         _showSnackBar(
             "Bu şoför zaten aktif bir görevde. Lütfen başka şoför seçin.",
@@ -147,6 +147,7 @@ class _CreateJobPageState extends State<CreateJobPage>
         );
       }
 
+      // 🔥 İŞİ OLUŞTUR
       await FirestoreService.createJob(
         driverId: _selectedDriverUid!,
         vehicleId: _selectedVehicleId!,
@@ -157,6 +158,9 @@ class _CreateJobPageState extends State<CreateJobPage>
         cargoWeightKg: cargoWeight,
         distanceKm: distanceKm,
       );
+
+      // 🔥 ŞOFÖRü MEŞGUL OLARAK İŞARETLE
+      await FirestoreService.updateDriverStatus(_selectedDriverUid!, 'busy');
 
       _loadPortController.clear();
       _unloadPortController.clear();
@@ -178,7 +182,6 @@ class _CreateJobPageState extends State<CreateJobPage>
       setState(() => _isCreatingJob = false);
     }
   }
-
   void _showSnackBar(String message, {required bool isError}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

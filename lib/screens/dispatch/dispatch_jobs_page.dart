@@ -442,39 +442,41 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(16),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(
+                Icons.inbox_outlined,
+                size: 64,
+                color: Colors.grey[400],
+              ),
             ),
-            child: Icon(
-              Icons.inbox_outlined,
-              size: 64,
-              color: Colors.grey[400],
+            const SizedBox(height: 16),
+            Text(
+              "Henüz İş Yok",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            "Henüz İş Yok",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
+            const SizedBox(height: 8),
+            Text(
+              "Bu kategoride görüntülenecek iş bulunmuyor",
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[500],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            "Bu kategoride görüntülenecek iş bulunmuyor",
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[500],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
