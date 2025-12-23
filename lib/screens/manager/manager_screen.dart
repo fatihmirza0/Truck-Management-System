@@ -1,5 +1,5 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:lojistik/screens/manager/jobs/completed_jobs_page.dart';
 
 import '../login_screen.dart';
@@ -22,20 +22,25 @@ class ManagerScreen extends StatefulWidget {
 
 class _ManagerScreenState extends State<ManagerScreen> {
   int _index = 0;
+  bool _sidebarOpen = true;
 
   bool get isDesktop => MediaQuery.of(context).size.width >= 900;
+  bool get showText => _sidebarOpen;
 
-  final List<Widget> _pages = [
-    const JobsPage(),
-    CompletedJobsPage(), // 🔥 YENİ
-    const AddUserPage(),
-    const UsersPage(),
-    const ReportScreen(),
+  String? userName;
+
+  // ------------------------------------------------------
+  final List<Widget> _pages = const [
+    JobsPage(),
+    CompletedJobsPage(),
+    AddUserPage(),
+    UsersPage(),
+    ReportScreen(),
   ];
 
   final List<String> _titles = [
     "İş Yönetimi",
-    "Tamamlanan İşler", // 🔥
+    "Tamamlanan İşler",
     "Personel Ekle",
     "Kullanıcılar",
     "Raporlar",
@@ -43,7 +48,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
 
   final List<String> _subTitles = [
     "Görevler",
-    "Filtre & Export", // 🔥
+    "Filtre & Export",
     "Yeni Kullanıcı",
     "Kullanıcı Listesi",
     "İş Raporları",
@@ -51,12 +56,20 @@ class _ManagerScreenState extends State<ManagerScreen> {
 
   final List<IconData> _icons = [
     Icons.dashboard_customize_outlined,
-    Icons.task_alt_outlined, // 🔥
+    Icons.task_alt_outlined,
     Icons.person_add_outlined,
     Icons.people_alt_outlined,
     Icons.bar_chart_outlined,
   ];
 
+  // ------------------------------------------------------
+  @override
+  void initState() {
+    super.initState();
+    userName = FirebaseAuth.instance.currentUser?.email;
+  }
+
+  // ------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -66,7 +79,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const LoginScreen()),
-          (_) => false,
+              (_) => false,
         );
       });
       return const Scaffold(
@@ -74,65 +87,34 @@ class _ManagerScreenState extends State<ManagerScreen> {
       );
     }
 
-    return isDesktop ? _desktopLayout() : _mobileLayout();
+    return isDesktop ? _desktop() : _mobile();
   }
 
   // ======================================================
-  // 📱 MOBILE LAYOUT
+  // MOBILE
   // ======================================================
-  Widget _mobileLayout() {
+  Widget _mobile() {
     return Scaffold(
       backgroundColor: ManagerScreen.bg,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        titleSpacing: 16,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: ManagerScreen.accent,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.local_shipping_outlined,
-                color: Colors.white,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Truck Management",
-                  style: TextStyle(
-                    color: Color(0xFF0F172A),
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                ),
-                Text(
-                  _titles[_index],
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ],
+        title: Text(
+          _titles[_index],
+          style: const TextStyle(
+            color: Color(0xFF0F172A),
+            fontWeight: FontWeight.w700,
+          ),
         ),
         actions: [
-          _profileButton(isDesktop: false),
-          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.person_outline,
+                color: ManagerScreen.accent),
+            onPressed: _openProfile,
+          ),
         ],
       ),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        child: _pages[_index],
-      ),
+      body: _pages[_index],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
         onTap: (i) => setState(() => _index = i),
@@ -141,134 +123,153 @@ class _ManagerScreenState extends State<ManagerScreen> {
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard_customize_outlined),
-            label: "İşler",
-          ),
+              icon: Icon(Icons.dashboard_customize_outlined), label: "İşler"),
           BottomNavigationBarItem(
-            icon: Icon(Icons.task_alt_outlined),
-            label: "Tamamlanan",
-          ),
+              icon: Icon(Icons.task_alt_outlined), label: "Tamamlanan"),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_add_outlined),
-            label: "Ekle",
-          ),
+              icon: Icon(Icons.person_add_outlined), label: "Ekle"),
           BottomNavigationBarItem(
-            icon: Icon(Icons.people_alt_outlined),
-            label: "Kullanıcılar",
-          ),
+              icon: Icon(Icons.people_alt_outlined), label: "Kullanıcılar"),
           BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart_outlined),
-            label: "Rapor",
-          ),
+              icon: Icon(Icons.bar_chart_outlined), label: "Rapor"),
         ],
       ),
     );
   }
 
   // ======================================================
-  // 🖥️ DESKTOP LAYOUT
+  // DESKTOP
   // ======================================================
-  Widget _desktopLayout() {
+  Widget _desktop() {
+    final sidebarWidth = _sidebarOpen ? 280.0 : 72.0;
+
     return Scaffold(
       backgroundColor: ManagerScreen.bg,
-      body: Row(
+      body: Stack(
         children: [
-          // SIDEBAR
-          Container(
-            width: 280,
-            color: ManagerScreen.sidebar,
-            child: Column(
-              children: [
-                const SizedBox(height: 32),
-                _sidebarHeader(),
-                const SizedBox(height: 32),
-                _menuItem("İş Yönetimi", Icons.dashboard_customize_outlined, 0),
-                _menuItem("Tamamlanan İşler", Icons.task_alt_outlined, 1), // 🔥
-                _menuItem("Personel Ekle", Icons.person_add_outlined, 2),
-                _menuItem("Kullanıcılar", Icons.people_alt_outlined, 3),
-                _menuItem("Raporlar", Icons.bar_chart_outlined, 4),
-                const Spacer(),
-                _sidebarProfile(),
-              ],
-            ),
-          ),
-
-          // CONTENT
-          Expanded(
+          // ================= CONTENT =================
+          Positioned.fill(
+            left: sidebarWidth, // 🔥 KRİTİK
             child: Column(
               children: [
                 _topBar(),
                 Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
+                  child: ClipRect( // 🔥 ekstra garanti
                     child: _pages[_index],
                   ),
                 ),
               ],
             ),
           ),
+
+          // ================= SIDEBAR =================
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: sidebarWidth,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              color: ManagerScreen.sidebar,
+              child: Column(
+                children: [
+                  const SizedBox(height: 16),
+
+                  Align(
+                    alignment:
+                    _sidebarOpen ? Alignment.centerRight : Alignment.center,
+                    child: IconButton(
+                      icon: Icon(
+                        _sidebarOpen
+                            ? Icons.chevron_left
+                            : Icons.chevron_right,
+                        color: Colors.white70,
+                      ),
+                      onPressed: () =>
+                          setState(() => _sidebarOpen = !_sidebarOpen),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  _sidebarHeader(),
+                  const SizedBox(height: 24),
+
+                  _menuItem("İş Yönetimi", Icons.dashboard_customize_outlined, 0),
+                  _menuItem("Tamamlanan İşler", Icons.task_alt_outlined, 1),
+                  _menuItem("Personel Ekle", Icons.person_add_outlined, 2),
+                  _menuItem("Kullanıcılar", Icons.people_alt_outlined, 3),
+                  _menuItem("Raporlar", Icons.bar_chart_outlined, 4),
+
+                  const Spacer(),
+
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: _profileCard(),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
   // ======================================================
-  // SIDEBAR WIDGETS
+  // SIDEBAR HEADER
   // ======================================================
   Widget _sidebarHeader() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: ManagerScreen.accent,
-              borderRadius: BorderRadius.circular(12),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Align(
+        alignment: showText ? Alignment.centerLeft : Alignment.center,
+        child: Row(
+          mainAxisSize: MainAxisSize.min, // 🔥 KRİTİK
+          children: showText
+              ? [
+            _squareIcon(Icons.local_shipping_outlined),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  "Yönetim Paneli",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  "Truck Management System",
+                  style: TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
-            child:
-                const Icon(Icons.local_shipping_outlined, color: Colors.white),
-          ),
-          const SizedBox(width: 12),
-          const Text(
-            "Yönetim Paneli",
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
+          ]
+              : [
+            _squareIcon(Icons.local_shipping_outlined),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _sidebarProfile() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          const Icon(Icons.account_circle, color: Colors.white70),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              FirebaseAuth.instance.currentUser?.email ?? "",
-              style: const TextStyle(color: Colors.white),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          _profileButton(isDesktop: true),
-        ],
-      ),
-    );
-  }
-
+  // ======================================================
+  // MENU ITEM
+  // ======================================================
   Widget _menuItem(String text, IconData icon, int idx) {
     final selected = _index == idx;
 
     return InkWell(
       onTap: () => setState(() => _index = idx),
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: selected
@@ -277,21 +278,43 @@ class _ManagerScreenState extends State<ManagerScreen> {
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
-          children: [
-            Icon(icon, color: selected ? ManagerScreen.accent : Colors.white54),
+          mainAxisAlignment:
+          showText ? MainAxisAlignment.start : MainAxisAlignment.center,
+          children: showText
+              ? [
+            Icon(
+              icon,
+              color: selected
+                  ? ManagerScreen.accent
+                  : Colors.white.withOpacity(0.6),
+            ),
             const SizedBox(width: 12),
-            Text(
-              text,
-              style: TextStyle(
-                color: selected ? Colors.white : Colors.white70,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            Expanded(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? Colors.white : Colors.white70,
+                  fontWeight:
+                  selected ? FontWeight.w600 : FontWeight.w400,
+                ),
               ),
+            ),
+          ]
+              : [
+            Icon(
+              icon,
+              color: selected
+                  ? ManagerScreen.accent
+                  : Colors.white.withOpacity(0.6),
             ),
           ],
         ),
       ),
     );
   }
+
 
   // ======================================================
   // TOP BAR
@@ -329,20 +352,81 @@ class _ManagerScreenState extends State<ManagerScreen> {
   }
 
   // ======================================================
-  // PROFILE BUTTON
+  // PROFILE CARD
   // ======================================================
-  Widget _profileButton({required bool isDesktop}) {
-    return IconButton(
-      icon: Icon(
-        Icons.person_outline,
-        color: isDesktop ? Colors.white : ManagerScreen.accent,
+  Widget _profileCard() {
+    return InkWell(
+      onTap: _openProfile,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: EdgeInsets.all(showText ? 12 : 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisAlignment:
+          showText ? MainAxisAlignment.start : MainAxisAlignment.center,
+          children: showText
+              ? [
+            _squareIcon(Icons.person),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 150,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    userName ?? "Kullanıcı",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Text(
+                    "Profilimi Görüntüle",
+                    style: TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ]
+              : [
+            _squareIcon(Icons.person),
+          ],
+        ),
       ),
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ProfileScreen()),
-        );
-      },
     );
   }
+
+  // ======================================================
+  Widget _squareIcon(IconData icon) {
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: ManagerScreen.accent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Center(
+          child: Icon(icon, color: Colors.white, size: 18),
+        ),
+      ),
+    );
+  }
+
+  void _openProfile() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+    );
+  }
+
 }
