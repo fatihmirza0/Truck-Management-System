@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'create_job_page.dart';
 import 'add_driver_page.dart';
 import 'dispatch_jobs_page.dart';
-import 'package:lojistik/screens/profile_screen.dart';
+import 'package:lojistik/screens/commons/profile_screen.dart';
 
 class DispatchMainScreen extends StatefulWidget {
   final String uid;
@@ -21,7 +21,9 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
   // SIDEBAR STATE
   // ==========================================================
   bool _sidebarOpen = true;
+
   bool get showText => _sidebarOpen;
+
   double get sidebarWidth => _sidebarOpen ? 260.0 : 72.0;
 
   static const Duration animDuration = Duration(milliseconds: 150);
@@ -35,7 +37,11 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
 
   String? userName;
 
-  bool get isDesktop => MediaQuery.of(context).size.width >= 900;
+  bool get isDesktop =>
+      MediaQuery
+          .of(context)
+          .size
+          .width >= 900;
 
   // ==========================================================
   // UI TOKENS
@@ -404,13 +410,14 @@ class _DispatchMainScreenState extends State<DispatchMainScreen> {
       ),
     );
   }
+
   Widget _squareIcon(IconData icon) {
     return SizedBox(
       width: 36,
       height: 36,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color:Color(0xFF1E3A5F),
+          color: Color(0xFF1E3A5F),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Center(

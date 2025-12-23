@@ -660,6 +660,47 @@ exports.clearFcmTokenHttp = onRequest((req, res) => {
     }
   });
 });
+exports.getLiveDriverLocations = onRequest(async (req, res) => {
+  try {
+    // CORS
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+
+    // AUTH HEADER
+    const authHeader = req.headers.authorization || "";
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Missing token" });
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+
+    // TOKEN VERIFY
+    const decoded = await admin.auth().verifyIdToken(token);
+
+    // ROLE CHECK (Firestore'dan)
+    const userSnap = await db.collection("users").doc(decoded.uid).get();
+    if (!userSnap.exists) {
+      return res.status(403).json({ error: "User not found" });
+    }
+
+    const user = userSnap.data();
+    if (user.role !== "manager" && user.role !== "dispatch") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    // RTDB READ (ADMIN SDK = RULE BYPASS)
+    const snapshot = await admin
+      .database()
+      .ref("driver_locations")
+      .get();
+
+    return res.json(snapshot.val() ?? {});
+  } catch (e) {
+    console.error("❌ getLiveDriverLocations error:", e);
+    return res.status(500).json({ error: "Internal error" });
+  }
+});
+
 
 
 

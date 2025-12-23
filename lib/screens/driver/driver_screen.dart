@@ -3,15 +3,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import 'active_jobs_page.dart';
 import 'completed_jobs_page.dart';
-import '../login_screen.dart';
-import '../profile_screen.dart';
+import '../commons/login_screen.dart';
+import '../commons/profile_screen.dart';
+import 'package:lojistik/services/driver_location_service.dart';
 
 class DriverScreen extends StatefulWidget {
   final String uid;
 
   const DriverScreen({super.key, required this.uid});
 
-  // ManagerScreen ile aynı tokenlar
   static const Color accent = Color(0xFF1E3A5F);
   static const Color bg = Color(0xFFF8FAFC);
 
@@ -19,8 +19,10 @@ class DriverScreen extends StatefulWidget {
   State<DriverScreen> createState() => _DriverScreenState();
 }
 
-class _DriverScreenState extends State<DriverScreen> {
+class _DriverScreenState extends State<DriverScreen> with WidgetsBindingObserver {
   int _index = 0;
+  late DriverLocationService _locationService;
+  bool _isTrackingActive = false;
 
   late final List<Widget> _pages = [
     ActiveJobsPage(uid: widget.uid),
@@ -32,10 +34,85 @@ class _DriverScreenState extends State<DriverScreen> {
     "Tamamlanan İşler",
   ];
 
-  final List<IconData> _icons = [
-    Icons.work_outline,
-    Icons.check_circle_outline,
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _locationService = DriverLocationService(widget.uid);
+    _startLocationTracking();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _locationService.stopTracking();
+    _locationService.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Uygulama arka plana gitse bile tracking devam etsin
+    // Ama battery optimization için bazı durumlarda durdurabiliriz
+    if (state == AppLifecycleState.paused) {
+      // Arka plana geçti, tracking devam
+    } else if (state == AppLifecycleState.resumed) {
+      // Ön plana geldi
+      if (!_isTrackingActive) {
+        _startLocationTracking();
+      }
+    }
+  }
+
+  Future<void> _startLocationTracking() async {
+    try {
+      await _locationService.startTracking();
+      setState(() {
+        _isTrackingActive = true;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Konum takibi başlatıldı'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print("HATAAAAA: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Konum izni hatası: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _toggleLocationTracking() async {
+    if (_isTrackingActive) {
+      await _locationService.stopTracking();
+      setState(() {
+        _isTrackingActive = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Konum takibi durduruldu'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } else {
+      await _startLocationTracking();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,9 +134,6 @@ class _DriverScreenState extends State<DriverScreen> {
     return Scaffold(
       backgroundColor: DriverScreen.bg,
 
-      // ======================================================
-      // APP BAR (ManagerScreen MOBILE ile aynı stil)
-      // ======================================================
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -90,18 +164,41 @@ class _DriverScreenState extends State<DriverScreen> {
                     fontSize: 16,
                   ),
                 ),
-                Text(
-                  _titles[_index],
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
-                    fontSize: 12,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      _titles[_index],
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Tracking indicator
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _isTrackingActive ? Colors.green : Colors.grey,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ],
         ),
         actions: [
+          // Location tracking toggle button
+          IconButton(
+            icon: Icon(
+              _isTrackingActive ? Icons.location_on : Icons.location_off,
+              color: _isTrackingActive ? Colors.green : Colors.grey,
+            ),
+            tooltip: _isTrackingActive ? "Konum Takibini Durdur" : "Konum Takibini Başlat",
+            onPressed: _toggleLocationTracking,
+          ),
           IconButton(
             icon: const Icon(
               Icons.person_outline,
@@ -119,17 +216,11 @@ class _DriverScreenState extends State<DriverScreen> {
         ],
       ),
 
-      // ======================================================
-      // BODY
-      // ======================================================
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 250),
         child: _pages[_index],
       ),
 
-      // ======================================================
-      // BOTTOM NAV (Kurumsal, sade)
-      // ======================================================
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
         onTap: (i) => setState(() => _index = i),

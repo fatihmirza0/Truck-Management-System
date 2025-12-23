@@ -1,9 +1,11 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:lojistik/screens/manager/jobs/completed_jobs_page.dart';
 
-import '../login_screen.dart';
-import '../profile_screen.dart';
+import '../commons/login_screen.dart';
+import '../commons/live_tracking_screen.dart';
+import '../commons/profile_screen.dart';
 import 'jobs/jobs_page.dart';
 import 'add_user_page.dart';
 import 'users_page.dart';
@@ -25,12 +27,14 @@ class _ManagerScreenState extends State<ManagerScreen> {
   bool _sidebarOpen = true;
 
   bool get isDesktop => MediaQuery.of(context).size.width >= 900;
+
   bool get showText => _sidebarOpen;
 
   String? userName;
 
   // ------------------------------------------------------
   final List<Widget> _pages = const [
+    LiveTrackingPanel(),
     JobsPage(),
     CompletedJobsPage(),
     AddUserPage(),
@@ -39,6 +43,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
   ];
 
   final List<String> _titles = [
+    "Canlı Takip",
     "İş Yönetimi",
     "Tamamlanan İşler",
     "Personel Ekle",
@@ -47,6 +52,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
   ];
 
   final List<String> _subTitles = [
+    "Rota Konum",
     "Görevler",
     "Filtre & Export",
     "Yeni Kullanıcı",
@@ -55,6 +61,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
   ];
 
   final List<IconData> _icons = [
+    Icons.map_outlined,
     Icons.dashboard_customize_outlined,
     Icons.task_alt_outlined,
     Icons.person_add_outlined,
@@ -79,7 +86,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const LoginScreen()),
-              (_) => false,
+          (_) => false,
         );
       });
       return const Scaffold(
@@ -108,8 +115,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.person_outline,
-                color: ManagerScreen.accent),
+            icon: const Icon(Icons.person_outline, color: ManagerScreen.accent),
             onPressed: _openProfile,
           ),
         ],
@@ -154,7 +160,8 @@ class _ManagerScreenState extends State<ManagerScreen> {
               children: [
                 _topBar(),
                 Expanded(
-                  child: ClipRect( // 🔥 ekstra garanti
+                  child: ClipRect(
+                    // 🔥 ekstra garanti
                     child: _pages[_index],
                   ),
                 ),
@@ -175,35 +182,28 @@ class _ManagerScreenState extends State<ManagerScreen> {
               child: Column(
                 children: [
                   const SizedBox(height: 16),
-
                   Align(
                     alignment:
-                    _sidebarOpen ? Alignment.centerRight : Alignment.center,
+                        _sidebarOpen ? Alignment.centerRight : Alignment.center,
                     child: IconButton(
                       icon: Icon(
-                        _sidebarOpen
-                            ? Icons.chevron_left
-                            : Icons.chevron_right,
+                        _sidebarOpen ? Icons.chevron_left : Icons.chevron_right,
                         color: Colors.white70,
                       ),
                       onPressed: () =>
                           setState(() => _sidebarOpen = !_sidebarOpen),
                     ),
                   ),
-
                   const SizedBox(height: 12),
-
                   _sidebarHeader(),
                   const SizedBox(height: 24),
-
-                  _menuItem("İş Yönetimi", Icons.dashboard_customize_outlined, 0),
-                  _menuItem("Tamamlanan İşler", Icons.task_alt_outlined, 1),
-                  _menuItem("Personel Ekle", Icons.person_add_outlined, 2),
-                  _menuItem("Kullanıcılar", Icons.people_alt_outlined, 3),
-                  _menuItem("Raporlar", Icons.bar_chart_outlined, 4),
-
+                  _menuItem("Canlı Takip", CupertinoIcons.map, 0),
+                  _menuItem("İş Yönetimi", Icons.dashboard_customize_outlined, 1),
+                  _menuItem("Tamamlanan İşler", Icons.task_alt_outlined, 2),
+                  _menuItem("Personel Ekle", Icons.person_add_outlined, 3),
+                  _menuItem("Kullanıcılar", Icons.people_alt_outlined, 4),
+                  _menuItem("Raporlar", Icons.bar_chart_outlined, 5),
                   const Spacer(),
-
                   Padding(
                     padding: const EdgeInsets.all(8),
                     child: _profileCard(),
@@ -229,32 +229,32 @@ class _ManagerScreenState extends State<ManagerScreen> {
           mainAxisSize: MainAxisSize.min, // 🔥 KRİTİK
           children: showText
               ? [
-            _squareIcon(Icons.local_shipping_outlined),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  "Yönetim Paneli",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
+                  _squareIcon(Icons.local_shipping_outlined),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        "Yönetim Paneli",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        "Truck Management System",
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                Text(
-                  "Truck Management System",
-                  style: TextStyle(
-                    color: Color(0xFF64748B),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ]
+                ]
               : [
-            _squareIcon(Icons.local_shipping_outlined),
-          ],
+                  _squareIcon(Icons.local_shipping_outlined),
+                ],
         ),
       ),
     );
@@ -279,42 +279,41 @@ class _ManagerScreenState extends State<ManagerScreen> {
         ),
         child: Row(
           mainAxisAlignment:
-          showText ? MainAxisAlignment.start : MainAxisAlignment.center,
+              showText ? MainAxisAlignment.start : MainAxisAlignment.center,
           children: showText
               ? [
-            Icon(
-              icon,
-              color: selected
-                  ? ManagerScreen.accent
-                  : Colors.white.withOpacity(0.6),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                text,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: selected ? Colors.white : Colors.white70,
-                  fontWeight:
-                  selected ? FontWeight.w600 : FontWeight.w400,
-                ),
-              ),
-            ),
-          ]
+                  Icon(
+                    icon,
+                    color: selected
+                        ? ManagerScreen.accent
+                        : Colors.white.withOpacity(0.6),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: selected ? Colors.white : Colors.white70,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                ]
               : [
-            Icon(
-              icon,
-              color: selected
-                  ? ManagerScreen.accent
-                  : Colors.white.withOpacity(0.6),
-            ),
-          ],
+                  Icon(
+                    icon,
+                    color: selected
+                        ? ManagerScreen.accent
+                        : Colors.white.withOpacity(0.6),
+                  ),
+                ],
         ),
       ),
     );
   }
-
 
   // ======================================================
   // TOP BAR
@@ -366,40 +365,40 @@ class _ManagerScreenState extends State<ManagerScreen> {
         ),
         child: Row(
           mainAxisAlignment:
-          showText ? MainAxisAlignment.start : MainAxisAlignment.center,
+              showText ? MainAxisAlignment.start : MainAxisAlignment.center,
           children: showText
               ? [
-            _squareIcon(Icons.person),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 150,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    userName ?? "Kullanıcı",
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                  _squareIcon(Icons.person),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 150,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          userName ?? "Kullanıcı",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const Text(
+                          "Profilimi Görüntüle",
+                          style: TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const Text(
-                    "Profilimi Görüntüle",
-                    style: TextStyle(
-                      color: Color(0xFF94A3B8),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ]
+                ]
               : [
-            _squareIcon(Icons.person),
-          ],
+                  _squareIcon(Icons.person),
+                ],
         ),
       ),
     );
@@ -428,5 +427,4 @@ class _ManagerScreenState extends State<ManagerScreen> {
       MaterialPageRoute(builder: (_) => const ProfileScreen()),
     );
   }
-
 }
