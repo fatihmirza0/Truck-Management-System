@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'package:lojistik/services/job_service.dart';
 
 import 'job_detail_panel.dart';
-import 'job_service.dart';
 
 class JobsPage extends StatefulWidget {
   const JobsPage({super.key});
@@ -17,12 +17,8 @@ class _JobsPageState extends State<JobsPage> {
 
   String _status = "pending";
   String _searchQuery = "";
-  Map<String, dynamic>? _selectedJob;
-  String? _selectedId;
-
-  // Cache maps
-  Map<String, Map<String, dynamic>> userCache = {};
-  Map<String, Map<String, dynamic>> vehicleCache = {};
+  JobRecord? _selectedJob;
+  JobLookups _lookups = JobLookups.empty();
 
   int _currentPage = 1;
   final int _itemsPerPage = 10;
@@ -48,66 +44,39 @@ class _JobsPageState extends State<JobsPage> {
   }
 
   Future<void> _loadCacheData() async {
-    userCache.clear();
-    vehicleCache.clear();
-
-    // Load users
-    final users = await FirebaseFirestore.instance
-        .collection("users")
-        .where("softDeleted", isEqualTo: false)
-        .get();
-
-    for (var doc in users.docs) {
-      userCache[doc.id] = doc.data();
-    }
-
-    // Load vehicles
-    final vehicles = await FirebaseFirestore.instance
-        .collection("vehicles")
-        .where("isActive", isEqualTo: true)
-        .get();
-
-    for (var doc in vehicles.docs) {
-      vehicleCache[doc.id] = doc.data();
-    }
-
-    setState(() {});
+    final lookups = await JobService.loadLookups();
+    setState(() => _lookups = lookups);
   }
 
   String userName(String? uid) {
-    if (uid == null) return "-";
-    return userCache[uid]?["name"] ?? "-";
+    return _lookups.userName(uid);
   }
 
   String vehiclePlate(String? vehicleId) {
-    if (vehicleId == null) return "-";
-    return vehicleCache[vehicleId]?["plate"] ?? "-";
+    return _lookups.vehiclePlate(vehicleId);
   }
 
-  Stream<QuerySnapshot> _jobsStream() {
-    return FirebaseFirestore.instance
-        .collection("jobs")
-        .where("softDeleted", isEqualTo: false)
-        .where("status", isEqualTo: _status)
-        .orderBy("timestamps.createdAt", descending: true)
-        .snapshots();
+  Stream<List<JobRecord>> _jobsStream() {
+    return JobService.streamJobsByStatus(_status);
   }
 
-  List<QueryDocumentSnapshot> _filterAndPaginateJobs(
-      List<QueryDocumentSnapshot> docs) {
+  List<JobRecord> _filterAndPaginateJobs(List<JobRecord> docs) {
     // Filter by search query
     var filtered = docs.where((doc) {
       if (_searchQuery.isEmpty) return true;
 
-      final job = doc.data() as Map<String, dynamic>;
-      final driverName = userName(job["driverId"]).toLowerCase();
-      final dispatchName = userName(job["createdBy"]).toLowerCase();
-      final vehiclePlateNo = vehiclePlate(job["vehicleId"]).toLowerCase();
-      final referenceNo = (job["referenceNo"] ?? "").toLowerCase();
-      final cargoType = (job["cargo"]?["type"] ?? "").toLowerCase();
-      final cargoDesc = (job["cargo"]?["description"] ?? "").toLowerCase();
-      final loadPort = (job["route"]?["loadPort"] ?? "").toLowerCase();
-      final unloadPort = (job["route"]?["unloadPort"] ?? "").toLowerCase();
+      final cargo = doc.cargo ?? {};
+      final route = doc.route ?? {};
+
+      final driverName = userName(doc.driverId).toLowerCase();
+      final dispatchName = userName(doc.createdBy).toLowerCase();
+      final vehiclePlateNo = vehiclePlate(doc.vehicleId).toLowerCase();
+      final referenceNo = doc.referenceNo.toLowerCase();
+      final cargoType = (cargo["type"] ?? "").toString().toLowerCase();
+      final cargoDesc =
+          (cargo["description"] ?? "").toString().toLowerCase();
+      final loadPort = (route["loadPort"] ?? "").toString().toLowerCase();
+      final unloadPort = (route["unloadPort"] ?? "").toString().toLowerCase();
 
       return driverName.contains(_searchQuery) ||
           dispatchName.contains(_searchQuery) ||
@@ -134,10 +103,9 @@ class _JobsPageState extends State<JobsPage> {
     return (totalItems / _itemsPerPage).ceil();
   }
 
-  void _openDetail(Map<String, dynamic> job, String id) {
+  void _openDetail(JobRecord job) {
     setState(() {
       _selectedJob = job;
-      _selectedId = id;
     });
 
     if (!isDesktop) {
@@ -158,15 +126,17 @@ class _JobsPageState extends State<JobsPage> {
                 ),
                 child: JobDetailPanel(
                   job: job,
-                  jobId: id,
+                  jobId: job.id,
                   userName: userName,
                   vehiclePlate: vehiclePlate,
                   onApprove: () async {
-                    await JobService.approveJob(_selectedId!);
+                    if (_selectedJob == null) return;
+                    await JobService.approveJob(_selectedJob!.id);
                     _closeDetailPanel();
                   },
                   onReject: (reason) async {
-                    await JobService.rejectJob(_selectedId!, reason);
+                    if (_selectedJob == null) return;
+                    await JobService.rejectJob(_selectedJob!.id, reason);
                     _closeDetailPanel();
                   },
                 ),
@@ -191,15 +161,15 @@ class _JobsPageState extends State<JobsPage> {
           ? null
           : JobDetailPanel(
               job: _selectedJob!,
-              jobId: _selectedId!,
+              jobId: _selectedJob!.id,
               userName: userName,
               vehiclePlate: vehiclePlate,
               onApprove: () async {
-                await JobService.approveJob(_selectedId!);
+                await JobService.approveJob(_selectedJob!.id);
                 _closeDetailPanel();
               },
               onReject: (reason) async {
-                await JobService.rejectJob(_selectedId!, reason);
+                await JobService.rejectJob(_selectedJob!.id, reason);
                 _closeDetailPanel();
               },
             ),
@@ -325,7 +295,7 @@ class _JobsPageState extends State<JobsPage> {
               const SizedBox(height: 12),
 
               Expanded(
-                child: StreamBuilder<QuerySnapshot>(
+                child: StreamBuilder<List<JobRecord>>(
                   stream: _jobsStream(),
                   builder: (context, snap) {
                     if (!snap.hasData) {
@@ -336,7 +306,7 @@ class _JobsPageState extends State<JobsPage> {
                       );
                     }
 
-                    final allDocs = snap.data!.docs;
+                    final allDocs = snap.data ?? [];
                     final filtered = _filterAndPaginateJobs(allDocs);
 
                     if (allDocs.isEmpty) {
@@ -358,30 +328,26 @@ class _JobsPageState extends State<JobsPage> {
                           _buildPagination(
                             _searchQuery.isEmpty
                                 ? allDocs.length
-                                : allDocs.where((doc) {
-                                    final job =
-                                        doc.data() as Map<String, dynamic>;
-                                    final driverName =
-                                        userName(job["driverId"]).toLowerCase();
-                                    final dispatchName =
-                                        userName(job["createdBy"])
-                                            .toLowerCase();
-                                    final vehiclePlateNo =
-                                        vehiclePlate(job["vehicleId"])
-                                            .toLowerCase();
-                                    final referenceNo =
-                                        (job["referenceNo"] ?? "")
-                                            .toLowerCase();
+                                : allDocs.where((job) {
+                                    final cargo = job.cargo ?? {};
                                     final cargoType =
-                                        (job["cargo"]?["type"] ?? "")
-                                            .toLowerCase();
-                                    final cargoDesc =
-                                        (job["cargo"]?["description"] ?? "")
-                                            .toLowerCase();
-                                    return driverName.contains(_searchQuery) ||
-                                        dispatchName.contains(_searchQuery) ||
-                                        vehiclePlateNo.contains(_searchQuery) ||
-                                        referenceNo.contains(_searchQuery) ||
+                                        (cargo["type"] ?? "").toString().toLowerCase();
+                                    final cargoDesc = (cargo["description"] ?? "")
+                                        .toString()
+                                        .toLowerCase();
+
+                                    return userName(job.driverId)
+                                            .toLowerCase()
+                                            .contains(_searchQuery) ||
+                                        userName(job.createdBy)
+                                            .toLowerCase()
+                                            .contains(_searchQuery) ||
+                                        vehiclePlate(job.vehicleId)
+                                            .toLowerCase()
+                                            .contains(_searchQuery) ||
+                                        job.referenceNo
+                                            .toLowerCase()
+                                            .contains(_searchQuery) ||
                                         cargoType.contains(_searchQuery) ||
                                         cargoDesc.contains(_searchQuery);
                                   }).length,
@@ -618,7 +584,7 @@ class _JobsPageState extends State<JobsPage> {
     );
   }
 
-  Widget _buildDesktopTable(List<QueryDocumentSnapshot> docs) {
+  Widget _buildDesktopTable(List<JobRecord> jobs) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -656,50 +622,49 @@ class _JobsPageState extends State<JobsPage> {
                 _buildColumn("Dispatch", Icons.support_agent_outlined),
                 _buildColumn("İşlemler", Icons.more_horiz),
               ],
-              rows: docs.map((d) {
-                final j = d.data() as Map<String, dynamic>;
-                final cargo = j["cargo"] as Map<String, dynamic>?;
-                final route = j["route"] as Map<String, dynamic>?;
-                final jobStatus = j["status"];
+              rows: jobs.map((job) {
+                final cargo = job.cargo;
+                final route = job.route;
+                final jobStatus = job.status;
 
                 return DataRow(
                   cells: [
                     _buildDataCell(
-                        j["referenceNo"], false, () => _openDetail(j, d.id)),
-                    _buildDataCell(userName(j["driverId"]), false,
-                        () => _openDetail(j, d.id)),
-                    _buildDataCell(vehiclePlate(j["vehicleId"]), false,
-                        () => _openDetail(j, d.id)),
+                        job.referenceNo, false, () => _openDetail(job)),
                     _buildDataCell(
-                        cargo?["type"], false, () => _openDetail(j, d.id)),
+                        userName(job.driverId), false, () => _openDetail(job)),
+                    _buildDataCell(vehiclePlate(job.vehicleId), false,
+                        () => _openDetail(job)),
+                    _buildDataCell(
+                        cargo?["type"], false, () => _openDetail(job)),
                     _buildDataCell(
                         "${route?["loadPort"] ?? "-"} → ${route?["unloadPort"] ?? "-"}",
                         false,
-                        () => _openDetail(j, d.id)),
+                        () => _openDetail(job)),
                     _buildDataCell(
-                        cargo?["weightKg"], false, () => _openDetail(j, d.id)),
-                    _buildDataCell(userName(j["createdBy"]), false,
-                        () => _openDetail(j, d.id)),
+                        cargo?["weightKg"], false, () => _openDetail(job)),
+                    _buildDataCell(
+                        userName(job.createdBy), false, () => _openDetail(job)),
                     DataCell(
                       Row(
                         children: [
                           _buildActionButton(
                             Icons.visibility_outlined,
                             const Color(0xFF64748B),
-                            () => _openDetail(j, d.id),
+                            () => _openDetail(job),
                           ),
                           if (jobStatus == "pending") ...[
                             const SizedBox(width: 8),
                             _buildActionButton(
                               Icons.check_circle_outline,
                               const Color(0xFF059669),
-                              () => JobService.approveJob(d.id),
+                              () => JobService.approveJob(job.id),
                             ),
                             const SizedBox(width: 8),
                             _buildActionButton(
                               Icons.cancel_outlined,
                               const Color(0xFFDC2626),
-                              () => _showRejectDialog(d.id),
+                              () => _showRejectDialog(job.id),
                             ),
                           ],
                         ],
@@ -714,6 +679,7 @@ class _JobsPageState extends State<JobsPage> {
       ),
     );
   }
+
 
   DataColumn _buildColumn(String label, IconData icon) {
     return DataColumn(
@@ -770,17 +736,16 @@ class _JobsPageState extends State<JobsPage> {
     );
   }
 
-  Widget _buildMobileList(List<QueryDocumentSnapshot> docs) {
+  Widget _buildMobileList(List<JobRecord> jobs) {
     return ListView.separated(
-      itemCount: docs.length,
+      itemCount: jobs.length,
       padding: const EdgeInsets.only(bottom: 32),
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        final d = docs[index];
-        final j = d.data() as Map<String, dynamic>;
-        final cargo = j["cargo"] as Map<String, dynamic>?;
-        final route = j["route"] as Map<String, dynamic>?;
-        final jobStatus = j["status"];
+        final job = jobs[index];
+        final cargo = job.cargo;
+        final route = job.route;
+        final jobStatus = job.status;
 
         return Container(
           decoration: BoxDecoration(
@@ -798,7 +763,7 @@ class _JobsPageState extends State<JobsPage> {
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: () => _openDetail(j, d.id),
+              onTap: () => _openDetail(job),
               borderRadius: BorderRadius.circular(12),
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -822,7 +787,7 @@ class _JobsPageState extends State<JobsPage> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            j["referenceNo"] ?? "-",
+                            job.referenceNo,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -838,13 +803,13 @@ class _JobsPageState extends State<JobsPage> {
                     _buildMobileInfoRow(
                       Icons.person_outline,
                       "Şoför",
-                      userName(j["driverId"]),
+                      userName(job.driverId),
                     ),
                     const SizedBox(height: 8),
                     _buildMobileInfoRow(
                       Icons.car_rental_outlined,
                       "Plaka",
-                      vehiclePlate(j["vehicleId"]),
+                      vehiclePlate(job.vehicleId),
                     ),
                     const SizedBox(height: 8),
                     _buildMobileInfoRow(
@@ -866,7 +831,7 @@ class _JobsPageState extends State<JobsPage> {
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: () => _showRejectDialog(d.id),
+                              onPressed: () => _showRejectDialog(job.id),
                               icon: const Icon(Icons.cancel_outlined, size: 18),
                               label: const Text("Reddet"),
                               style: OutlinedButton.styleFrom(
@@ -883,7 +848,7 @@ class _JobsPageState extends State<JobsPage> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: () => JobService.approveJob(d.id),
+                              onPressed: () => JobService.approveJob(job.id),
                               icon: const Icon(Icons.check_circle_outline,
                                   size: 18),
                               label: const Text("Onayla"),
@@ -993,7 +958,6 @@ class _JobsPageState extends State<JobsPage> {
 
     setState(() {
       _selectedJob = null;
-      _selectedId = null;
     });
   }
 }

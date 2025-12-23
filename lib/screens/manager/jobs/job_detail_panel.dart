@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'job_service.dart';
+
+import 'package:lojistik/services/job_service.dart';
+
 import 'job_documents.dart';
 
 
 class JobDetailPanel extends StatefulWidget {
-  final Map job;
+  final JobRecord job;
   final String jobId;
   final String Function(String?) userName;
   final String Function(String?) vehiclePlate;
@@ -89,9 +91,9 @@ class _JobDetailPanelState extends State<JobDetailPanel> {
   @override
   Widget build(BuildContext context) {
     final bool isMobile = MediaQuery.of(context).size.width < 600;
-    final cargo = widget.job["cargo"] as Map<String, dynamic>?;
-    final route = widget.job["route"] as Map<String, dynamic>?;
-    final timestamps = widget.job["timestamps"] as Map<String, dynamic>?;
+    final cargo = widget.job.cargo;
+    final route = widget.job.route;
+    final timestamps = widget.job.timestamps;
 
     return Drawer(
       width: 480,
@@ -148,13 +150,13 @@ class _JobDetailPanelState extends State<JobDetailPanel> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Status Badge
-                  _buildStatusBadge(widget.job["status"]),
+                  _buildStatusBadge(widget.job.status),
                   const SizedBox(height: 20),
 
                   // Reference Number
                   _buildMinimalCard(
                     "Referans Numarası",
-                    widget.job["referenceNo"],
+                    widget.job.referenceNo,
                     Icons.tag,
                   ),
                   const SizedBox(height: 12),
@@ -162,7 +164,7 @@ class _JobDetailPanelState extends State<JobDetailPanel> {
                   // Driver Info
                   _buildMinimalCard(
                     "Şoför",
-                    widget.userName(widget.job["driverId"]),
+                    widget.userName(widget.job.driverId),
                     Icons.person_outline,
                   ),
                   const SizedBox(height: 12),
@@ -170,7 +172,7 @@ class _JobDetailPanelState extends State<JobDetailPanel> {
                   // Vehicle Info
                   _buildMinimalCard(
                     "Araç Plakası",
-                    widget.vehiclePlate(widget.job["vehicleId"]),
+                    widget.vehiclePlate(widget.job.vehicleId),
                     Icons.car_rental_outlined,
                   ),
                   const SizedBox(height: 12),
@@ -222,7 +224,7 @@ class _JobDetailPanelState extends State<JobDetailPanel> {
                   // Dispatcher
                   _buildMinimalCard(
                     "Dispatch",
-                    widget.userName(widget.job["createdBy"]),
+                    widget.userName(widget.job.createdBy),
                     Icons.support_agent_outlined,
                   ),
                   const SizedBox(height: 12),
@@ -248,8 +250,8 @@ class _JobDetailPanelState extends State<JobDetailPanel> {
                     const SizedBox(height: 12),
 
                   // Rejection Reason
-                  if (widget.job["status"] == "rejected" &&
-                      widget.job["rejectionReason"] != null)
+                  if (widget.job.status == "rejected" &&
+                      widget.job.rejectionReason != null)
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -283,7 +285,7 @@ class _JobDetailPanelState extends State<JobDetailPanel> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            widget.job["rejectionReason"] ?? "",
+                            widget.job.rejectionReason ?? "",
                             style: const TextStyle(
                               fontSize: 14,
                               color: Color(0xFF991B1B),
@@ -292,8 +294,8 @@ class _JobDetailPanelState extends State<JobDetailPanel> {
                         ],
                       ),
                     ),
-                  if (widget.job["status"] == "rejected" &&
-                      widget.job["rejectionReason"] != null)
+                  if (widget.job.status == "rejected" &&
+                      widget.job.rejectionReason != null)
                     const SizedBox(height: 24),
 
                   // Logs Section
@@ -302,7 +304,7 @@ class _JobDetailPanelState extends State<JobDetailPanel> {
                   const SizedBox(height: 24),
 
                   // Action Buttons
-                  if (widget.job["status"] == "pending")
+                  if (widget.job.status == "pending")
                     Column(
                       children: [
                         SizedBox(
@@ -496,7 +498,7 @@ class _JobDetailPanelState extends State<JobDetailPanel> {
           ],
         ),
         const SizedBox(height: 16),
-        StreamBuilder<QuerySnapshot>(
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: JobService.getJobLogs(widget.jobId),
           builder: (context, snapshot) {
             if (!snapshot.hasData) {

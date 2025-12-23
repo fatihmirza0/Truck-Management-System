@@ -25,6 +25,23 @@ class FirestoreService {
     };
   }
 
+  static Future<http.Response> _postToFunction({
+    required String endpoint,
+    required Map<String, dynamic> body,
+  }) async {
+    final res = await http.post(
+      Uri.parse("$_baseUrl/$endpoint"),
+      headers: await _headers(),
+      body: jsonEncode(body),
+    );
+
+    if (res.statusCode != 200) {
+      throw Exception(res.body);
+    }
+
+    return res;
+  }
+
   // ============================================
   // CONSTANTS
   // ============================================
@@ -81,22 +98,17 @@ class FirestoreService {
     required String phone,
     required String plate,
   }) async {
-    final res = await http.post(
-      Uri.parse("$_baseUrl/createDriverHttp"),
-      headers: await _headers(),
-      body: jsonEncode({
+    await _postToFunction(
+      endpoint: "createDriverHttp",
+      body: {
         "name": name,
         "email": email,
         "password": password,
         "phone": phone,
         "plate": plate,
         "jobStatus": "available", // 🔥 EKLE
-      }),
+      },
     );
-
-    if (res.statusCode != 200) {
-      throw Exception(res.body);
-    }
   }
 
   static Future<void> createUserHttp({
@@ -107,22 +119,17 @@ class FirestoreService {
     required String role,
     String? plate,
   }) async {
-    final res = await http.post(
-      Uri.parse("$_baseUrl/createUserHttp"),
-      headers: await _headers(),
-      body: jsonEncode({
+    await _postToFunction(
+      endpoint: "createUserHttp",
+      body: {
         "name": name,
         "email": email,
         "password": password,
         "phone": phone,
         "role": role,
         "plate": plate,
-      }),
+      },
     );
-
-    if (res.statusCode != 200) {
-      throw Exception(res.body);
-    }
   }
 
   static Future<void> updateUserHttp({
@@ -133,34 +140,24 @@ class FirestoreService {
     required String role,
     String? plate,
   }) async {
-    final res = await http.post(
-      Uri.parse("$_baseUrl/updateUserHttp"),
-      headers: await _headers(),
-      body: jsonEncode({
+    await _postToFunction(
+      endpoint: "updateUserHttp",
+      body: {
         "uid": uid,
         "name": name,
         "email": email,
         "phone": phone,
         "role": role,
         "plate": plate,
-      }),
+      },
     );
-
-    if (res.statusCode != 200) {
-      throw Exception(res.body);
-    }
   }
 
   static Future<void> softDeleteUserHttp(String userId) async {
-    final res = await http.post(
-      Uri.parse("$_baseUrl/softDeleteUserHttp"),
-      headers: await _headers(),
-      body: jsonEncode({"userId": userId}),
+    await _postToFunction(
+      endpoint: "softDeleteUserHttp",
+      body: {"userId": userId},
     );
-
-    if (res.statusCode != 200) {
-      throw Exception(res.body);
-    }
   }
   static Future<String> getDriverStatus(String driverId) async {
     final doc = await FirebaseFirestore.instance
@@ -180,19 +177,14 @@ class FirestoreService {
     required String action, // approve | reject | complete
     String? reason,
   }) async {
-    final res = await http.post(
-      Uri.parse("$_baseUrl/jobActionHttp"),
-      headers: await _headers(),
-      body: jsonEncode({
+    await _postToFunction(
+      endpoint: "jobActionHttp",
+      body: {
         "jobId": jobId,
         "action": action,
         "reason": reason,
-      }),
+      },
     );
-
-    if (res.statusCode != 200) {
-      throw Exception(res.body);
-    }
   }
 
   /// Get user data by UID
@@ -619,7 +611,8 @@ class FirestoreService {
   }
 
   /// Stream job logs
-  static Stream<QuerySnapshot> getJobLogs(String jobId) {
+  static Stream<QuerySnapshot<Map<String, dynamic>>> getJobLogs(
+      String jobId) {
     try {
       return _firestore
           .collection('jobs')
@@ -634,7 +627,8 @@ class FirestoreService {
   }
 
   /// Stream jobs by status
-  static Stream<QuerySnapshot> getJobsByStatus(String status) {
+  static Stream<QuerySnapshot<Map<String, dynamic>>> getJobsByStatus(
+      String status) {
     try {
       return _firestore
           .collection('jobs')
