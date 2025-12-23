@@ -41,6 +41,10 @@ dependencies:
   firebase_messaging: ^16.1.0
   flutter_local_notifications: ^19.5.0
   shared_preferences: ^2.5.4
+  go_router: ^14.2.7
+  flutter_riverpod: ^2.5.1
+  get_it: ^7.7.0
+  dio: ^5.7.0
 
   # Windows için desktop SDK
 #  firebase_core_desktop:

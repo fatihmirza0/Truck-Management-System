@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:lojistik/core/constants/app_routes.dart';
 import 'package:lojistik/services/auth_service.dart';
 import 'dart:math' as math;
 
@@ -71,19 +73,14 @@ class _LoginScreenState extends State<LoginScreen>
 
       // Role'e göre yönlendir
       if (role == 'manager') {
-        Navigator.pushReplacementNamed(context, '/manager');
+        if (!mounted) return;
+        context.go(AppRoutes.manager);
       } else if (role == 'dispatch') {
-        Navigator.pushReplacementNamed(
-          context,
-          '/dispatch',
-          arguments: {"uid": uid},
-        );
+        if (!mounted) return;
+        context.go('${AppRoutes.dispatch}?uid=$uid');
       } else if (role == 'driver') {
-        Navigator.pushReplacementNamed(
-          context,
-          '/driver',
-          arguments: {"uid": uid},
-        );
+        if (!mounted) return;
+        context.go('${AppRoutes.driver}?uid=$uid');
       } else {
         setState(() => errorMessage = "Bilinmeyen kullanıcı tipi");
       }

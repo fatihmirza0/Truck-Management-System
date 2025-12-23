@@ -3,7 +3,7 @@
 // Desktop & Mobile Optimized
 // ============================================
 import 'package:flutter/material.dart';
-import '../../services/firestore_Service.dart';
+import '../../services/firestore_service.dart';
 
 class UserDetailPage extends StatefulWidget {
   final String userId;

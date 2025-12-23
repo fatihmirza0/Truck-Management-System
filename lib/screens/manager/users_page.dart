@@ -3,7 +3,7 @@
 // Enhanced visual hierarchy & micro-interactions
 // ============================================
 import 'package:flutter/material.dart';
-import 'package:lojistik/services/firestore_Service.dart';
+import 'package:lojistik/services/firestore_service.dart';
 import 'user_detail_page.dart';
 
 class UsersPage extends StatefulWidget {

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:lojistik/services/firestore_Service.dart';
+import 'package:lojistik/services/firestore_service.dart';
 import 'package:lojistik/utils/route_utils.dart';
 
 class CreateJobPage extends StatefulWidget {
