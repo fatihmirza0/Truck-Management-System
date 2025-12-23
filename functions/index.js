@@ -366,6 +366,10 @@ exports.syncActivePlateFromVehicles = onRequest(async (req, res) => {
 /* =========================================================
    FCM NOTIFICATIONS - JOB CREATED
 ========================================================= */
+/* =========================================================
+   FCM NOTIFICATIONS - JOB CREATED
+   Dispatch iş oluşturur → SADECE MANAGER'A bildirim
+========================================================= */
 exports.notifyManagersOnJobCreated = onDocumentCreated(
     "jobs/{jobId}",
     async (event) => {
@@ -381,6 +385,9 @@ exports.notifyManagersOnJobCreated = onDocumentCreated(
       console.log("🚀 Yeni job oluşturuldu:", jobId);
 
       try {
+        // ========================================
+        // SADECE MANAGER'LARA BİLDİRİM GÖNDER
+        // ========================================
         const managersSnapshot = await db
             .collection("users")
             .where("role", "==", "manager")
@@ -396,7 +403,7 @@ exports.notifyManagersOnJobCreated = onDocumentCreated(
           }
         });
 
-        console.log(`📱 ${tokens.length} aktif token bulundu`);
+        console.log(`📱 ${tokens.length} aktif manager token bulundu`);
 
         if (tokens.length === 0) {
           console.log("⚠️ Bildirim gönderilebilecek manager yok");
@@ -438,7 +445,7 @@ exports.notifyManagersOnJobCreated = onDocumentCreated(
         const results = await Promise.all(promises);
         const successCount = results.filter((r) => r !== null).length;
 
-        console.log(`✅ ${successCount}/${tokens.length} bildirim gönderildi`);
+        console.log(`✅ ${successCount}/${tokens.length} manager bildirimi gönderildi`);
       } catch (error) {
         console.error("❌ Bildirim gönderme hatası:", error);
       }
@@ -446,9 +453,9 @@ exports.notifyManagersOnJobCreated = onDocumentCreated(
 );
 
 /* =========================================================
-   FCM NOTIFICATIONS - JOB COMPLETED
+   FCM NOTIFICATIONS - JOB STATUS UPDATES
 ========================================================= */
-exports.notifyManagersOnJobCompleted = onDocumentUpdated(
+exports.notifyOnJobStatusChange = onDocumentUpdated(
     "jobs/{jobId}",
     async (event) => {
       const beforeSnap = event.data.before;
@@ -462,10 +469,89 @@ exports.notifyManagersOnJobCompleted = onDocumentUpdated(
       const after = afterSnap.data();
       const jobId = event.params.jobId;
 
-      if (before.status !== "completed" && after.status === "completed") {
-        console.log("✅ Job tamamlandı:", jobId);
+      try {
+        // ========================================
+        // 1️⃣ JOB APPROVED → DISPATCH + DRIVER'A BİLDİRİM
+        // ========================================
+        if (before.status !== "approved" && after.status === "approved") {
+          console.log("✅ Job onaylandı:", jobId);
 
-        try {
+          // A) DISPATCH'E BİLDİRİM
+          if (after.createdBy) {
+            const dispatchDoc = await db
+                .collection("users")
+                .doc(after.createdBy)
+                .get();
+
+            if (dispatchDoc.exists) {
+              const dispatchData = dispatchDoc.data();
+              if (dispatchData.fcmToken) {
+                await admin.messaging().send({
+                  notification: {
+                    title: "✅ İş Onaylandı!",
+                    body: `Oluşturduğunuz iş onaylandı: ${after.driverName || "Sürücü"} - ${after.title || "İş detayı"}`,
+                  },
+                  data: {
+                    jobId: jobId,
+                    type: "job_approved",
+                    click_action: "FLUTTER_NOTIFICATION_CLICK",
+                  },
+                  token: dispatchData.fcmToken,
+                }).catch((error) => {
+                  console.error("❌ Dispatch bildirim hatası:", error.code);
+                  return null;
+                });
+
+                console.log("✅ Dispatch'e onay bildirimi gönderildi");
+              }
+            }
+          }
+
+          // B) DRIVER'A BİLDİRİM
+          if (after.driverId) {
+            const driverDoc = await db
+                .collection("users")
+                .doc(after.driverId)
+                .get();
+
+            if (driverDoc.exists) {
+              const driverData = driverDoc.data();
+              if (driverData.fcmToken) {
+                await admin.messaging().send({
+                  notification: {
+                    title: "🚛 Yeni İş Ataması!",
+                    body: `Size yeni bir iş atandı: ${after.title || "Detayları görmek için tıklayın"}`,
+                  },
+                  data: {
+                    jobId: jobId,
+                    type: "new_job_assigned",
+                    click_action: "FLUTTER_NOTIFICATION_CLICK",
+                  },
+                  token: driverData.fcmToken,
+                }).catch(async (error) => {
+                  console.error("❌ Driver bildirim hatası:", error.code);
+
+                  if (error.code === "messaging/invalid-registration-token" ||
+                      error.code === "messaging/registration-token-not-registered") {
+                    await driverDoc.ref.update({
+                      fcmToken: admin.firestore.FieldValue.delete(),
+                    });
+                  }
+                });
+
+                console.log("✅ Driver'a iş ataması bildirimi gönderildi");
+              }
+            }
+          }
+        }
+
+        // ========================================
+        // 2️⃣ JOB COMPLETED → MANAGER + DISPATCH'E BİLDİRİM
+        // ========================================
+        if (before.status !== "completed" && after.status === "completed") {
+          console.log("✅ Job tamamlandı:", jobId);
+
+          // A) MANAGER'LARA BİLDİRİM
           const managersSnapshot = await db
               .collection("users")
               .where("role", "==", "manager")
@@ -479,35 +565,65 @@ exports.notifyManagersOnJobCompleted = onDocumentUpdated(
             }
           });
 
-          if (tokens.length === 0) {
-            return;
+          if (tokens.length > 0) {
+            const promises = tokens.map((token) => {
+              return admin.messaging().send({
+                notification: {
+                  title: "✅ İş Tamamlandı",
+                  body: `${after.driverName || "Bir sürücü"} işi tamamladı`,
+                },
+                data: {
+                  jobId: jobId,
+                  type: "job_completed",
+                  click_action: "FLUTTER_NOTIFICATION_CLICK",
+                },
+                token: token,
+              }).catch((error) => {
+                console.error("❌ Manager bildirim hatası:", error.code);
+                return null;
+              });
+            });
+
+            await Promise.all(promises);
+            console.log("✅ Manager'lara tamamlanma bildirimleri gönderildi");
           }
 
-          const promises = tokens.map((token) => {
-            return admin.messaging().send({
-              notification: {
-                title: "✅ İş Tamamlandı",
-                body: `${after.driverName || "Bir sürücü"} işi tamamladı`,
-              },
-              data: {
-                jobId: jobId,
-                type: "job_completed",
-              },
-              token: token,
-            }).catch((error) => {
-              console.error("Bildirim hatası:", error.code);
-              return null;
-            });
-          });
-          await Promise.all(promises);
-          console.log("✅ Tamamlanma bildirimleri gönderildi");
-        } catch (error) {
-          console.error("❌ Hata:", error);
+          // B) DISPATCH'E (İŞİ ATAYAN) BİLDİRİM
+          if (after.createdBy) {
+            const dispatchDoc = await db
+                .collection("users")
+                .doc(after.createdBy)
+                .get();
+
+            if (dispatchDoc.exists) {
+              const dispatchData = dispatchDoc.data();
+              if (dispatchData.fcmToken) {
+                await admin.messaging().send({
+                  notification: {
+                    title: "🎉 İş Tamamlandı!",
+                    body: `Atadığınız iş tamamlandı: ${after.driverName || "Sürücü"} - ${after.title || "İş detayı"}`,
+                  },
+                  data: {
+                    jobId: jobId,
+                    type: "job_completed_dispatch",
+                    click_action: "FLUTTER_NOTIFICATION_CLICK",
+                  },
+                  token: dispatchData.fcmToken,
+                }).catch((error) => {
+                  console.error("❌ Dispatch tamamlanma bildirimi hatası:", error.code);
+                  return null;
+                });
+
+                console.log("✅ Dispatch'e tamamlanma bildirimi gönderildi");
+              }
+            }
+          }
         }
+      } catch (error) {
+        console.error("❌ Status change bildirim hatası:", error);
       }
     },
 );
-
 
 
 
@@ -528,6 +644,19 @@ exports.updateLastLoginHttp = onRequest((req, res) => {
     } catch (e) {
       console.error(e);
       res.status(401).json({ error: e.message });
+    }
+  });
+});
+exports.clearFcmTokenHttp = onRequest((req, res) => {
+  cors(req, res, async () => {
+    try {
+      const decoded = await verifyAuth(req);
+      await db.collection("users").doc(decoded.uid).update({
+        fcmToken: admin.firestore.FieldValue.delete(),
+      });
+      res.json({ success: true });
+    } catch (e) {
+      res.status(400).json({ error: e.message });
     }
   });
 });
