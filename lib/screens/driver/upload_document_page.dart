@@ -8,21 +8,21 @@ import 'package:lottie/lottie.dart';
 
 class UploadDocumentsPage extends StatefulWidget {
   final String jobId;
+  final String driverId;
 
-  const UploadDocumentsPage({super.key, required this.jobId});
+  const UploadDocumentsPage({
+    super.key,
+    required this.jobId,
+    required this.driverId,
+  });
 
   @override
   State<UploadDocumentsPage> createState() => _UploadDocumentsPageState();
 }
 
 class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
-  // ======================================================
-  // UI TOKENS (DİĞER SAYFALARLA AYNI)
-  // ======================================================
   static const Color primary = Color(0xFF1E3A5F);
   static const Color bg = Color(0xFFF8FAFC);
-  static const Color border = Color(0xFFE2E8F0);
-  static const Color textDark = Color(0xFF0F172A);
   static const Color textMuted = Color(0xFF64748B);
 
   final ImagePicker _picker = ImagePicker();
@@ -50,8 +50,10 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
   // ======================================================
   Future<void> pickFromCamera() async {
     try {
-      final photo =
-      await _picker.pickImage(source: ImageSource.camera, imageQuality: 75);
+      final photo = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 75,
+      );
       if (photo != null) {
         setState(() => selectedFiles.add(photo));
       }
@@ -61,7 +63,7 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
   }
 
   // ======================================================
-  // ⬆ UPLOAD
+  // ⬆ UPLOAD & COMPLETE
   // ======================================================
   Future<void> uploadFiles() async {
     if (selectedFiles.isEmpty) {
@@ -77,8 +79,7 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
     });
 
     try {
-      final jobRef =
-      FirebaseFirestore.instance.collection("jobs").doc(widget.jobId);
+      final jobRef = FirebaseFirestore.instance.collection("jobs").doc(widget.jobId);
       final jobSnap = await jobRef.get();
 
       if (!jobSnap.exists) {
@@ -86,17 +87,16 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
       }
 
       final jobData = (jobSnap.data() as Map<String, dynamic>?) ?? {};
-      final driverUid = (jobData["driverId"] ?? "").toString();
-      if (driverUid.isEmpty) throw "driverId bulunamadı";
 
-      // (opsiyonel) zaten completed ise double submit engelle
+      // Zaten completed ise double submit engelle
       final status = (jobData["status"] ?? "").toString();
       if (status == "completed") {
-        throw "Bu iş zaten tamamlanmış görünüyor.";
+        throw "Bu iş zaten tamamlanmış.";
       }
 
       final List<String> urls = [];
 
+      // Dosyaları yükle
       for (int i = 0; i < selectedFiles.length; i++) {
         final file = selectedFiles[i];
 
@@ -106,11 +106,12 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
 
         final uploadTask = ref.putFile(File(file.path));
         uploadTask.snapshotEvents.listen((snap) {
-          final p = snap.totalBytes == 0 ? 0.0 : snap.bytesTransferred / snap.totalBytes;
+          final p = snap.totalBytes == 0
+              ? 0.0
+              : snap.bytesTransferred / snap.totalBytes;
           if (!mounted) return;
           setState(() {
-            uploadProgress =
-                (i / selectedFiles.length) + (p / selectedFiles.length);
+            uploadProgress = (i / selectedFiles.length) + (p / selectedFiles.length);
           });
         });
 
@@ -118,15 +119,29 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
         urls.add(await ref.getDownloadURL());
       }
 
-      // ✅ Job update (new schema)
-      await jobRef.update({
-        "documents": FieldValue.arrayUnion(urls), // senin mevcut kullanımın
+      // Batch işlem - Hem job'u completed yap hem driver'ı available
+      final batch = FirebaseFirestore.instance.batch();
+
+      // 1. Job'u güncelle
+      batch.update(jobRef, {
+        "documents": FieldValue.arrayUnion(urls),
         "status": "completed",
         "timestamps.completedAt": FieldValue.serverTimestamp(),
       });
 
-      if (!mounted) return;
+      // 2. Driver'ı available yap ⭐
+      final userRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.driverId);
 
+      batch.update(userRef, {
+        "jobStatus": "available",
+        "currentJobId": null,
+      });
+
+      await batch.commit();
+
+      if (!mounted) return;
       await _successDialog();
 
       if (!mounted) return;
@@ -134,8 +149,12 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
     } catch (e) {
       debugPrint("UPLOAD ERROR → $e");
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text("Hata: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Hata: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => isUploading = false);
@@ -157,7 +176,7 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
               borderRadius: BorderRadius.circular(20),
             ),
             child: SizedBox(
-              height: 260,
+              height: 300,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -175,15 +194,42 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    "İş Tamamlandı",
+                    "İş Tamamlandı! 🎉",
                     style: TextStyle(
-                      fontSize: 18,
+                      fontSize: 20,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    "Evraklar başarıyla yüklendi.",
+                    style: TextStyle(fontSize: 14),
+                  ),
                   const SizedBox(height: 6),
-                  const Text("Evraklar başarıyla yüklendi."),
-                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green, size: 18),
+                        SizedBox(width: 8),
+                        Text(
+                          "Durum: Müsait",
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -202,7 +248,7 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
       backgroundColor: bg,
       appBar: AppBar(
         backgroundColor: Colors.white,
-        foregroundColor: textDark,
+        foregroundColor: const Color(0xFF0F172A),
         elevation: 0,
         title: const Text(
           "Evrak Yükleme",
@@ -213,9 +259,32 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
         children: [
           const SizedBox(height: 12),
 
-          // ===================================================
-          // ACTION BUTTONS
-          // ===================================================
+          // Info Banner
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.blue.withOpacity(0.3)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.blue),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    "Evrakları yükleyip tamamladığınızda durumunuz 'Müsait' olacak.",
+                    style: TextStyle(fontSize: 13, color: Colors.blue),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Action Buttons
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
@@ -225,6 +294,9 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
                     onPressed: isUploading ? null : pickDocuments,
                     icon: const Icon(Icons.photo_library),
                     label: const Text("Galeriden Seç"),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -233,6 +305,9 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
                     onPressed: isUploading ? null : pickFromCamera,
                     icon: const Icon(Icons.camera_alt),
                     label: const Text("Kamera"),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
                   ),
                 ),
               ],
@@ -241,16 +316,15 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
 
           const SizedBox(height: 16),
 
-          // ===================================================
-          // FILE LIST
-          // ===================================================
+          // File Grid
           Expanded(
             child: selectedFiles.isEmpty
                 ? _emptyState()
                 : GridView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: selectedFiles.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              gridDelegate:
+              const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
@@ -277,8 +351,11 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
                         child: const CircleAvatar(
                           radius: 14,
                           backgroundColor: Colors.black54,
-                          child: Icon(Icons.close,
-                              size: 16, color: Colors.white),
+                          child: Icon(
+                            Icons.close,
+                            size: 16,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ),
@@ -288,39 +365,61 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
             ),
           ),
 
-          // ===================================================
-          // PROGRESS / SUBMIT
-          // ===================================================
+          // Progress / Submit
           Padding(
             padding: const EdgeInsets.all(16),
             child: isUploading
                 ? Column(
               children: [
-                Text(
-                  "%${(uploadProgress * 100).toStringAsFixed(0)}",
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w700),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "Yükleniyor...",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      "%${(uploadProgress * 100).toStringAsFixed(0)}",
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: primary,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                LinearProgressIndicator(
-                  value: uploadProgress,
-                  minHeight: 10,
+                const SizedBox(height: 12),
+                ClipRRect(
                   borderRadius: BorderRadius.circular(10),
+                  child: LinearProgressIndicator(
+                    value: uploadProgress,
+                    minHeight: 10,
+                    backgroundColor: Colors.grey[200],
+                    valueColor: const AlwaysStoppedAnimation(primary),
+                  ),
                 ),
               ],
             )
-                : ElevatedButton(
+                : ElevatedButton.icon(
               onPressed: uploadFiles,
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-                backgroundColor: primary,
-              ),
-              child: const Text(
+              icon: const Icon(Icons.check_circle),
+              label: const Text(
                 "Yüklemeyi Tamamla",
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 54),
+                backgroundColor: primary,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
             ),
@@ -335,16 +434,26 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.upload_file_outlined, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 12),
+          Icon(
+            Icons.upload_file_outlined,
+            size: 80,
+            color: Colors.grey[300],
+          ),
+          const SizedBox(height: 16),
           const Text(
             "Henüz evrak seçilmedi",
-            style: TextStyle(fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 16,
+            ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           const Text(
             "Galeriden veya kameradan belge ekleyin",
-            style: TextStyle(color: textMuted),
+            style: TextStyle(
+              color: textMuted,
+              fontSize: 14,
+            ),
           ),
         ],
       ),

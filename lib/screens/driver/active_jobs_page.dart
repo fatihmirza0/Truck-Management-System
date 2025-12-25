@@ -14,36 +14,27 @@ class ActiveJobsPage extends StatefulWidget {
 }
 
 class _ActiveJobsPageState extends State<ActiveJobsPage> {
-  // ===============================
-  // UI TOKENS (JobsPage ile aynı dil)
-  // ===============================
   static const Color primary = Color(0xFF1E3A5F);
   static const Color bg = Color(0xFFF8FAFC);
   static const Color border = Color(0xFFE2E8F0);
   static const Color textDark = Color(0xFF0F172A);
   static const Color textMuted = Color(0xFF64748B);
 
-  // ===============================
-  // FIRESTORE
-  // ===============================
   Stream<QuerySnapshot> _getActiveJobs() {
     return FirebaseFirestore.instance
         .collection('jobs')
-        .where('status', isEqualTo: 'approved')
+        .where('status', isEqualTo: 'approved') // Sadece onaylanmış işler
         .where('driverId', isEqualTo: widget.uid)
         .where('softDeleted', isEqualTo: false)
         .snapshots();
   }
 
-  // ===============================
-  // MAPS
-  // ===============================
   Future<void> _openMaps(String query) async {
     final q = query.trim();
     if (q.isEmpty) return;
     final encoded = Uri.encodeComponent(q);
-    final url =
-    Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$encoded");
+    final url = Uri.parse(
+        "https://www.google.com/maps/dir/?api=1&destination=$encoded");
     await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
@@ -73,9 +64,7 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ===================================================
-                  // HEADER
-                  // ===================================================
+                  // Header
                   Row(
                     children: [
                       Container(
@@ -91,9 +80,9 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
                         ),
                       ),
                       const SizedBox(width: 16),
-                      Column(
+                      const Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
+                        children: [
                           Text(
                             "Aktif İş",
                             style: TextStyle(
@@ -114,32 +103,38 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 28),
 
-                  // ===================================================
-                  // JOB CARDS (birden fazla approved iş olabilir)
-                  // ===================================================
+                  // Job Cards
                   ...jobs.map((jobDoc) {
-                    final data = jobDoc.data() as Map<String, dynamic>? ?? {};
+                    final data =
+                        jobDoc.data() as Map<String, dynamic>? ?? {};
 
                     final String referenceNo =
                     (data['referenceNo'] ?? '-').toString();
 
-                    final route = (data['route'] as Map?)?.cast<String, dynamic>() ?? {};
-                    final String loadPort = (route['loadPort'] ?? '-').toString();
+                    final route =
+                        (data['route'] as Map?)?.cast<String, dynamic>() ??
+                            {};
+                    final String loadPort =
+                    (route['loadPort'] ?? '-').toString();
                     final String unloadPort =
                     (route['unloadPort'] ?? '-').toString();
 
-                    final cargo = (data['cargo'] as Map?)?.cast<String, dynamic>() ?? {};
-                    final String cargoType = (cargo['type'] ?? '-').toString();
+                    final cargo =
+                        (data['cargo'] as Map?)?.cast<String, dynamic>() ??
+                            {};
+                    final String cargoType =
+                    (cargo['type'] ?? '-').toString();
                     final String cargoDesc =
                     (cargo['description'] ?? '-').toString();
                     final dynamic w = cargo['weightKg'];
                     final String weightKg = (w == null) ? '-' : w.toString();
 
-                    final String createdBy = (data['createdBy'] ?? '').toString();
-                    final String vehicleId = (data['vehicleId'] ?? '').toString();
+                    final String createdBy =
+                    (data['createdBy'] ?? '').toString();
+                    final String vehicleId =
+                    (data['vehicleId'] ?? '').toString();
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 18),
@@ -155,7 +150,7 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
                           _infoRow("Referans No", referenceNo),
                           const SizedBox(height: 18),
 
-                          // Cargo Summary
+                          // Cargo
                           _infoRow(
                             "Yük",
                             "$cargoType • ${weightKg == '-' ? '-' : '$weightKg kg'}",
@@ -167,12 +162,12 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
                           const Divider(height: 1),
                           const SizedBox(height: 20),
 
+                          // Routes
                           _routeRow(
                             title: "Yükleme Noktası",
                             value: loadPort,
                             onMap: () => _openMaps(loadPort),
                           ),
-
                           const SizedBox(height: 20),
                           _routeRow(
                             title: "Varış Noktası",
@@ -184,9 +179,7 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
                           const Divider(height: 1),
                           const SizedBox(height: 20),
 
-                          // ===================================================
-                          // VEHICLE (plate)
-                          // ===================================================
+                          // Vehicle
                           if (vehicleId.isNotEmpty)
                             FutureBuilder<DocumentSnapshot>(
                               future: FirebaseFirestore.instance
@@ -199,8 +192,10 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
                                 }
                                 final v = snap.data!.data()
                                 as Map<String, dynamic>?;
-                                if (v == null) return _infoRow("Plaka", "Bulunamadı");
-                                return _infoRow("Plaka", (v['plate'] ?? '-').toString());
+                                if (v == null)
+                                  return _infoRow("Plaka", "Bulunamadı");
+                                return _infoRow(
+                                    "Plaka", (v['plate'] ?? '-').toString());
                               },
                             )
                           else
@@ -208,9 +203,7 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
 
                           const SizedBox(height: 18),
 
-                          // ===================================================
-                          // DISPATCH INFO (createdBy)
-                          // ===================================================
+                          // Dispatch
                           if (createdBy.isNotEmpty)
                             FutureBuilder<DocumentSnapshot>(
                               future: FirebaseFirestore.instance
@@ -222,17 +215,19 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
                                   return _infoRow("Dispatch", "Yükleniyor...");
                                 }
 
-                                final dispatch =
-                                snap.data!.data() as Map<String, dynamic>?;
+                                final dispatch = snap.data!.data()
+                                as Map<String, dynamic>?;
                                 if (dispatch == null) {
                                   return _infoRow("Dispatch", "Bulunamadı");
                                 }
 
                                 return Column(
                                   children: [
-                                    _infoRow("Dispatch", (dispatch['name'] ?? '-').toString()),
+                                    _infoRow("Dispatch",
+                                        (dispatch['name'] ?? '-').toString()),
                                     const SizedBox(height: 8),
-                                    _infoRow("Telefon", (dispatch['phone'] ?? '-').toString()),
+                                    _infoRow("Telefon",
+                                        (dispatch['phone'] ?? '-').toString()),
                                   ],
                                 );
                               },
@@ -242,9 +237,7 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
 
                           const SizedBox(height: 32),
 
-                          // ===================================================
-                          // ACTION BUTTON
-                          // ===================================================
+                          // Action Button - UploadDocumentsPage'e yönlendir
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
@@ -252,8 +245,10 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) =>
-                                        UploadDocumentsPage(jobId: jobDoc.id),
+                                    builder: (_) => UploadDocumentsPage(
+                                      jobId: jobDoc.id,
+                                      driverId: widget.uid,
+                                    ),
                                   ),
                                 );
                               },
@@ -289,9 +284,6 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
     );
   }
 
-  // ===================================================
-  // INFO ROW
-  // ===================================================
   Widget _infoRow(String label, String? value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -321,9 +313,6 @@ class _ActiveJobsPageState extends State<ActiveJobsPage> {
     );
   }
 
-  // ===================================================
-  // ROUTE ROW (KURUMSAL, RENKSİZ)
-  // ===================================================
   Widget _routeRow({
     required String title,
     required String value,

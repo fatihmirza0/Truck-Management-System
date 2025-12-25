@@ -666,6 +666,10 @@ exports.getLiveDriverLocations = onRequest(async (req, res) => {
     res.set("Access-Control-Allow-Origin", "*");
     res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
 
+    if (req.method === "OPTIONS") {
+      return res.status(204).send("");
+    }
+
     // AUTH HEADER
     const authHeader = req.headers.authorization || "";
     if (!authHeader.startsWith("Bearer ")) {
@@ -688,19 +692,23 @@ exports.getLiveDriverLocations = onRequest(async (req, res) => {
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    // RTDB READ (ADMIN SDK = RULE BYPASS)
+    // ✅ RTDB READ - Sadece lokasyon ve durum
     const snapshot = await admin
       .database()
       .ref("driver_locations")
       .get();
 
-    return res.json(snapshot.val() ?? {});
+    const locations = snapshot.val() ?? {};
+
+    // ℹ️ NOT: Kullanıcı adı ve plaka bilgisi Flutter tarafında Firestore'dan çekilecek
+    // Bu sayede her istekte tekrar Firestore sorgusu yapmaktan kaçınıyoruz
+
+    return res.json(locations);
   } catch (e) {
     console.error("❌ getLiveDriverLocations error:", e);
     return res.status(500).json({ error: "Internal error" });
   }
 });
-
 
 
 
