@@ -1,64 +1,274 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
-import 'live_driver.dart';
+// Model
+class LiveDriver {
+  final String driverId;
+  final String name;
+  final String plate;
+  final String phone;
+  final LatLng position;
+  final double heading;
+  final double speed;
+  final double accuracy;
+  final bool isMoving;
+  final String status;
+  final DateTime? lastSeen;
+  final String? currentJobId;
+  final List<LatLng> history;
 
+  LiveDriver({
+    required this.driverId,
+    required this.name,
+    required this.plate,
+    required this.phone,
+    required this.position,
+    required this.heading,
+    required this.speed,
+    required this.accuracy,
+    required this.isMoving,
+    required this.status,
+    this.lastSeen,
+    this.currentJobId,
+    required this.history,
+  });
+}
+
+// Service
 class LiveTrackingService {
   final _firestore = FirebaseFirestore.instance;
-  final _rtdb = FirebaseDatabase.instance.ref('driver_locations');
 
-  final Map<String, String> _nameCache = {};
-  final Map<String, String> _plateCache = {};
+  static const String _endpoint =
+      'https://us-central1-truck-dispatch-system.cloudfunctions.net/getLiveDriverLocations';
 
-  /// 🔥 Firestore’dan KİMLİK VERİLERİ
+  // Polling ayarı (saniye cinsinden)
+  static const int _pollingIntervalSeconds = 10; // ⭐ BURADAN DEĞİŞTİR
+
+  // Cache
+  final Map<String, Map<String, dynamic>> _userCache = {};
+
+  /// 🔥 Firestore'dan KİMLİK VERİLERİ (Preload)
   Future<void> preloadFirestore() async {
-    final users = await _firestore
-        .collection('users')
-        .where('role', isEqualTo: 'driver')
-        .where('isActive', isEqualTo: true)
-        .where('softDeleted', isEqualTo: false)
-        .get();
+    try {
+      final users = await _firestore
+          .collection('users')
+          .where('role', isEqualTo: 'driver')
+          .where('isActive', isEqualTo: true)
+          .where('softDeleted', isEqualTo: false)
+          .get();
 
-    for (final u in users.docs) {
-      final d = u.data();
+      for (final u in users.docs) {
+        final d = u.data();
 
-      _nameCache[u.id] = (d['name'] ?? '').toString();
-      _plateCache[u.id] = (d['activePlate'] ?? '').toString();
+        _userCache[u.id] = {
+          'name': d['name'] ?? '',
+          'phone': d['phone'] ?? '',
+          'activeVehicleId': d['activeVehicleId'],
+        };
+      }
+
+      // Plakaları da önbelleğe al
+      for (final entry in _userCache.entries) {
+        final vehicleId = entry.value['activeVehicleId'];
+        if (vehicleId != null) {
+          try {
+            final vehicleDoc = await _firestore
+                .collection('vehicles')
+                .doc(vehicleId)
+                .get();
+
+            if (vehicleDoc.exists) {
+              entry.value['plate'] = vehicleDoc.data()?['plate'] ?? '';
+            }
+          } catch (e) {
+            debugPrint('⚠️ Vehicle fetch error: $e');
+          }
+        }
+      }
+
+      debugPrint('✅ Preloaded ${_userCache.length} drivers');
+    } catch (e) {
+      debugPrint('❌ Preload error: $e');
     }
   }
 
-  /// 🔴 SADECE KONUM
-  Stream<List<LiveDriver>> liveDrivers() {
-    return _rtdb.onValue.map((event) {
-      if (event.snapshot.value == null) return [];
+  /// 📍 Firestore'dan tek sürücü bilgisi çek (cache miss durumunda)
+  Future<Map<String, dynamic>> _getUserData(String driverId) async {
+    // Cache'de varsa döndür
+    if (_userCache.containsKey(driverId)) {
+      return _userCache[driverId]!;
+    }
 
-      final raw = event.snapshot.value as Map<dynamic, dynamic>;
-      final List<LiveDriver> drivers = [];
+    // Yoksa Firestore'dan çek
+    try {
+      final userDoc = await _firestore.collection('users').doc(driverId).get();
 
-      raw.forEach((driverId, data) {
-        final current = data['current'];
-        final status = data['status'];
+      if (!userDoc.exists) {
+        return {'name': '', 'phone': '', 'plate': ''};
+      }
 
-        if (current == null) return;
+      final userData = userDoc.data()!;
+      String plate = '';
 
-        drivers.add(
-          LiveDriver(
-            driverId: driverId,
-            name: _nameCache[driverId] ?? '',
-            plate: _plateCache[driverId] ?? '—',
-            position: LatLng(
-              (current['latitude'] as num).toDouble(),
-              (current['longitude'] as num).toDouble(),
+      final activeVehicleId = userData['activeVehicleId'];
+      if (activeVehicleId != null) {
+        final vehicleDoc = await _firestore
+            .collection('vehicles')
+            .doc(activeVehicleId)
+            .get();
+
+        if (vehicleDoc.exists) {
+          plate = vehicleDoc.data()?['plate'] ?? '';
+        }
+      }
+
+      final result = {
+        'name': userData['name'] ?? '',
+        'phone': userData['phone'] ?? '',
+        'plate': plate,
+      };
+
+      // Cache'e ekle
+      _userCache[driverId] = result;
+      return result;
+    } catch (e) {
+      debugPrint('⚠️ getUserData error for $driverId: $e');
+      return {'name': '', 'phone': '', 'plate': ''};
+    }
+  }
+
+  /// 🌐 HTTP Polling ile RTDB verisi (Windows uyumlu)
+  Stream<List<LiveDriver>> liveDrivers() async* {
+    while (true) {
+      try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user == null) {
+          debugPrint('⚠️ User not authenticated');
+          yield <LiveDriver>[];
+          await Future.delayed(const Duration(seconds: 3));
+          continue;
+        }
+
+        final token = await user.getIdToken();
+
+        final res = await http.get(
+          Uri.parse(_endpoint),
+          headers: {'Authorization': 'Bearer $token'},
+        ).timeout(const Duration(seconds: 10));
+        if (res.statusCode == 401 || res.statusCode == 403) {
+          debugPrint('❌ Auth error: ${res.statusCode}');
+          yield <LiveDriver>[];
+          await Future.delayed(const Duration(seconds: 3));
+          continue;
+        }
+
+        if (res.statusCode != 200) {
+          debugPrint('⚠️ HTTP error: ${res.statusCode}');
+          yield <LiveDriver>[];
+          await Future.delayed(const Duration(seconds: 3));
+          continue;
+        }
+
+        if (res.body == 'null' || res.body.isEmpty || res.body == '{}') {
+          debugPrint('⚠️ Empty response body');
+          yield <LiveDriver>[];
+          await Future.delayed(const Duration(seconds: 3));
+          continue;
+        }
+
+        final raw = jsonDecode(res.body) as Map<String, dynamic>;
+        final List<LiveDriver> drivers = [];
+
+        for (final entry in raw.entries) {
+          final driverId = entry.key;
+          final data = entry.value as Map<String, dynamic>;
+
+          final current = data['current'];
+          final status = data['status'];
+
+          if (current == null) {
+            debugPrint('⚠️ Driver $driverId has no current location yet');
+            continue;
+          }
+
+          // Cache'den veya Firestore'dan kullanıcı bilgisi
+          final userData = await _getUserData(driverId);
+
+          // History
+          final List<LatLng> history = [];
+          if (data['history'] != null) {
+            try {
+              final h = data['history'] as Map<String, dynamic>;
+              final sorted = h.entries.toList()
+                ..sort((a, b) =>
+                    (a.value['timestamp'] ?? 0)
+                        .compareTo(b.value['timestamp'] ?? 0));
+
+              for (final e in sorted) {
+                history.add(
+                  LatLng(
+                    (e.value['latitude'] as num).toDouble(),
+                    (e.value['longitude'] as num).toDouble(),
+                  ),
+                );
+              }
+            } catch (e) {
+              debugPrint('⚠️ History parse error: $e');
+            }
+          }
+
+          // lastSeen
+          DateTime? lastSeen;
+          if (status != null && status['lastSeen'] != null) {
+            try {
+              lastSeen = DateTime.fromMillisecondsSinceEpoch(
+                status['lastSeen'] as int,
+              );
+            } catch (e) {
+              debugPrint('⚠️ lastSeen parse error: $e');
+            }
+          }
+
+          drivers.add(
+            LiveDriver(
+              driverId: driverId,
+              name: userData['name'] ?? '',
+              plate: userData['plate'] ?? '—',
+              phone: userData['phone'] ?? '',
+              position: LatLng(
+                (current['latitude'] as num).toDouble(),
+                (current['longitude'] as num).toDouble(),
+              ),
+              heading: (current['heading'] as num?)?.toDouble() ?? 0,
+              speed: (current['speed'] as num?)?.toDouble() ?? 0,
+              accuracy: (current['accuracy'] as num?)?.toDouble() ?? 0,
+              isMoving: current['isMoving'] as bool? ?? false,
+              status: status?['status']?.toString() ?? 'offline',
+              lastSeen: lastSeen,
+              currentJobId: status?['currentJobId']?.toString(),
+              history: history,
             ),
-            heading: (current['heading'] ?? 0).toDouble(),
-            isMoving: current['isMoving'] ?? false,
-            status: status?['status'] ?? 'offline',
-          ),
-        );
-      });
+          );
+        }
 
-      return drivers;
-    });
+        yield drivers;
+      } catch (e) {
+        debugPrint('❌ Fetch error: $e');
+        yield <LiveDriver>[];
+      }
+
+      // Polling interval
+      await Future.delayed(Duration(seconds: _pollingIntervalSeconds));
+    }
+  }
+
+  /// Cache'i temizle
+  void clearCache() {
+    _userCache.clear();
   }
 }

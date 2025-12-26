@@ -259,26 +259,47 @@ exports.jobAction = onRequest((req, res) => {
       const jobSnap = await jobRef.get();
       if (!jobSnap.exists) throw new Error("Job not found");
 
+      const job = jobSnap.data();
       const now = admin.firestore.FieldValue.serverTimestamp();
       const batch = db.batch();
 
       if (action === "approve") {
+        // Manager onayladığında driver BUSY kalır
         batch.update(jobRef, {
           status: "approved",
           "timestamps.reviewedAt": now,
           reviewedBy: decoded.uid,
         });
+
+        // Driver'ı BUSY yap (eğer değilse)
+        if (job.driverId) {
+          batch.update(db.collection("users").doc(job.driverId), {
+            jobStatus: "busy",
+            currentJobId: jobId,
+          });
+        }
+
       } else if (action === "reject") {
+        // Manager reddederse driver AVAILABLE olur ⭐
         if (!reason) throw new Error("Rejection reason required");
+
         batch.update(jobRef, {
           status: "rejected",
           rejectionReason: reason,
           "timestamps.reviewedAt": now,
           reviewedBy: decoded.uid,
         });
+
+        // Driver'ı AVAILABLE yap ⭐
+        if (job.driverId) {
+          batch.update(db.collection("users").doc(job.driverId), {
+            jobStatus: "available",
+            currentJobId: null,
+          });
+        }
+
       } else if (action === "complete") {
         // Driver sadece kendi işini tamamlayabilir
-        const job = jobSnap.data();
         if (caller.role === "driver" && job.driverId !== decoded.uid) {
           throw new Error("Unauthorized");
         }
@@ -288,16 +309,19 @@ exports.jobAction = onRequest((req, res) => {
           "timestamps.completedAt": now,
         });
 
-        // Driver'ı müsait yap
+        // Driver'ı AVAILABLE yap
         if (job.driverId) {
           batch.update(db.collection("users").doc(job.driverId), {
             jobStatus: "available",
+            currentJobId: null,
           });
         }
+
       } else {
         throw new Error("Invalid action");
       }
 
+      // Log kaydet
       batch.set(jobRef.collection("logs").doc(), {
         action,
         performedBy: decoded.uid,
@@ -306,14 +330,16 @@ exports.jobAction = onRequest((req, res) => {
       });
 
       await batch.commit();
+
+      console.log(`✅ Job ${action}: ${jobId} by ${decoded.uid}`);
       res.json({ success: true });
+
     } catch (e) {
-      console.error(e);
+      console.error("❌ jobAction error:", e);
       res.status(400).json({ error: e.message });
     }
   });
-});
-/* =========================================================
+});/* =========================================================
    SYNC ACTIVE PLATE FROM VEHICLES
 ========================================================= */
 exports.syncActivePlateFromVehicles = onRequest(async (req, res) => {

@@ -300,6 +300,28 @@ class DriverLocationService {
     }
   }
 
+  // Firestore'daki jobStatus ile RTDB'yi senkronize et
+  Future<void> syncJobStatus(String firestoreJobStatus) async {
+    String rtdbStatus;
+
+    switch (firestoreJobStatus) {
+      case 'available':
+        rtdbStatus = 'online';
+        break;
+      case 'busy':
+        rtdbStatus = 'busy';
+        break;
+      case 'offline':
+        rtdbStatus = 'offline';
+        break;
+      default:
+        rtdbStatus = 'online';
+    }
+
+    await _setStatus(rtdbStatus);
+    print('🔄 Synced Firestore ($firestoreJobStatus) → RTDB ($rtdbStatus)');
+  }
+
   bool get isTracking => _positionStream != null;
   bool get isMoving => _isMoving;
   Position? get lastPosition => _lastPosition;
