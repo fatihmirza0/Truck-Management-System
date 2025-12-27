@@ -264,23 +264,34 @@ exports.jobAction = onRequest((req, res) => {
       const batch = db.batch();
 
       if (action === "approve") {
-        // Manager onayladığında driver BUSY kalır
+        // ✅ Manager onayladığında driver BUSY olur
         batch.update(jobRef, {
           status: "approved",
           "timestamps.reviewedAt": now,
           reviewedBy: decoded.uid,
         });
 
-        // Driver'ı BUSY yap (eğer değilse)
         if (job.driverId) {
+          // Firestore: jobStatus = busy
           batch.update(db.collection("users").doc(job.driverId), {
             jobStatus: "busy",
             currentJobId: jobId,
           });
+
+          // RTDB: status = busy (otomatik senkronize olacak ama yine de güncelle)
+          try {
+            await admin.database().ref(`driver_locations/${job.driverId}/status`).update({
+              status: "busy",
+              lastSeen: admin.database.ServerValue.TIMESTAMP,
+              currentJobId: jobId,
+            });
+          } catch (rtdbError) {
+            console.error("⚠️ RTDB update error:", rtdbError);
+          }
         }
 
       } else if (action === "reject") {
-        // Manager reddederse driver AVAILABLE olur ⭐
+        // ✅ Manager reddederse driver AVAILABLE olur
         if (!reason) throw new Error("Rejection reason required");
 
         batch.update(jobRef, {
@@ -290,16 +301,39 @@ exports.jobAction = onRequest((req, res) => {
           reviewedBy: decoded.uid,
         });
 
-        // Driver'ı AVAILABLE yap ⭐
         if (job.driverId) {
+          // ✅ Firestore: jobStatus = available, currentJobId = null
           batch.update(db.collection("users").doc(job.driverId), {
             jobStatus: "available",
             currentJobId: null,
           });
+
+          // ✅ RTDB: status = online (eğer tracking aktifse)
+          try {
+            const rtdbRef = admin.database().ref(`driver_locations/${job.driverId}/status`);
+            const statusSnap = await rtdbRef.get();
+
+            if (statusSnap.exists()) {
+              const currentStatus = statusSnap.val().status;
+
+              // Sadece busy ise online'a çek
+              if (currentStatus === "busy") {
+                await rtdbRef.update({
+                  status: "online",
+                  lastSeen: admin.database.ServerValue.TIMESTAMP,
+                  currentJobId: null,
+                });
+                console.log(`✅ RTDB: ${job.driverId} -> online (job rejected)`);
+              }
+            }
+          } catch (rtdbError) {
+            console.error("⚠️ RTDB update error:", rtdbError);
+            // RTDB hatası critical değil, devam et
+          }
         }
 
       } else if (action === "complete") {
-        // Driver sadece kendi işini tamamlayabilir
+        // ✅ Driver sadece kendi işini tamamlayabilir
         if (caller.role === "driver" && job.driverId !== decoded.uid) {
           throw new Error("Unauthorized");
         }
@@ -309,12 +343,29 @@ exports.jobAction = onRequest((req, res) => {
           "timestamps.completedAt": now,
         });
 
-        // Driver'ı AVAILABLE yap
         if (job.driverId) {
+          // ✅ Firestore: jobStatus = available, currentJobId = null
           batch.update(db.collection("users").doc(job.driverId), {
             jobStatus: "available",
             currentJobId: null,
           });
+
+          // ✅ RTDB: status = online (eğer tracking aktifse)
+          try {
+            const rtdbRef = admin.database().ref(`driver_locations/${job.driverId}/status`);
+            const statusSnap = await rtdbRef.get();
+
+            if (statusSnap.exists()) {
+              await rtdbRef.update({
+                status: "online",
+                lastSeen: admin.database.ServerValue.TIMESTAMP,
+                currentJobId: null,
+              });
+              console.log(`✅ RTDB: ${job.driverId} -> online (job completed)`);
+            }
+          } catch (rtdbError) {
+            console.error("⚠️ RTDB update error:", rtdbError);
+          }
         }
 
       } else {

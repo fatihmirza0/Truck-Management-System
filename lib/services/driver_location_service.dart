@@ -2,13 +2,16 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class DriverLocationService {
   final String driverId;
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   StreamSubscription<Position>? _positionStream;
   Timer? _idleCheckTimer;
+  StreamSubscription<DocumentSnapshot>? _jobStatusListener;
 
   DateTime? _lastUpdateTime;
   DateTime? _lastMovementTime;
@@ -34,6 +37,24 @@ class DriverLocationService {
   Future<void> startTracking() async {
     if (kIsWeb) return;
 
+    // ✅ RTDB'deki mevcut durumu kontrol et
+    final currentStatusSnap = await _db
+        .child('driver_locations')
+        .child(driverId)
+        .child('status')
+        .get();
+
+    if (currentStatusSnap.exists) {
+      final statusData = currentStatusSnap.value as Map<dynamic, dynamic>;
+      final currentStatus = statusData['status'] as String?;
+
+      // Eğer zaten online/busy ise, tekrar başlatma
+      if (currentStatus == 'online' || currentStatus == 'busy') {
+        print('⚠️ Tracking zaten aktif: $currentStatus');
+        return;
+      }
+    }
+
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
@@ -44,7 +65,7 @@ class DriverLocationService {
 
     const LocationSettings settings = LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 10, // 10 metre hareket gerekli
+      distanceFilter: 10,
     );
 
     _positionStream = Geolocator.getPositionStream(locationSettings: settings)
@@ -58,7 +79,33 @@ class DriverLocationService {
           (_) => _checkIdleStatus(),
     );
 
-    await _setStatus('online');
+    // ✅ Firestore jobStatus'u dinle ve RTDB'yi senkronize et
+    _startJobStatusListener();
+
+    // ✅ Firestore'dan mevcut jobStatus'a göre başlangıç durumu belirle
+    final userDoc = await _firestore.collection('users').doc(driverId).get();
+    if (!userDoc.exists) {
+      print('❌ User document not found');
+      return;
+    }
+
+    final userData = userDoc.data()!;
+    final jobStatus = userData['jobStatus'] as String? ?? 'available';
+    final currentJobId = userData['currentJobId'] as String?;
+
+    // ✅ Firestore jobStatus → RTDB status mapping
+    // Firestore: available | busy
+    // RTDB: online | busy | offline
+    String rtdbStatus;
+    if (jobStatus == 'busy') {
+      rtdbStatus = 'busy';
+    } else {
+      // available ise RTDB'de online
+      rtdbStatus = 'online';
+    }
+
+    await _setStatus(rtdbStatus, jobId: currentJobId);
+    print('🚀 Tracking başlatıldı - RTDB: $rtdbStatus (Firestore jobStatus: $jobStatus)');
   }
 
   // ======================================================
@@ -67,9 +114,46 @@ class DriverLocationService {
   Future<void> stopTracking() async {
     await _positionStream?.cancel();
     _idleCheckTimer?.cancel();
+    _jobStatusListener?.cancel();
+
     _positionStream = null;
     _idleCheckTimer = null;
+    _jobStatusListener = null;
+
+    // ✅ RTDB'de offline yap (Firestore'da değişiklik yok)
     await _setStatus('offline');
+    print('🛑 Tracking durduruldu - RTDB: offline');
+  }
+
+  // ======================================================
+  // JOB STATUS LISTENER (FIRESTORE → RTDB SYNC)
+  // ======================================================
+  void _startJobStatusListener() {
+    _jobStatusListener = _firestore
+        .collection('users')
+        .doc(driverId)
+        .snapshots()
+        .listen((snapshot) async {
+      if (!snapshot.exists) return;
+
+      final data = snapshot.data()!;
+      final jobStatus = data['jobStatus'] as String? ?? 'available';
+      final currentJobId = data['currentJobId'] as String?;
+
+      // ✅ Firestore jobStatus → RTDB status mapping
+      // Firestore: available | busy
+      // RTDB: online | busy | offline
+      String rtdbStatus;
+      if (jobStatus == 'busy') {
+        rtdbStatus = 'busy';
+      } else {
+        // available ise RTDB'de online
+        rtdbStatus = 'online';
+      }
+
+      await _setStatus(rtdbStatus, jobId: currentJobId);
+      print('🔄 Sync: Firestore jobStatus=$jobStatus → RTDB status=$rtdbStatus');
+    });
   }
 
   // ======================================================
@@ -78,7 +162,7 @@ class DriverLocationService {
   Future<void> _onPosition(Position position) async {
     final now = DateTime.now();
 
-    // 1. Accuracy kontrolü - Kötü sinyali filtrele
+    // 1. Accuracy kontrolü
     if (position.accuracy > _minAccuracyThreshold) {
       print('⚠️ Poor GPS accuracy: ${position.accuracy.toStringAsFixed(1)}m - Skipping');
       return;
@@ -96,7 +180,6 @@ class DriverLocationService {
     double distanceMoved = 0.0;
 
     if (_lastSignificantPosition != null) {
-      // Son önemli pozisyondan bu yana kat edilen mesafe
       distanceMoved = Geolocator.distanceBetween(
         _lastSignificantPosition!.latitude,
         _lastSignificantPosition!.longitude,
@@ -104,23 +187,20 @@ class DriverLocationService {
         position.longitude,
       );
 
-      // Ortalama hız hesapla (son 3 pozisyondan)
       if (_recentPositions.length >= 3) {
         actualSpeed = _calculateAverageSpeed();
       }
 
-      // Hareket kontrolü: En az 15 metre hareket gerekli
-      _isMoving = distanceMoved >= _minDistanceForMovement && actualSpeed > 5.0; // 5 km/h
+      _isMoving = distanceMoved >= _minDistanceForMovement && actualSpeed > 5.0;
     } else {
       _lastSignificantPosition = position;
     }
 
-    // 4. Hareket değişimi - otomatik online/offline
+    // 4. Hareket değişimi
     if (_isMoving && !wasMoving) {
       _lastMovementTime = now;
       _lastSignificantPosition = position;
-      await _setStatus('online');
-      print('🚗 Hareket başladı - Online');
+      print('🚗 Hareket başladı');
     }
 
     // 5. Güncelleme aralığı kontrolü
@@ -128,13 +208,12 @@ class DriverLocationService {
       final diff = now.difference(_lastUpdateTime!).inSeconds;
       final minInterval = _isMoving ? _updateIntervalMoving : _updateIntervalIdle;
 
-      // Hareket durumu değişmediyse ve süre dolmadıysa skip
       if (diff < minInterval && wasMoving == _isMoving && distanceMoved < _minDistanceForMovement) {
         return;
       }
     }
 
-    // 6. Önemli pozisyon güncellemesi (hareket halindeyse)
+    // 6. Önemli pozisyon güncellemesi
     if (_isMoving && distanceMoved >= _minDistanceForMovement) {
       _lastSignificantPosition = position;
     }
@@ -146,7 +225,7 @@ class DriverLocationService {
     final data = {
       'latitude': position.latitude,
       'longitude': position.longitude,
-      'speed': _isMoving ? actualSpeed : 0.0, // Gerçek hız
+      'speed': _isMoving ? actualSpeed : 0.0,
       'heading': position.heading,
       'accuracy': position.accuracy,
       'isMoving': _isMoving,
@@ -159,18 +238,17 @@ class DriverLocationService {
       // Current location
       await baseRef.child('current').set(data);
 
-      // History - sadece anlamlı hareketlerde kaydet
+      // History
       if (_isMoving && distanceMoved >= _minDistanceForMovement) {
         await baseRef.child('history').push().set(data);
       } else if (_shouldSaveToHistory()) {
-        // Durağan halde de periyodik kaydet
         await baseRef.child('history').push().set(data);
       }
 
       // Cleanup old history
       await _cleanupHistory(baseRef.child('history'));
 
-      print('📍 Location updated - Moving: $_isMoving, Speed: ${actualSpeed.toStringAsFixed(1)} km/h, Distance: ${distanceMoved.toStringAsFixed(1)}m');
+      print('📍 Location updated - Moving: $_isMoving, Speed: ${actualSpeed.toStringAsFixed(1)} km/h');
     } catch (e) {
       print('❌ Location update error: $e');
     }
@@ -206,7 +284,6 @@ class DriverLocationService {
 
     if (totalTime == 0) return 0.0;
 
-    // m/s -> km/h
     final speedMps = totalDistance / totalTime;
     return speedMps * 3.6;
   }
@@ -220,9 +297,22 @@ class DriverLocationService {
     final now = DateTime.now();
     final idleDuration = now.difference(_lastMovementTime!).inSeconds;
 
-    // 5 dakika hareketsizse offline yap
-    if (idleDuration > _idleTimeoutSeconds && !_isMoving) {
+    // ✅ RTDB'deki mevcut durumu kontrol et
+    final currentStatusSnap = await _db
+        .child('driver_locations')
+        .child(driverId)
+        .child('status')
+        .get();
+
+    if (!currentStatusSnap.exists) return;
+
+    final statusData = currentStatusSnap.value as Map<dynamic, dynamic>;
+    final currentStatus = statusData['status'] as String?;
+
+    // ✅ Busy değilse ve 5 dakika hareketsizse offline yap
+    if (currentStatus != 'busy' && idleDuration > _idleTimeoutSeconds && !_isMoving) {
       await _setStatus('offline');
+      print('😴 5 dakika hareketsizlik - RTDB: offline');
     }
   }
 
@@ -230,7 +320,6 @@ class DriverLocationService {
   // HISTORY SAVE LOGIC
   // ======================================================
   bool _shouldSaveToHistory() {
-    // Her 5 dakikada bir kaydet (durağan haldeyken)
     if (_lastUpdateTime == null) return true;
     final diff = DateTime.now().difference(_lastUpdateTime!).inMinutes;
     return diff >= 5;
@@ -285,42 +374,12 @@ class DriverLocationService {
         .child('status')
         .set(statusData);
 
-    print('📍 Status updated: $status');
+    print('📍 RTDB Status updated: $status');
   }
 
   // ======================================================
   // PUBLIC METHODS
   // ======================================================
-  Future<void> updateDriverStatus(String status, {String? jobId}) async {
-    await _setStatus(status, jobId: jobId);
-
-    // Status değişikliğinde hareket zamanını güncelle
-    if (status == 'online' || status == 'busy') {
-      _lastMovementTime = DateTime.now();
-    }
-  }
-
-  // Firestore'daki jobStatus ile RTDB'yi senkronize et
-  Future<void> syncJobStatus(String firestoreJobStatus) async {
-    String rtdbStatus;
-
-    switch (firestoreJobStatus) {
-      case 'available':
-        rtdbStatus = 'online';
-        break;
-      case 'busy':
-        rtdbStatus = 'busy';
-        break;
-      case 'offline':
-        rtdbStatus = 'offline';
-        break;
-      default:
-        rtdbStatus = 'online';
-    }
-
-    await _setStatus(rtdbStatus);
-    print('🔄 Synced Firestore ($firestoreJobStatus) → RTDB ($rtdbStatus)');
-  }
 
   bool get isTracking => _positionStream != null;
   bool get isMoving => _isMoving;
@@ -329,6 +388,7 @@ class DriverLocationService {
   void dispose() {
     _positionStream?.cancel();
     _idleCheckTimer?.cancel();
+    _jobStatusListener?.cancel();
     _recentPositions.clear();
   }
 }
