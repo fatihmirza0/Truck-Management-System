@@ -48,14 +48,14 @@ class LiveTrackingService {
 
   static const int _pollingIntervalSeconds = 10;
 
-  // 🔥 Cache'ler
+  // 🔥 Caches
   final Map<String, Map<String, dynamic>> _userCache = {};
-  final Set<String> _busyDriversCache = {}; // ✅ Meşgul sürücüler cache'i
+  final Set<String> _busyDriversCache = {};
 
   // 🔥 Jobs Listener
   StreamSubscription<QuerySnapshot>? _jobsSubscription;
 
-  /// 🔥 Firestore'dan KİMLİK VERİLERİ (Preload)
+  /// 🔥 Preload Firestore Data
   Future<void> preloadFirestore() async {
     try {
       final users = await _firestore
@@ -75,7 +75,7 @@ class LiveTrackingService {
         };
       }
 
-      // Plakaları da önbelleğe al
+      // Load plates
       for (final entry in _userCache.entries) {
         final vehicleId = entry.value['activeVehicleId'];
         if (vehicleId != null) {
@@ -92,27 +92,23 @@ class LiveTrackingService {
         }
       }
 
-      debugPrint('✅ Preloaded ${_userCache.length} drivers from Firestore');
+      debugPrint('✅ Preloaded ${_userCache.length} drivers');
 
-      // 🔥 Jobs dinlemeye başla
+      // Start jobs listener
       _startJobsListener();
     } catch (e) {
       debugPrint('❌ Preload error: $e');
     }
   }
 
-  /// 🔥 JOBS LİSTENER (En Minimal Data Transfer)
+  /// 🔥 Jobs Listener
   void _startJobsListener() {
-    // ✅ Firestore'dan SADECE driverId field'larını dinle
-    // Not: Firestore snapshot'ları her zaman tüm document'i getirir,
-    // ama biz sadece ihtiyacımız olan field'ı extract ediyoruz
     _jobsSubscription = _firestore
         .collection('jobs')
         .where('status', whereIn: ['approved', 'in_progress'])
-        .snapshots(includeMetadataChanges: false) // ✅ Metadata değişikliklerini ignore et
+        .snapshots(includeMetadataChanges: false)
         .listen(
           (snapshot) {
-        // Sadece değişen documentleri işle (daha az CPU)
         if (snapshot.docChanges.isEmpty) return;
 
         for (final change in snapshot.docChanges) {
@@ -130,7 +126,7 @@ class LiveTrackingService {
           }
         }
 
-        debugPrint('🔄 Jobs cache updated: ${_busyDriversCache.length} busy drivers');
+        debugPrint('🔄 Jobs cache: ${_busyDriversCache.length} busy drivers');
       },
       onError: (e) {
         debugPrint('❌ Jobs listener error: $e');
@@ -138,19 +134,16 @@ class LiveTrackingService {
     );
   }
 
-  /// 📍 Firestore'dan tek sürücü bilgisi çek (cache miss durumunda)
+  /// 📍 Get User Data
   Future<Map<String, dynamic>> _getUserData(String driverId) async {
-    // Cache'de varsa döndür
     if (_userCache.containsKey(driverId)) {
       return _userCache[driverId]!;
     }
 
-    // Yoksa Firestore'dan çek
     try {
       final userDoc = await _firestore.collection('users').doc(driverId).get();
 
       if (!userDoc.exists) {
-        debugPrint('⚠️ User not found in Firestore: $driverId');
         return {'name': '', 'phone': '', 'plate': ''};
       }
 
@@ -173,17 +166,15 @@ class LiveTrackingService {
         'plate': plate,
       };
 
-      // Cache'e ekle
       _userCache[driverId] = result;
-      debugPrint('✅ Cached user data for: $driverId');
       return result;
     } catch (e) {
-      debugPrint('⚠️ getUserData error for $driverId: $e');
+      debugPrint('⚠️ getUserData error: $e');
       return {'name': '', 'phone': '', 'plate': ''};
     }
   }
 
-  /// 🌐 HTTP Polling ile RTDB verisi (Windows uyumlu)
+  /// 🌐 HTTP Polling - RTDB Data
   Stream<List<LiveDriver>> liveDrivers() async* {
     int errorCount = 0;
 
@@ -199,10 +190,12 @@ class LiveTrackingService {
 
         final token = await user.getIdToken();
 
-        final res = await http.get(
+        final res = await http
+            .get(
           Uri.parse(_endpoint),
           headers: {'Authorization': 'Bearer $token'},
-        ).timeout(const Duration(seconds: 10));
+        )
+            .timeout(const Duration(seconds: 10));
 
         if (res.statusCode == 401 || res.statusCode == 403) {
           debugPrint('❌ Auth error: ${res.statusCode}');
@@ -219,75 +212,89 @@ class LiveTrackingService {
         }
 
         if (res.body == 'null' || res.body.isEmpty || res.body == '{}') {
-          debugPrint('⚠️ Empty response body - No drivers tracking');
           yield <LiveDriver>[];
           await Future.delayed(Duration(seconds: _pollingIntervalSeconds));
           continue;
         }
 
+        // ✅ Parse new RTDB structure
         final raw = jsonDecode(res.body) as Map<String, dynamic>;
+
+        // Check if we have locations and history separately
+        final locations = raw['locations'] as Map<String, dynamic>?;
+        final history = raw['history'] as Map<String, dynamic>?;
+
+        if (locations == null) {
+          yield <LiveDriver>[];
+          await Future.delayed(Duration(seconds: _pollingIntervalSeconds));
+          continue;
+        }
+
         final List<LiveDriver> drivers = [];
 
-        for (final entry in raw.entries) {
+        for (final entry in locations.entries) {
           final driverId = entry.key;
           final data = entry.value as Map<String, dynamic>;
 
-          final current = data['current'];
-          final status = data['status'];
+          // Get user data from cache
+          final userData = await _getUserData(driverId);
 
-          if (current == null) {
-            debugPrint('⚠️ Driver $driverId has no current location yet');
+          // Parse location data (flat structure)
+          final lat = (data['lat'] as num?)?.toDouble();
+          final lng = (data['lng'] as num?)?.toDouble();
+
+          if (lat == null || lng == null) {
+            debugPrint('⚠️ Invalid location for $driverId');
             continue;
           }
 
-          // Cache'den kullanıcı bilgisi
-          final userData = await _getUserData(driverId);
-
-          // History
-          final List<LatLng> history = [];
-          if (data['history'] != null) {
+          // Get history for this driver
+          final List<LatLng> driverHistory = [];
+          if (history != null && history[driverId] != null) {
             try {
-              final h = data['history'] as Map<String, dynamic>;
+              final h = history[driverId] as Map<String, dynamic>;
               final sorted = h.entries.toList()
-                ..sort((a, b) => (a.value['timestamp'] ?? 0)
-                    .compareTo(b.value['timestamp'] ?? 0));
+                ..sort((a, b) {
+                  final aTime = (a.value as Map)['timestamp'] ?? 0;
+                  final bTime = (b.value as Map)['timestamp'] ?? 0;
+                  return aTime.compareTo(bTime);
+                });
 
               for (final e in sorted) {
-                history.add(
-                  LatLng(
-                    (e.value['latitude'] as num).toDouble(),
-                    (e.value['longitude'] as num).toDouble(),
-                  ),
-                );
+                final hLat = (e.value['lat'] as num?)?.toDouble();
+                final hLng = (e.value['lng'] as num?)?.toDouble();
+                if (hLat != null && hLng != null) {
+                  driverHistory.add(LatLng(hLat, hLng));
+                }
               }
             } catch (e) {
-              debugPrint('⚠️ History parse error for $driverId: $e');
+              debugPrint('⚠️ History parse error: $e');
             }
           }
 
-          // lastSeen
+          // LastSeen
           DateTime? lastSeen;
-          if (status != null && status['lastSeen'] != null) {
+          if (data['timestamp'] != null) {
             try {
               lastSeen = DateTime.fromMillisecondsSinceEpoch(
-                status['lastSeen'] as int,
+                data['timestamp'] as int,
               );
             } catch (e) {
-              debugPrint('⚠️ lastSeen parse error for $driverId: $e');
+              debugPrint('⚠️ Timestamp parse error: $e');
             }
           }
 
-          // ✅ RTDB'den gelen status: online | busy | offline
-          final rtdbStatus = status?['status']?.toString() ?? 'offline';
+          // Status from RTDB
+          final rtdbStatus = data['status']?.toString() ?? 'online';
 
-          // 🔥 CACHE'DEN İŞ DURUMU KONTROLÜ (Firestore'a istek yok!)
+          // Check if busy from cache
           final isBusy = _busyDriversCache.contains(driverId);
 
-          // ✅ Final status kararı
+          // Final status
           String finalStatus;
           if (rtdbStatus == 'offline') {
             finalStatus = 'offline';
-          } else if (isBusy) {
+          } else if (isBusy || rtdbStatus == 'busy') {
             finalStatus = 'busy';
           } else {
             finalStatus = 'online';
@@ -299,26 +306,21 @@ class LiveTrackingService {
               name: userData['name'] ?? '',
               plate: userData['plate'] ?? '—',
               phone: userData['phone'] ?? '',
-              position: LatLng(
-                (current['latitude'] as num).toDouble(),
-                (current['longitude'] as num).toDouble(),
-              ),
-              heading: (current['heading'] as num?)?.toDouble() ?? 0,
-              speed: (current['speed'] as num?)?.toDouble() ?? 0,
-              accuracy: (current['accuracy'] as num?)?.toDouble() ?? 0,
-              isMoving: current['isMoving'] as bool? ?? false,
+              position: LatLng(lat, lng),
+              heading: (data['heading'] as num?)?.toDouble() ?? 0,
+              speed: (data['speed'] as num?)?.toDouble() ?? 0,
+              accuracy: (data['accuracy'] as num?)?.toDouble() ?? 0,
+              isMoving: data['isMoving'] as bool? ?? false,
               status: finalStatus,
               lastSeen: lastSeen,
-              currentJobId: status?['currentJobId']?.toString(),
-              history: history,
+              currentJobId: null,
+              history: driverHistory,
             ),
           );
         }
 
-        // ✅ Başarılı fetch
         if (errorCount > 0) {
-          debugPrint(
-              '✅ Recovered from errors - ${drivers.length} drivers loaded');
+          debugPrint('✅ Recovered - ${drivers.length} drivers');
           errorCount = 0;
         }
 
@@ -328,21 +330,18 @@ class LiveTrackingService {
         debugPrint('❌ Fetch error ($errorCount): $e');
         yield <LiveDriver>[];
 
-        // Çok fazla hata varsa polling interval'i artır
         if (errorCount > 5) {
-          debugPrint('⚠️ Too many errors, increasing polling interval');
+          debugPrint('⚠️ Too many errors');
           await Future.delayed(const Duration(seconds: 30));
           errorCount = 0;
           continue;
         }
       }
 
-      // Polling interval
       await Future.delayed(Duration(seconds: _pollingIntervalSeconds));
     }
   }
 
-  /// Cache'i temizle ve listener'ı durdur
   void dispose() {
     _jobsSubscription?.cancel();
     _userCache.clear();
@@ -350,7 +349,6 @@ class LiveTrackingService {
     debugPrint('🧹 Service disposed');
   }
 
-  /// Cache'i temizle (eski metot uyumluluğu için)
   void clearCache() {
     _userCache.clear();
     _busyDriversCache.clear();

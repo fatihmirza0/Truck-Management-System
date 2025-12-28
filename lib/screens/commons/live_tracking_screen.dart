@@ -15,11 +15,12 @@ class LiveTrackingPanel extends StatefulWidget {
   State<LiveTrackingPanel> createState() => _LiveTrackingPanelState();
 }
 
-class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
+class _LiveTrackingPanelState extends State<LiveTrackingPanel>
+    with SingleTickerProviderStateMixin {
   final MapController _mapController = MapController();
   final LiveTrackingService _service = LiveTrackingService();
   final ValueNotifier<List<LiveDriver>> _driversNotifier =
-      ValueNotifier<List<LiveDriver>>([]);
+  ValueNotifier<List<LiveDriver>>([]);
 
   StreamSubscription<List<LiveDriver>>? _driversSubscription;
 
@@ -34,9 +35,15 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
   String _searchQuery = '';
   String _mapStyle = 'osm';
 
+  late AnimationController _pulseController;
+
   @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
     _initializeTracking();
   }
 
@@ -46,6 +53,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
     _service.dispose();
     _mapController.dispose();
     _driversNotifier.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -55,7 +63,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
       await _service.preloadFirestore();
 
       _driversSubscription = _service.liveDrivers().listen(
-        (drivers) {
+            (drivers) {
           if (!mounted) return;
           _driversNotifier.value = drivers;
 
@@ -118,9 +126,9 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
       final q = _searchQuery.toLowerCase();
       filtered = filtered
           .where((d) =>
-              d.name.toLowerCase().contains(q) ||
-              d.plate.toLowerCase().contains(q) ||
-              d.phone.toLowerCase().contains(q))
+      d.name.toLowerCase().contains(q) ||
+          d.plate.toLowerCase().contains(q) ||
+          d.phone.toLowerCase().contains(q))
           .toList();
     }
 
@@ -181,15 +189,19 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                       PolylineLayer(
                         polylines: allDrivers
                             .where((d) =>
-                                d.driverId == _selectedDriverId &&
-                                d.history.length > 1)
+                        d.driverId == _selectedDriverId &&
+                            d.history.length > 1)
                             .map((d) => Polyline(
-                                  points: d.history,
-                                  strokeWidth: 3,
-                                  color: const Color(0xFF3B82F6),
-                                  borderStrokeWidth: 1,
-                                  borderColor: Colors.white,
-                                ))
+                          points: d.history,
+                          strokeWidth: 3.5,
+                          color: const Color(0xFF3B82F6),
+                          borderStrokeWidth: 1.5,
+                          borderColor: Colors.white,
+                          gradientColors: [
+                            const Color(0xFF3B82F6).withOpacity(0.3),
+                            const Color(0xFF3B82F6),
+                          ],
+                        ))
                             .toList(),
                       ),
                     MarkerLayer(
@@ -206,12 +218,12 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                       Container(
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 20,
-                              offset: const Offset(0, 4),
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 24,
+                              offset: const Offset(0, 8),
                             ),
                           ],
                         ),
@@ -221,20 +233,21 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                             hintStyle: const TextStyle(
                               fontSize: 14,
                               color: Color(0xFF94A3B8),
+                              fontWeight: FontWeight.w500,
                             ),
                             prefixIcon: const Icon(
-                              Icons.search,
-                              size: 20,
+                              Icons.search_rounded,
+                              size: 22,
                               color: Color(0xFF64748B),
                             ),
                             suffixIcon: IconButton(
-                              icon: const Icon(Icons.filter_list, size: 20),
+                              icon: const Icon(Icons.tune_rounded, size: 22),
                               onPressed: () => _showMobileFilters(),
                             ),
                             border: InputBorder.none,
                             contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
+                              horizontal: 20,
+                              vertical: 16,
                             ),
                           ),
                           onChanged: (v) => setState(() => _searchQuery = v),
@@ -248,15 +261,15 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                             allDrivers
                                 .where((d) => d.status == 'online')
                                 .length,
-                            Colors.green,
-                            Icons.check_circle,
+                            const Color(0xFF10B981),
+                            Icons.check_circle_rounded,
                           ),
                           const SizedBox(width: 8),
                           _buildMobileStatChip(
                             'Meşgul',
                             allDrivers.where((d) => d.status == 'busy').length,
-                            Colors.orange,
-                            Icons.local_shipping,
+                            const Color(0xFFF59E0B),
+                            Icons.local_shipping_rounded,
                           ),
                           const SizedBox(width: 8),
                           _buildMobileStatChip(
@@ -264,8 +277,8 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                             allDrivers
                                 .where((d) => d.status == 'offline')
                                 .length,
-                            Colors.red,
-                            Icons.remove_circle_outline,
+                            const Color(0xFFEF4444),
+                            Icons.remove_circle_outline_rounded,
                           ),
                         ],
                       ),
@@ -277,59 +290,55 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                   right: 16,
                   child: Column(
                     children: [
-                      FloatingActionButton.small(
-                        heroTag: 'center',
-                        backgroundColor: Colors.white,
+                      _buildFloatingButton(
+                        icon: Icons.center_focus_strong_rounded,
                         onPressed: () => _fitMapToDrivers(allDrivers),
-                        child: const Icon(Icons.center_focus_strong,
-                            color: Color(0xFF1E3A5F)),
+                        tooltip: 'Merkeze Al',
                       ),
-                      const SizedBox(height: 8),
-                      FloatingActionButton.small(
-                        heroTag: 'layer',
-                        backgroundColor: Colors.white,
+                      const SizedBox(height: 12),
+                      _buildFloatingButton(
+                        icon: Icons.layers_rounded,
                         onPressed: _showMapStylePicker,
-                        child:
-                            const Icon(Icons.layers, color: Color(0xFF1E3A5F)),
+                        tooltip: 'Harita Stili',
                       ),
                     ],
                   ),
                 ),
                 if (filtered.isNotEmpty)
                   DraggableScrollableSheet(
-                    initialChildSize: 0.15,
-                    minChildSize: 0.15,
-                    maxChildSize: 0.7,
+                    initialChildSize: 0.18,
+                    minChildSize: 0.18,
+                    maxChildSize: 0.75,
                     builder: (context, scrollController) {
                       return Container(
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(20),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(24),
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black12,
-                              blurRadius: 20,
-                              offset: Offset(0, -4),
+                              color: Colors.black.withOpacity(0.12),
+                              blurRadius: 32,
+                              offset: const Offset(0, -8),
                             ),
                           ],
                         ),
                         child: Column(
                           children: [
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 12),
                             Container(
-                              width: 40,
-                              height: 4,
+                              width: 48,
+                              height: 5,
                               decoration: BoxDecoration(
-                                color: Colors.grey[300],
-                                borderRadius: BorderRadius.circular(2),
+                                color: const Color(0xFFE2E8F0),
+                                borderRadius: BorderRadius.circular(3),
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 16),
                             Padding(
                               padding:
-                                  const EdgeInsets.symmetric(horizontal: 16),
+                              const EdgeInsets.symmetric(horizontal: 20),
                               child: Row(
                                 children: [
                                   const Text(
@@ -338,26 +347,42 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
                                       color: Color(0xFF0F172A),
+                                      letterSpacing: -0.3,
                                     ),
                                   ),
                                   const Spacer(),
-                                  Text(
-                                    '${filtered.length}',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      color: Color(0xFF1E3A5F),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Color(0xFF1E3A5F),
+                                          Color(0xFF2D5F8D)
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      '${filtered.length}',
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white,
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 16),
                             Expanded(
                               child: ListView.builder(
                                 controller: scrollController,
                                 padding:
-                                    const EdgeInsets.symmetric(horizontal: 16),
+                                const EdgeInsets.symmetric(horizontal: 16),
                                 itemCount: filtered.length,
                                 itemBuilder: (_, i) =>
                                     _buildMobileDriverCard(filtered[i]),
@@ -371,8 +396,26 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                 if (_isLoading)
                   Container(
                     color: Colors.white,
-                    child: const Center(
-                      child: CircularProgressIndicator(),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const CircularProgressIndicator(
+                            strokeWidth: 3,
+                            valueColor:
+                            AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'Sistem başlatılıyor...',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
               ],
@@ -394,18 +437,22 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
               builder: (_, allDrivers, __) {
                 return Container(
                   padding: EdgeInsets.symmetric(
-                    horizontal: isTablet ? 16 : 24,
+                    horizontal: isTablet ? 20 : 28,
                     vertical: isTablet ? 16 : 20,
                   ),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1E3A5F), Color(0xFF2D5F8D)],
+                    color: Colors.white,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: const Color(0xFFE2E8F0).withOpacity(0.8),
+                        width: 1,
+                      ),
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 20,
-                        offset: const Offset(0, 4),
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
                       ),
                     ],
                   ),
@@ -414,13 +461,24 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFF1E3A5F), Color(0xFF2D5F8D)],
+                          ),
                           borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF1E3A5F).withOpacity(0.2),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
                         child: const Icon(
-                          Icons.map_outlined,
+                          Icons.map_rounded,
                           color: Colors.white,
-                          size: 24,
+                          size: 22,
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -431,29 +489,44 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                             const Text(
                               'Canlı Takip Sistemi',
                               style: TextStyle(
-                                fontSize: 22,
+                                fontSize: 20,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.white,
+                                color: Color(0xFF0F172A),
                                 letterSpacing: -0.5,
                               ),
                             ),
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: const BoxDecoration(
-                                    color: Colors.greenAccent,
-                                    shape: BoxShape.circle,
-                                  ),
+                                AnimatedBuilder(
+                                  animation: _pulseController,
+                                  builder: (_, __) {
+                                    return Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF10B981),
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFF10B981)
+                                                .withOpacity(
+                                                0.4 * _pulseController.value),
+                                            blurRadius: 8,
+                                            spreadRadius: 2 * _pulseController.value,
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
                                 ),
-                                const SizedBox(width: 6),
-                                Text(
+                                const SizedBox(width: 7),
+                                const Text(
                                   'Gerçek zamanlı güncelleniyor',
                                   style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.white.withOpacity(0.9),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: Color(0xFF64748B),
                                   ),
                                 ),
                               ],
@@ -465,43 +538,46 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                         _buildDesktopStatCard(
                           'Müsait',
                           allDrivers.where((d) => d.status == 'online').length,
-                          Icons.check_circle,
-                          Colors.green,
+                          Icons.check_circle_rounded,
+                          const Color(0xFF10B981),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 16),
                         _buildDesktopStatCard(
                           'Meşgul',
                           allDrivers.where((d) => d.status == 'busy').length,
-                          Icons.local_shipping,
-                          Colors.orange,
+                          Icons.local_shipping_rounded,
+                          const Color(0xFFF59E0B),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 16),
                         _buildDesktopStatCard(
                           'Pasif',
                           allDrivers.where((d) => d.status == 'offline').length,
-                          Icons.remove_circle_outline,
-                          Colors.red,
+                          Icons.remove_circle_outline_rounded,
+                          const Color(0xFFEF4444),
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 24),
                       ],
                       _buildHeaderButton(
-                        icon: _showHistory ? Icons.route : Icons.route_outlined,
+                        icon: _showHistory
+                            ? Icons.route_rounded
+                            : Icons.route_outlined,
                         label: 'Rota',
                         isActive: _showHistory,
                         onTap: () =>
                             setState(() => _showHistory = !_showHistory),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 12),
                       _buildHeaderButton(
-                        icon:
-                            _autoCenter ? Icons.gps_fixed : Icons.gps_not_fixed,
+                        icon: _autoCenter
+                            ? Icons.gps_fixed_rounded
+                            : Icons.gps_not_fixed_rounded,
                         label: 'Merkez',
                         isActive: _autoCenter,
                         onTap: () => setState(() => _autoCenter = !_autoCenter),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 12),
                       _buildHeaderButton(
-                        icon: Icons.layers_outlined,
+                        icon: Icons.layers_rounded,
                         label: 'Katman',
                         onTap: _showMapStylePicker,
                       ),
@@ -515,27 +591,28 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                 children: [
                   if (_showSidePanel)
                     AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      width: isTablet ? 320 : 400,
+                      duration: const Duration(milliseconds: 350),
+                      curve: Curves.easeInOutCubic,
+                      width: isTablet ? 340 : 420,
                       decoration: BoxDecoration(
                         color: Colors.white,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 10,
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 16,
                           ),
                         ],
                       ),
                       child: Column(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
                               color: const Color(0xFFFAFAFA),
                               border: Border(
                                 bottom: BorderSide(
                                   color:
-                                      const Color(0xFFE2E8F0).withOpacity(0.5),
+                                  const Color(0xFFE2E8F0).withOpacity(0.6),
                                 ),
                               ),
                             ),
@@ -547,36 +624,39 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                                     hintStyle: const TextStyle(
                                       fontSize: 14,
                                       color: Color(0xFF94A3B8),
+                                      fontWeight: FontWeight.w500,
                                     ),
                                     prefixIcon: const Icon(
-                                      Icons.search,
+                                      Icons.search_rounded,
                                       size: 20,
                                       color: Color(0xFF94A3B8),
                                     ),
                                     suffixIcon: _searchQuery.isNotEmpty
                                         ? IconButton(
-                                            icon: const Icon(Icons.clear,
-                                                size: 18),
-                                            onPressed: () => setState(
-                                                () => _searchQuery = ''),
-                                          )
+                                      icon: const Icon(
+                                        Icons.clear_rounded,
+                                        size: 18,
+                                      ),
+                                      onPressed: () => setState(
+                                              () => _searchQuery = ''),
+                                    )
                                         : null,
                                     filled: true,
                                     fillColor: Colors.white,
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(10),
+                                      borderRadius: BorderRadius.circular(12),
                                       borderSide: const BorderSide(
                                         color: Color(0xFFE2E8F0),
                                       ),
                                     ),
                                     enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(10),
+                                      borderRadius: BorderRadius.circular(12),
                                       borderSide: const BorderSide(
                                         color: Color(0xFFE2E8F0),
                                       ),
                                     ),
                                     focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(10),
+                                      borderRadius: BorderRadius.circular(12),
                                       borderSide: const BorderSide(
                                         color: Color(0xFF1E3A5F),
                                         width: 2,
@@ -590,18 +670,18 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                                   onChanged: (v) =>
                                       setState(() => _searchQuery = v),
                                 ),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 16),
                                 SingleChildScrollView(
                                   scrollDirection: Axis.horizontal,
                                   child: Row(
                                     children: [
-                                      _filterChip('Tümü', 'all', Icons.apps),
+                                      _filterChip('Tümü', 'all', Icons.apps_rounded),
                                       _filterChip('Meşgul', 'busy',
-                                          Icons.local_shipping),
+                                          Icons.local_shipping_rounded),
                                       _filterChip('Müsait', 'online',
-                                          Icons.check_circle),
+                                          Icons.check_circle_rounded),
                                       _filterChip('Pasif', 'offline',
-                                          Icons.remove_circle_outline),
+                                          Icons.remove_circle_outline_rounded),
                                     ],
                                   ),
                                 ),
@@ -621,7 +701,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
 
                                 return ListView.builder(
                                   padding:
-                                      const EdgeInsets.symmetric(vertical: 8),
+                                  const EdgeInsets.symmetric(vertical: 12),
                                   itemCount: filtered.length,
                                   itemBuilder: (_, i) =>
                                       _buildDriverCard(filtered[i]),
@@ -648,21 +728,26 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                                 TileLayer(
                                   urlTemplate: _getMapTileUrl(),
                                   userAgentPackageName:
-                                      'com.truck.management.system',
+                                  'com.truck.management.system',
                                 ),
                                 if (_showHistory && _selectedDriverId != null)
                                   PolylineLayer(
                                     polylines: allDrivers
                                         .where((d) =>
-                                            d.driverId == _selectedDriverId &&
-                                            d.history.length > 1)
+                                    d.driverId == _selectedDriverId &&
+                                        d.history.length > 1)
                                         .map((d) => Polyline(
-                                              points: d.history,
-                                              strokeWidth: 4,
-                                              color: const Color(0xFF3B82F6),
-                                              borderStrokeWidth: 2,
-                                              borderColor: Colors.white,
-                                            ))
+                                      points: d.history,
+                                      strokeWidth: 4.5,
+                                      color: const Color(0xFF3B82F6),
+                                      borderStrokeWidth: 2,
+                                      borderColor: Colors.white,
+                                      gradientColors: [
+                                        const Color(0xFF3B82F6)
+                                            .withOpacity(0.3),
+                                        const Color(0xFF3B82F6),
+                                      ],
+                                    ))
                                         .toList(),
                                   ),
                                 MarkerLayer(
@@ -673,26 +758,28 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                           },
                         ),
                         Positioned(
-                          left: 16,
-                          top: 16,
+                          left: 20,
+                          top: 20,
                           child: Material(
-                            elevation: 4,
-                            borderRadius: BorderRadius.circular(10),
+                            elevation: 8,
+                            borderRadius: BorderRadius.circular(14),
+                            shadowColor: Colors.black.withOpacity(0.2),
                             child: InkWell(
                               onTap: () => setState(
-                                  () => _showSidePanel = !_showSidePanel),
-                              borderRadius: BorderRadius.circular(10),
+                                      () => _showSidePanel = !_showSidePanel),
+                              borderRadius: BorderRadius.circular(14),
                               child: Container(
-                                padding: const EdgeInsets.all(12),
+                                padding: const EdgeInsets.all(14),
                                 decoration: BoxDecoration(
                                   color: Colors.white,
-                                  borderRadius: BorderRadius.circular(10),
+                                  borderRadius: BorderRadius.circular(14),
                                 ),
                                 child: Icon(
                                   _showSidePanel
-                                      ? Icons.chevron_left
-                                      : Icons.menu,
+                                      ? Icons.chevron_left_rounded
+                                      : Icons.menu_rounded,
                                   color: const Color(0xFF1E3A5F),
+                                  size: 24,
                                 ),
                               ),
                             ),
@@ -710,6 +797,38 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
     );
   }
 
+  Widget _buildFloatingButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+    required String tooltip,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        elevation: 8,
+        borderRadius: BorderRadius.circular(16),
+        shadowColor: Colors.black.withOpacity(0.3),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              icon,
+              color: const Color(0xFF1E3A5F),
+              size: 26,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildHeaderButton({
     required IconData icon,
     required String label,
@@ -718,25 +837,35 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
   }) {
     return Material(
       color: isActive
-          ? Colors.white.withOpacity(0.2)
-          : Colors.white.withOpacity(0.1),
+          ? const Color(0xFF1E3A5F).withOpacity(0.1)
+          : Colors.transparent,
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isActive
+                  ? const Color(0xFF1E3A5F).withOpacity(0.3)
+                  : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
+          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 18, color: Colors.white),
-              const SizedBox(width: 6),
+              Icon(icon, size: 18, color: const Color(0xFF64748B)),
+              const SizedBox(width: 7),
               Text(
                 label,
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  color: Color(0xFF64748B),
+                  letterSpacing: 0.1,
                 ),
               ),
             ],
@@ -749,24 +878,29 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
   Widget _buildDesktopStatCard(
       String label, int count, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(10),
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withOpacity(0.2),
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 16, color: Colors.white),
+              Icon(icon, size: 16, color: color),
               const SizedBox(width: 6),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white.withOpacity(0.8),
+                  color: color.withOpacity(0.9),
+                  letterSpacing: 0.2,
                 ),
               ),
             ],
@@ -774,10 +908,11 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
           const SizedBox(height: 4),
           Text(
             '$count',
-            style: const TextStyle(
-              fontSize: 24,
+            style: TextStyle(
+              fontSize: 22,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: color,
+              letterSpacing: -0.5,
             ),
           ),
         ],
@@ -789,21 +924,21 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
       String label, int count, Color color, IconData icon) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
         child: Column(
           children: [
-            Icon(icon, size: 18, color: color),
+            Icon(icon, size: 16, color: color),
             const SizedBox(height: 4),
             Text(
               '$count',
@@ -811,13 +946,15 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
                 color: color,
+                letterSpacing: -0.3,
               ),
             ),
             const SizedBox(height: 2),
             Text(
               label,
               style: const TextStyle(
-                fontSize: 10,
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
                 color: Color(0xFF64748B),
               ),
             ),
@@ -838,16 +975,16 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: selected ? const Color(0xFF1E3A5F) : const Color(0xFFE2E8F0),
-          width: selected ? 2 : 1,
+          width: selected ? 1.5 : 1,
         ),
         boxShadow: selected
             ? [
-                BoxShadow(
-                  color: const Color(0xFF1E3A5F).withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ]
+          BoxShadow(
+            color: const Color(0xFF1E3A5F).withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ]
             : null,
       ),
       child: Material(
@@ -859,174 +996,6 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
             _mapController.move(d.position, 15);
           },
           child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                Stack(
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: selected
-                              ? [
-                                  const Color(0xFF3B82F6),
-                                  const Color(0xFF2563EB)
-                                ]
-                              : [
-                                  const Color(0xFF1E3A5F),
-                                  const Color(0xFF2D5F8D)
-                                ],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Center(
-                        child: Text(
-                          d.name.isNotEmpty ? d.name[0].toUpperCase() : '?',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      right: -2,
-                      bottom: -2,
-                      child: Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: _getStatusColor(d.status),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              d.plate.isNotEmpty ? d.plate : d.name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 15,
-                                color: Color(0xFF0F172A),
-                              ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _getStatusColor(d.status).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              _getStatusLabel(d.status),
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: _getStatusColor(d.status),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      if (d.name.isNotEmpty && d.plate.isNotEmpty)
-                        Text(
-                          d.name,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF64748B),
-                          ),
-                        ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(
-                            d.isMoving
-                                ? Icons.directions_car
-                                : Icons.stop_circle,
-                            size: 13,
-                            color: d.isMoving
-                                ? Colors.green
-                                : const Color(0xFF94A3B8),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            d.isMoving
-                                ? '${d.speed.toStringAsFixed(0)} km/h'
-                                : 'Durgun',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: d.isMoving
-                                  ? Colors.green
-                                  : const Color(0xFF94A3B8),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Icon(
-                            Icons.access_time,
-                            size: 11,
-                            color: Colors.grey[400],
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            timeAgo,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMobileDriverCard(LiveDriver d) {
-    final selected = d.driverId == _selectedDriverId;
-    final timeAgo = d.lastSeen != null ? _getTimeAgo(d.lastSeen!) : '—';
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: selected ? const Color(0xFFF0F9FF) : const Color(0xFFFAFAFA),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: selected ? const Color(0xFF1E3A5F) : const Color(0xFFE2E8F0),
-          width: selected ? 2 : 1,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            setState(() => _selectedDriverId = d.driverId);
-            _mapController.move(d.position, 16);
-          },
-          child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
@@ -1036,8 +1005,18 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF1E3A5F), Color(0xFF2D5F8D)],
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: selected
+                              ? [
+                            const Color(0xFF3B82F6),
+                            const Color(0xFF2563EB)
+                          ]
+                              : [
+                            const Color(0xFF1E3A5F),
+                            const Color(0xFF2D5F8D)
+                          ],
                         ),
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -1072,23 +1051,63 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        d.plate.isNotEmpty ? d.plate : d.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                          color: Color(0xFF0F172A),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              d.plate.isNotEmpty ? d.plate : d.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                color: Color(0xFF0F172A),
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _getStatusColor(d.status).withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              _getStatusLabel(d.status),
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: _getStatusColor(d.status),
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
+                      if (d.name.isNotEmpty && d.plate.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            d.name,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
                       Row(
                         children: [
                           Icon(
                             d.isMoving
-                                ? Icons.directions_car
-                                : Icons.stop_circle,
+                                ? Icons.directions_car_rounded
+                                : Icons.stop_circle_rounded,
                             size: 12,
-                            color: d.isMoving ? Colors.green : Colors.grey,
+                            color: d.isMoving
+                                ? const Color(0xFF10B981)
+                                : const Color(0xFF94A3B8),
                           ),
                           const SizedBox(width: 4),
                           Text(
@@ -1097,14 +1116,147 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                                 : 'Durgun',
                             style: TextStyle(
                               fontSize: 11,
-                              color: d.isMoving ? Colors.green : Colors.grey,
+                              fontWeight: FontWeight.w600,
+                              color: d.isMoving
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFF94A3B8),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Icon(
+                            Icons.access_time_rounded,
+                            size: 11,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            timeAgo,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileDriverCard(LiveDriver d) {
+    final selected = d.driverId == _selectedDriverId;
+    final timeAgo = d.lastSeen != null ? _getTimeAgo(d.lastSeen!) : '—';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: selected ? const Color(0xFFF0F9FF) : const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: selected ? const Color(0xFF1E3A5F) : const Color(0xFFE2E8F0),
+          width: selected ? 1.5 : 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            setState(() => _selectedDriverId = d.driverId);
+            _mapController.move(d.position, 16);
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Stack(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1E3A5F), Color(0xFF2D5F8D)],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(
+                        child: Text(
+                          d.name.isNotEmpty ? d.name[0].toUpperCase() : '?',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      right: -1,
+                      bottom: -1,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: _getStatusColor(d.status),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        d.plate.isNotEmpty ? d.plate : d.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: Color(0xFF0F172A),
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            d.isMoving
+                                ? Icons.directions_car_rounded
+                                : Icons.stop_circle_rounded,
+                            size: 11,
+                            color: d.isMoving
+                                ? const Color(0xFF10B981)
+                                : Colors.grey,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            d.isMoving
+                                ? '${d.speed.toStringAsFixed(0)} km/h'
+                                : 'Durgun',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: d.isMoving
+                                  ? const Color(0xFF10B981)
+                                  : Colors.grey,
                             ),
                           ),
                           const SizedBox(width: 8),
                           Text(
                             timeAgo,
                             style: const TextStyle(
-                              fontSize: 10,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w500,
                               color: Color(0xFF94A3B8),
                             ),
                           ),
@@ -1115,17 +1267,18 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                 ),
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(d.status).withOpacity(0.1),
+                    color: _getStatusColor(d.status).withOpacity(0.12),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     _getStatusLabel(d.status),
                     style: TextStyle(
-                      fontSize: 9,
+                      fontSize: 8,
                       fontWeight: FontWeight.w700,
                       color: _getStatusColor(d.status),
+                      letterSpacing: 0.3,
                     ),
                   ),
                 ),
@@ -1138,19 +1291,31 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
   }
 
   Widget _buildLoadingState() {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E3A5F).withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+              ),
+            ),
           ),
-          SizedBox(height: 16),
-          Text(
+          const SizedBox(height: 24),
+          const Text(
             'Sürücüler yükleniyor...',
             style: TextStyle(
               color: Color(0xFF64748B),
-              fontSize: 14,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -1161,32 +1326,33 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
   Widget _buildErrorState() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(40),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: const Color(0xFFEF4444).withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.error_outline,
-                size: 48,
-                color: Colors.red,
+                Icons.error_outline_rounded,
+                size: 56,
+                color: Color(0xFFEF4444),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             Text(
               _errorMessage!,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: Colors.red,
-                fontSize: 14,
+                color: Color(0xFFEF4444),
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () {
                 setState(() {
@@ -1195,18 +1361,19 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                 });
                 _initializeTracking();
               },
-              icon: const Icon(Icons.refresh),
+              icon: const Icon(Icons.refresh_rounded),
               label: const Text('Yeniden Dene'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1E3A5F),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
+                  horizontal: 28,
+                  vertical: 14,
                 ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                elevation: 0,
               ),
             ),
           ],
@@ -1221,23 +1388,25 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(28),
             decoration: const BoxDecoration(
               color: Color(0xFFF8FAFC),
               shape: BoxShape.circle,
             ),
             child: Icon(
-              _searchQuery.isNotEmpty ? Icons.search_off : Icons.people_outline,
-              size: 56,
+              _searchQuery.isNotEmpty
+                  ? Icons.search_off_rounded
+                  : Icons.people_outline_rounded,
+              size: 64,
               color: const Color(0xFF94A3B8),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           Text(
             _searchQuery.isNotEmpty ? 'Sonuç bulunamadı' : 'Aktif sürücü yok',
             style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
               color: Color(0xFF64748B),
             ),
           ),
@@ -1247,7 +1416,8 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                 ? 'Farklı bir arama deneyin'
                 : 'Sürücüler takip başlattığında görünecek',
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
               color: Color(0xFF94A3B8),
             ),
           ),
@@ -1262,26 +1432,26 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
       padding: const EdgeInsets.only(right: 8),
       child: Material(
         color: selected ? const Color(0xFF1E3A5F) : const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           onTap: () => setState(() => _statusFilter = value),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   icon,
-                  size: 14,
+                  size: 16,
                   color: selected ? Colors.white : const Color(0xFF64748B),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Text(
                   label,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     color: selected ? Colors.white : const Color(0xFF64748B),
                   ),
                 ),
@@ -1296,8 +1466,8 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
   Marker _marker(LiveDriver d) {
     final selected = d.driverId == _selectedDriverId;
     return Marker(
-      width: 160,
-      height: 110,
+      width: 140,
+      height: 90,
       point: d.position,
       child: GestureDetector(
         onTap: () {
@@ -1307,41 +1477,54 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
         child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color:
-                      selected ? const Color(0xFF1E3A5F) : Colors.transparent,
-                  width: 2,
+                  color: selected
+                      ? const Color(0xFF1E3A5F)
+                      : const Color(0xFFE2E8F0),
+                  width: selected ? 2 : 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.15),
+                    color: Colors.black.withOpacity(0.12),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
                 ],
               ),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     d.plate.isNotEmpty ? d.plate : '—',
                     style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
                       color: Color(0xFF1E3A5F),
+                      letterSpacing: 0.2,
                     ),
                   ),
                   if (d.isMoving) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      '${d.speed.toStringAsFixed(0)} km/h',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.green[700],
+                    const SizedBox(height: 3),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: Text(
+                        '${d.speed.toStringAsFixed(0)} km/h',
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF10B981),
+                        ),
                       ),
                     ),
                   ],
@@ -1352,21 +1535,21 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
             Transform.rotate(
               angle: d.heading * pi / 180,
               child: Container(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
                   color: _getStatusColor(d.status),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
                       color: _getStatusColor(d.status).withOpacity(0.4),
-                      blurRadius: 8,
+                      blurRadius: 10,
                       spreadRadius: 2,
                     ),
                   ],
                 ),
                 child: const Icon(
-                  Icons.navigation,
-                  size: 20,
+                  Icons.navigation_rounded,
+                  size: 18,
                   color: Colors.white,
                 ),
               ),
@@ -1381,7 +1564,16 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Harita Stili'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text(
+          'Harita Stili',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 20,
+          ),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1395,6 +1587,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
   }
 
   Widget _mapStyleOption(String label, String value) {
+    final selected = _mapStyle == value;
     return ListTile(
       leading: Radio<String>(
         value: value,
@@ -1403,8 +1596,14 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
           setState(() => _mapStyle = v!);
           Navigator.pop(context);
         },
+        activeColor: const Color(0xFF1E3A5F),
       ),
-      title: Text(label),
+      title: Text(
+        label,
+        style: TextStyle(
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+        ),
+      ),
       onTap: () {
         setState(() => _mapStyle = value);
         Navigator.pop(context);
@@ -1416,11 +1615,11 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) => Container(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(28),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1428,15 +1627,16 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
               const Text(
                 'Filtrele',
                 style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
                   color: Color(0xFF0F172A),
+                  letterSpacing: -0.5,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: 10,
+                runSpacing: 10,
                 children: [
                   _mobileFilterChip('Tümü', 'all', setModalState),
                   _mobileFilterChip('Müsait', 'online', setModalState),
@@ -1444,18 +1644,18 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
                   _mobileFilterChip('Pasif', 'offline', setModalState),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 28),
               const Text(
                 'Harita Stili',
                 style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
                   color: Color(0xFF0F172A),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Wrap(
-                spacing: 8,
+                spacing: 10,
                 children: [
                   _mobileMapStyleChip('Standart', 'osm', setModalState),
                   _mobileMapStyleChip('Uydu', 'satellite', setModalState),
@@ -1480,10 +1680,13 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
         setModalState(() {});
       },
       selectedColor: const Color(0xFF1E3A5F),
+      backgroundColor: const Color(0xFFF8FAFC),
       labelStyle: TextStyle(
         color: selected ? Colors.white : const Color(0xFF64748B),
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w700,
+        fontSize: 13,
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     );
   }
 
@@ -1498,21 +1701,24 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel> {
         setModalState(() {});
       },
       selectedColor: const Color(0xFF1E3A5F),
+      backgroundColor: const Color(0xFFF8FAFC),
       labelStyle: TextStyle(
         color: selected ? Colors.white : const Color(0xFF64748B),
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w700,
+        fontSize: 13,
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     );
   }
 
   Color _getStatusColor(String status) {
     switch (status) {
       case 'online':
-        return Colors.green;
+        return const Color(0xFF10B981);
       case 'busy':
-        return Colors.orange;
+        return const Color(0xFFF59E0B);
       default:
-        return Colors.red;
+        return const Color(0xFFEF4444);
     }
   }
 

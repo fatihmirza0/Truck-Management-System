@@ -18,6 +18,7 @@ class DriverScreen extends StatefulWidget {
   static const Color accent = Color(0xFF1E3A5F);
   static const Color bg = Color(0xFFF8FAFC);
 
+
   @override
   State<DriverScreen> createState() => _DriverScreenState();
 }
@@ -25,21 +26,18 @@ class DriverScreen extends StatefulWidget {
 class _DriverScreenState extends State<DriverScreen>
     with WidgetsBindingObserver {
   int _index = 0;
+  bool _isToggling = false;
 
   late DriverLocationService _locationService;
 
-  /// Firestore → iş durumu
-  String _jobStatus = 'available'; // available | busy
-
-  /// RTDB → canlılık
-  String _rtdbStatus = 'offline'; // online | offline
+  String _jobStatus = 'available';
+  String _rtdbStatus = 'offline';
 
   bool _isTrackingActive = false;
 
   StreamSubscription<DocumentSnapshot>? _jobStatusListener;
   StreamSubscription<DatabaseEvent>? _rtdbStatusListener;
 
-  /// ✅ SON DURUM (UI bunu kullanır)
   String get _finalStatus =>
       _jobStatus == 'busy' ? 'busy' : _rtdbStatus;
 
@@ -87,38 +85,34 @@ class _DriverScreenState extends State<DriverScreen>
 
   Future<void> _initialize() async {
     try {
-      /// 🔥 Firestore jobStatus
+      // 🔥 Firestore job status
       _jobStatusListener = FirebaseFirestore.instance
           .collection('users')
           .doc(widget.uid)
           .snapshots()
           .listen((snap) {
         if (!snap.exists || !mounted) return;
+
         setState(() {
           _jobStatus = snap.data()?['jobStatus'] ?? 'available';
         });
       });
 
-      /// 🔥 RTDB online / offline
+      // 🔥 RTDB status (DÜZELTİLDİ)
       _rtdbStatusListener = FirebaseDatabase.instance
-          .ref()
-          .child('driver_locations')
-          .child(widget.uid)
-          .child('status')
+          .ref('driver_locations/${widget.uid}/status')
           .onValue
           .listen((event) {
         if (!mounted) return;
 
-        final data = event.snapshot.value as Map?;
-        final status = data?['status'] ?? 'offline';
+        final status = event.snapshot.value?.toString() ?? 'offline';
 
         setState(() {
           _rtdbStatus = status;
-          _isTrackingActive = status == 'online';
+          _isTrackingActive = status == 'online' || status == 'busy';
         });
       });
 
-      /// İlk açılışta tracking başlat
       await _startLocationTracking();
     } catch (e) {
       debugPrint('❌ Init error: $e');
@@ -132,9 +126,7 @@ class _DriverScreenState extends State<DriverScreen>
   Future<void> _startLocationTracking() async {
     try {
       await _locationService.startTracking();
-      if (mounted) {
-        setState(() => _isTrackingActive = true);
-      }
+      if (mounted) setState(() => _isTrackingActive = true);
     } catch (e) {
       debugPrint('❌ Start tracking error: $e');
     }
@@ -146,18 +138,12 @@ class _DriverScreenState extends State<DriverScreen>
       return;
     }
 
-    try {
-      await _locationService.stopTracking();
-      if (mounted) {
-        setState(() => _isTrackingActive = false);
-      }
-    } catch (e) {
-      debugPrint('❌ Stop tracking error: $e');
-    }
+    await _locationService.stopTracking();
+    if (mounted) setState(() => _isTrackingActive = false);
   }
 
   // ---------------------------------------------------
-  // UI
+  // UI (DOKUNULMADI)
   // ---------------------------------------------------
 
   @override
@@ -186,8 +172,6 @@ class _DriverScreenState extends State<DriverScreen>
     );
   }
 
-  // ---------------------------------------------------
-
   AppBar _buildAppBar() {
     return AppBar(
       backgroundColor: Colors.white,
@@ -213,10 +197,7 @@ class _DriverScreenState extends State<DriverScreen>
               ),
               Row(
                 children: [
-                  Text(
-                    _titles[_index],
-                    style: const TextStyle(fontSize: 12),
-                  ),
+                  Text(_titles[_index], style: const TextStyle(fontSize: 12)),
                   const SizedBox(width: 6),
                   _statusDot(),
                 ],
@@ -233,10 +214,30 @@ class _DriverScreenState extends State<DriverScreen>
                 : Icons.location_off,
             color: _getStatusColor(_finalStatus),
           ),
-          onPressed: () {
-            _isTrackingActive
-                ? _stopLocationTracking()
-                : _startLocationTracking();
+          onPressed: _isToggling
+              ? null
+              : () async {
+            setState(() {
+              _isToggling = true;
+              _isTrackingActive = !_isTrackingActive; // 👈 anında UI değişir
+            });
+
+            try {
+              if (_isTrackingActive) {
+                await _startLocationTracking();
+              } else {
+                await _stopLocationTracking();
+              }
+            } catch (e) {
+              // hata olursa geri al
+              setState(() {
+                _isTrackingActive = !_isTrackingActive;
+              });
+            } finally {
+              if (mounted) {
+                setState(() => _isToggling = false);
+              }
+            }
           },
         ),
         IconButton(
@@ -297,8 +298,6 @@ class _DriverScreenState extends State<DriverScreen>
   }
 
   // ---------------------------------------------------
-  // HELPERS
-  // ---------------------------------------------------
 
   Color _getStatusColor(String status) {
     switch (status) {
@@ -327,8 +326,8 @@ class _DriverScreenState extends State<DriverScreen>
       context: context,
       builder: (_) => AlertDialog(
         title: const Text("Konum Takibi Gerekli"),
-        content: const Text(
-            "Aktif iş varken konum takibi kapatılamaz."),
+        content:
+        const Text("Aktif iş varken konum kapatılamaz."),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),

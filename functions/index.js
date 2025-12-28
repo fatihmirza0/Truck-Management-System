@@ -4,6 +4,7 @@ const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/fi
 const {setGlobalOptions} = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const cors = require("cors")({ origin: true });
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 
 // Global ayarlar
 setGlobalOptions({maxInstances: 10});
@@ -280,7 +281,7 @@ exports.jobAction = onRequest((req, res) => {
 
           // RTDB: status = busy (otomatik senkronize olacak ama yine de güncelle)
           try {
-            await admin.database().ref(`driver_locations/${job.driverId}/status`).update({
+            await admin.database().ref(`locations/${job.driverId}/status`).update({
               status: "busy",
               lastSeen: admin.database.ServerValue.TIMESTAMP,
               currentJobId: jobId,
@@ -310,7 +311,7 @@ exports.jobAction = onRequest((req, res) => {
 
           // ✅ RTDB: status = online (eğer tracking aktifse)
           try {
-            const rtdbRef = admin.database().ref(`driver_locations/${job.driverId}/status`);
+            const rtdbRef = admin.database().ref(`locations/${job.driverId}/status`);
             const statusSnap = await rtdbRef.get();
 
             if (statusSnap.exists()) {
@@ -352,7 +353,7 @@ exports.jobAction = onRequest((req, res) => {
 
           // ✅ RTDB: status = online (eğer tracking aktifse)
           try {
-            const rtdbRef = admin.database().ref(`driver_locations/${job.driverId}/status`);
+            const rtdbRef = admin.database().ref(`locations/${job.driverId}/status`);
             const statusSnap = await rtdbRef.get();
 
             if (statusSnap.exists()) {
@@ -738,54 +739,131 @@ exports.clearFcmTokenHttp = onRequest((req, res) => {
   });
 });
 exports.getLiveDriverLocations = onRequest(async (req, res) => {
+  // ===============================
+  // CORS
+  // ===============================
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).send("");
+  }
+
   try {
-    // CORS
-    res.set("Access-Control-Allow-Origin", "*");
-    res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
-
-    if (req.method === "OPTIONS") {
-      return res.status(204).send("");
-    }
-
-    // AUTH HEADER
+    // ===============================
+    // AUTH
+    // ===============================
     const authHeader = req.headers.authorization || "";
     if (!authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Missing token" });
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const token = authHeader.replace("Bearer ", "");
-
-    // TOKEN VERIFY
     const decoded = await admin.auth().verifyIdToken(token);
 
-    // ROLE CHECK (Firestore'dan)
+    // ===============================
+    // ROLE CHECK
+    // ===============================
     const userSnap = await db.collection("users").doc(decoded.uid).get();
+
     if (!userSnap.exists) {
       return res.status(403).json({ error: "User not found" });
     }
 
     const user = userSnap.data();
-    if (user.role !== "manager" && user.role !== "dispatch") {
+
+    if (!["manager", "dispatch"].includes(user.role)) {
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    // ✅ RTDB READ - Sadece lokasyon ve durum
-    const snapshot = await admin
-      .database()
-      .ref("driver_locations")
-      .get();
+    // ===============================
+    // RTDB READ
+    // ===============================
+    const rtdb = admin.database();
 
-    const locations = snapshot.val() ?? {};
+    const [locationsSnap, historySnap] = await Promise.all([
+      rtdb.ref("locations").get(),
+      rtdb.ref("history").get(),
+    ]);
 
-    // ℹ️ NOT: Kullanıcı adı ve plaka bilgisi Flutter tarafında Firestore'dan çekilecek
-    // Bu sayede her istekte tekrar Firestore sorgusu yapmaktan kaçınıyoruz
+    const locations = locationsSnap.exists()
+      ? locationsSnap.val()
+      : {};
 
-    return res.json(locations);
-  } catch (e) {
-    console.error("❌ getLiveDriverLocations error:", e);
-    return res.status(500).json({ error: "Internal error" });
+    const history = historySnap.exists()
+      ? historySnap.val()
+      : {};
+
+    console.log(
+      `✅ Live drivers: ${Object.keys(locations).length}`
+    );
+
+    return res.status(200).json({
+      success: true,
+      locations,
+      history,
+    });
+
+  } catch (error) {
+    console.error("❌ getLiveDriverLocations error:", error);
+    return res.status(500).json({
+      error: "Internal server error",
+      message: error.message,
+    });
   }
 });
+exports.checkInactiveDrivers = onSchedule(
+  {
+    schedule: "every 1 minutes",
+    timeZone: "Europe/Istanbul",
+  },
+  async () => {
+    const now = Date.now();
+
+    const [locationSnap, usersSnap] = await Promise.all([
+      admin.database().ref("locations").get(),
+      admin.firestore().collection("users").get(),
+    ]);
+
+    if (!locationSnap.exists()) return;
+
+    const usersMap = {};
+    usersSnap.forEach((doc) => {
+      usersMap[doc.id] = doc.data();
+    });
+
+    const updates = {};
+
+    for (const driverSnap of Object.values(locationSnap.val())) {
+      const driverId = driverSnap.driverId ?? null;
+      if (!driverId) continue;
+
+      const user = usersMap[driverId];
+      if (!user || user.jobStatus !== "busy") continue;
+
+      const lastPing = driverSnap.timestamp ?? 0;
+      const diff = now - lastPing;
+
+      // ⏱ 60 saniye sessizlik
+      if (diff > 60_000 && driverSnap.status !== "offline") {
+        updates[`locations/${driverId}/status`] = "offline";
+        updates[`locations/${driverId}/offlineNotified`] = true;
+        updates[`locations/${driverId}/timestamp`] =
+          admin.database.ServerValue.TIMESTAMP;
+
+        console.log(`⚠️ ${driverId} offline`);
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await admin.database().ref().update(updates);
+      console.log("✅ Offline drivers updated");
+    }
+  }
+);
+
+
 
 
 

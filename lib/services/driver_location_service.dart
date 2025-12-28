@@ -1,394 +1,284 @@
-import 'package:firebase_database/firebase_database.dart';
-import 'package:geolocator/geolocator.dart';
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:firebase_database/firebase_database.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:flutter/foundation.dart';
+import 'package:latlong2/latlong.dart';
 
 class DriverLocationService {
   final String driverId;
+
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  StreamSubscription<Position>? _positionStream;
-  Timer? _idleCheckTimer;
-  StreamSubscription<DocumentSnapshot>? _jobStatusListener;
+  StreamSubscription<Position>? _positionSub;
+  StreamSubscription<DocumentSnapshot>? _jobSub;
+  Timer? _updateTimer;
 
-  DateTime? _lastUpdateTime;
-  DateTime? _lastMovementTime;
-  bool _isMoving = false;
   Position? _lastPosition;
-  Position? _lastSignificantPosition;
-  List<Position> _recentPositions = [];
+  LatLng? _lastSentPosition;
+  DateTime? _lastMoveTime;
 
-  // Ayarlar
-  static const int _idleTimeoutSeconds = 300; // 5 dakika hareketsizlik
-  static const double _minDistanceForMovement = 15.0; // 15 metre hareket gerekli
-  static const double _minAccuracyThreshold = 30.0; // 30 metre accuracy limiti
-  static const int _positionHistoryCount = 5; // Son 5 pozisyonu tut
-  static const int _updateIntervalMoving = 10; // saniye
-  static const int _updateIntervalIdle = 60; // saniye
-  static const int _historyRetentionHours = 24; // 24 saat geçmiş
+  bool _isTracking = false;
+  bool _isUpdating = false;
+  bool _isMoving = false;
+
+  String _jobStatus = 'available';
+  String _rtdbStatus = 'offline';
+
+  final List<Position> _buffer = [];
+
+  // ================= CONFIG =================
+  static const int _updateInterval = 10; // saniye
+  static const int _idleTimeout = 300; // 5 dk
+  static const int _bufferSize = 5;
+  static const double _minMoveDistance = 10;
+  static const double _minAccuracy = 30;
 
   DriverLocationService(this.driverId);
 
+  bool get isTracking => _isTracking;
+
   // ======================================================
-  // START TRACKING
+  // START
   // ======================================================
   Future<void> startTracking() async {
-    if (kIsWeb) return;
+    if (_isTracking) return;
+    _isTracking = true;
 
-    // ✅ RTDB'deki mevcut durumu kontrol et
-    final currentStatusSnap = await _db
-        .child('driver_locations')
-        .child(driverId)
-        .child('status')
-        .get();
-
-    if (currentStatusSnap.exists) {
-      final statusData = currentStatusSnap.value as Map<dynamic, dynamic>;
-      final currentStatus = statusData['status'] as String?;
-
-      // Eğer zaten online/busy ise, tekrar başlatma
-      if (currentStatus == 'online' || currentStatus == 'busy') {
-        print('⚠️ Tracking zaten aktif: $currentStatus');
-        return;
-      }
-    }
-
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
+    final permission = await Geolocator.requestPermission();
     if (permission == LocationPermission.deniedForever) {
-      throw Exception('Konum izni kalıcı olarak reddedildi');
+      throw Exception("Location permission denied");
     }
 
-    const LocationSettings settings = LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: 10,
+    await _initLocation();
+    await _setOnline();
+
+    _positionSub = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+      ),
+    ).listen(_onLocation);
+
+    _updateTimer = Timer.periodic(
+      const Duration(seconds: _updateInterval),
+          (_) => _updateToRTDB(),
     );
 
-    _positionStream = Geolocator.getPositionStream(locationSettings: settings)
-        .listen(_onPosition, onError: (e) {
-      print('❌ Position stream error: $e');
-    });
+    _listenJobStatus();
 
-    // Hareketsizlik kontrolü
-    _idleCheckTimer = Timer.periodic(
-      const Duration(seconds: 30),
-          (_) => _checkIdleStatus(),
-    );
-
-    // ✅ Firestore jobStatus'u dinle ve RTDB'yi senkronize et
-    _startJobStatusListener();
-
-    // ✅ Firestore'dan mevcut jobStatus'a göre başlangıç durumu belirle
-    final userDoc = await _firestore.collection('users').doc(driverId).get();
-    if (!userDoc.exists) {
-      print('❌ User document not found');
-      return;
-    }
-
-    final userData = userDoc.data()!;
-    final jobStatus = userData['jobStatus'] as String? ?? 'available';
-    final currentJobId = userData['currentJobId'] as String?;
-
-    // ✅ Firestore jobStatus → RTDB status mapping
-    // Firestore: available | busy
-    // RTDB: online | busy | offline
-    String rtdbStatus;
-    if (jobStatus == 'busy') {
-      rtdbStatus = 'busy';
-    } else {
-      // available ise RTDB'de online
-      rtdbStatus = 'online';
-    }
-
-    await _setStatus(rtdbStatus, jobId: currentJobId);
-    print('🚀 Tracking başlatıldı - RTDB: $rtdbStatus (Firestore jobStatus: $jobStatus)');
+    debugPrint("✅ Tracking started");
   }
 
   // ======================================================
-  // STOP TRACKING
+  // STOP
   // ======================================================
   Future<void> stopTracking() async {
-    await _positionStream?.cancel();
-    _idleCheckTimer?.cancel();
-    _jobStatusListener?.cancel();
+    if (!_isTracking) return;
 
-    _positionStream = null;
-    _idleCheckTimer = null;
-    _jobStatusListener = null;
+    _isTracking = false;
 
-    // ✅ RTDB'de offline yap (Firestore'da değişiklik yok)
-    await _setStatus('offline');
-    print('🛑 Tracking durduruldu - RTDB: offline');
+    await _positionSub?.cancel();
+    await _jobSub?.cancel();
+    _updateTimer?.cancel();
+
+    await _setOffline();
+
+    _positionSub = null;
+    _jobSub = null;
+    _updateTimer = null;
+
+    debugPrint("🛑 Tracking stopped");
   }
 
   // ======================================================
-  // JOB STATUS LISTENER (FIRESTORE → RTDB SYNC)
+  // INIT
   // ======================================================
-  void _startJobStatusListener() {
-    _jobStatusListener = _firestore
+  Future<void> _initLocation() async {
+    _lastPosition = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+  }
+
+  void _listenJobStatus() {
+    _jobSub = _firestore
         .collection('users')
         .doc(driverId)
         .snapshots()
-        .listen((snapshot) async {
-      if (!snapshot.exists) return;
-
-      final data = snapshot.data()!;
-      final jobStatus = data['jobStatus'] as String? ?? 'available';
-      final currentJobId = data['currentJobId'] as String?;
-
-      // ✅ Firestore jobStatus → RTDB status mapping
-      // Firestore: available | busy
-      // RTDB: online | busy | offline
-      String rtdbStatus;
-      if (jobStatus == 'busy') {
-        rtdbStatus = 'busy';
-      } else {
-        // available ise RTDB'de online
-        rtdbStatus = 'online';
+        .listen((doc) {
+      if (doc.exists) {
+        _jobStatus = doc['jobStatus'] ?? 'available';
       }
-
-      await _setStatus(rtdbStatus, jobId: currentJobId);
-      print('🔄 Sync: Firestore jobStatus=$jobStatus → RTDB status=$rtdbStatus');
     });
   }
 
   // ======================================================
-  // POSITION UPDATE
+  // LOCATION HANDLING
   // ======================================================
-  Future<void> _onPosition(Position position) async {
-    final now = DateTime.now();
+  void _onLocation(Position pos) {
+    if (pos.accuracy > _minAccuracy) return;
 
-    // 1. Accuracy kontrolü
-    if (position.accuracy > _minAccuracyThreshold) {
-      print('⚠️ Poor GPS accuracy: ${position.accuracy.toStringAsFixed(1)}m - Skipping');
-      return;
+    _lastPosition = pos;
+    _buffer.add(pos);
+
+    if (_buffer.length > _bufferSize) {
+      _buffer.removeAt(0);
     }
 
-    // 2. Son pozisyonları tut
-    _recentPositions.add(position);
-    if (_recentPositions.length > _positionHistoryCount) {
-      _recentPositions.removeAt(0);
-    }
+    _calculateMovement();
+  }
 
-    // 3. Mesafe bazlı hareket kontrolü
-    final wasMoving = _isMoving;
-    double actualSpeed = 0.0;
-    double distanceMoved = 0.0;
+  void _calculateMovement() {
+    if (_buffer.length < 2) return;
 
-    if (_lastSignificantPosition != null) {
-      distanceMoved = Geolocator.distanceBetween(
-        _lastSignificantPosition!.latitude,
-        _lastSignificantPosition!.longitude,
-        position.latitude,
-        position.longitude,
+    double distance = 0;
+    int time = 0;
+
+    for (int i = 1; i < _buffer.length; i++) {
+      final a = _buffer[i - 1];
+      final b = _buffer[i];
+
+      distance += Geolocator.distanceBetween(
+        a.latitude,
+        a.longitude,
+        b.latitude,
+        b.longitude,
       );
 
-      if (_recentPositions.length >= 3) {
-        actualSpeed = _calculateAverageSpeed();
-      }
-
-      _isMoving = distanceMoved >= _minDistanceForMovement && actualSpeed > 5.0;
-    } else {
-      _lastSignificantPosition = position;
+      time += b.timestamp.difference(a.timestamp).inSeconds;
     }
 
-    // 4. Hareket değişimi
-    if (_isMoving && !wasMoving) {
-      _lastMovementTime = now;
-      _lastSignificantPosition = position;
-      print('🚗 Hareket başladı');
+    if (time == 0) return;
+
+    final speed = (distance / time) * 3.6;
+    _isMoving = distance >= 15 && speed > 5;
+
+    if (_isMoving) {
+      _lastMoveTime = DateTime.now();
     }
+  }
 
-    // 5. Güncelleme aralığı kontrolü
-    if (_lastUpdateTime != null) {
-      final diff = now.difference(_lastUpdateTime!).inSeconds;
-      final minInterval = _isMoving ? _updateIntervalMoving : _updateIntervalIdle;
+  // ======================================================
+  // RTDB UPDATE
+  // ======================================================
+  Future<void> _updateToRTDB() async {
+    if (_lastPosition == null || _isUpdating) return;
+    _isUpdating = true;
 
-      if (diff < minInterval && wasMoving == _isMoving && distanceMoved < _minDistanceForMovement) {
+    try {
+      final now = DateTime.now();
+
+      // 🧠 idle → offline
+      if (_jobStatus == 'available' &&
+          _lastMoveTime != null &&
+          now.difference(_lastMoveTime!).inSeconds > _idleTimeout) {
+        if (_rtdbStatus != "offline") {
+          await _setOffline();
+        }
         return;
       }
-    }
 
-    // 6. Önemli pozisyon güncellemesi
-    if (_isMoving && distanceMoved >= _minDistanceForMovement) {
-      _lastSignificantPosition = position;
-    }
-
-    _lastUpdateTime = now;
-    _lastPosition = position;
-
-    // 7. Veriyi hazırla
-    final data = {
-      'latitude': position.latitude,
-      'longitude': position.longitude,
-      'speed': _isMoving ? actualSpeed : 0.0,
-      'heading': position.heading,
-      'accuracy': position.accuracy,
-      'isMoving': _isMoving,
-      'timestamp': ServerValue.timestamp,
-    };
-
-    try {
-      final baseRef = _db.child('driver_locations').child(driverId);
-
-      // Current location
-      await baseRef.child('current').set(data);
-
-      // History
-      if (_isMoving && distanceMoved >= _minDistanceForMovement) {
-        await baseRef.child('history').push().set(data);
-      } else if (_shouldSaveToHistory()) {
-        await baseRef.child('history').push().set(data);
+      if (_lastSentPosition != null) {
+        final d = Geolocator.distanceBetween(
+          _lastSentPosition!.latitude,
+          _lastSentPosition!.longitude,
+          _lastPosition!.latitude,
+          _lastPosition!.longitude,
+        );
+        if (d < _minMoveDistance) return;
       }
 
-      // Cleanup old history
-      await _cleanupHistory(baseRef.child('history'));
+      final data = {
+        "lat": _lastPosition!.latitude,
+        "lng": _lastPosition!.longitude,
+        "heading": _lastPosition!.heading.isNaN ? 0 : _lastPosition!.heading,
+        "speed": _isMoving ? _calcSpeed() : 0,
+        "accuracy": _lastPosition!.accuracy,
+        "isMoving": _isMoving,
+        "status": _jobStatus == 'busy' ? 'busy' : 'online',
+        "timestamp": ServerValue.timestamp,
+        "lastPing": ServerValue.timestamp, // 🔥 kritik
+      };
 
-      print('📍 Location updated - Moving: $_isMoving, Speed: ${actualSpeed.toStringAsFixed(1)} km/h');
-    } catch (e) {
-      print('❌ Location update error: $e');
+      await _db.child("locations/$driverId").update(data);
+
+      if (_isMoving) {
+        await _addToHistory(data);
+      }
+
+      _lastSentPosition =
+          LatLng(_lastPosition!.latitude, _lastPosition!.longitude);
+    } finally {
+      _isUpdating = false;
     }
   }
 
-  // ======================================================
-  // CALCULATE AVERAGE SPEED
-  // ======================================================
-  double _calculateAverageSpeed() {
-    if (_recentPositions.length < 2) return 0.0;
+  double _calcSpeed() {
+    if (_buffer.length < 2) return 0;
 
-    double totalDistance = 0.0;
-    int totalTime = 0;
+    double dist = 0;
+    int time = 0;
 
-    for (int i = 1; i < _recentPositions.length; i++) {
-      final prev = _recentPositions[i - 1];
-      final curr = _recentPositions[i];
-
-      final distance = Geolocator.distanceBetween(
-        prev.latitude,
-        prev.longitude,
-        curr.latitude,
-        curr.longitude,
+    for (int i = 1; i < _buffer.length; i++) {
+      dist += Geolocator.distanceBetween(
+        _buffer[i - 1].latitude,
+        _buffer[i - 1].longitude,
+        _buffer[i].latitude,
+        _buffer[i].longitude,
       );
-
-      final timeDiff = curr.timestamp.difference(prev.timestamp).inSeconds;
-
-      if (timeDiff > 0) {
-        totalDistance += distance;
-        totalTime += timeDiff;
-      }
+      time += _buffer[i]
+          .timestamp
+          .difference(_buffer[i - 1].timestamp)
+          .inSeconds;
     }
 
-    if (totalTime == 0) return 0.0;
-
-    final speedMps = totalDistance / totalTime;
-    return speedMps * 3.6;
+    return time == 0 ? 0 : (dist / time) * 3.6;
   }
 
   // ======================================================
-  // IDLE STATUS CHECK
+  // HISTORY
   // ======================================================
-  Future<void> _checkIdleStatus() async {
-    if (_lastMovementTime == null) return;
-
-    final now = DateTime.now();
-    final idleDuration = now.difference(_lastMovementTime!).inSeconds;
-
-    // ✅ RTDB'deki mevcut durumu kontrol et
-    final currentStatusSnap = await _db
-        .child('driver_locations')
-        .child(driverId)
-        .child('status')
-        .get();
-
-    if (!currentStatusSnap.exists) return;
-
-    final statusData = currentStatusSnap.value as Map<dynamic, dynamic>;
-    final currentStatus = statusData['status'] as String?;
-
-    // ✅ Busy değilse ve 5 dakika hareketsizse offline yap
-    if (currentStatus != 'busy' && idleDuration > _idleTimeoutSeconds && !_isMoving) {
-      await _setStatus('offline');
-      print('😴 5 dakika hareketsizlik - RTDB: offline');
-    }
+  Future<void> _addToHistory(Map data) async {
+    await _db.child("history/$driverId").push().set({
+      "lat": data['lat'],
+      "lng": data['lng'],
+      "timestamp": ServerValue.timestamp,
+    });
   }
 
   // ======================================================
-  // HISTORY SAVE LOGIC
+  // STATUS
   // ======================================================
-  bool _shouldSaveToHistory() {
-    if (_lastUpdateTime == null) return true;
-    final diff = DateTime.now().difference(_lastUpdateTime!).inMinutes;
-    return diff >= 5;
+  Future<void> _setOnline() async {
+    if (_lastPosition == null) return;
+
+    _rtdbStatus = _jobStatus == 'busy' ? 'busy' : 'online';
+
+    await _db.child("locations/$driverId").update({
+      "lat": _lastPosition!.latitude,
+      "lng": _lastPosition!.longitude,
+      "status": _rtdbStatus,
+      "timestamp": ServerValue.timestamp,
+      "offlineNotified": false,
+    });
+  }
+
+  Future<void> _setOffline() async {
+    _rtdbStatus = "offline";
+
+    await _db.child("locations/$driverId").update({
+      "status": "offline",
+      "timestamp": ServerValue.timestamp,
+    });
   }
 
   // ======================================================
-  // CLEAN OLD HISTORY
+  // CLEANUP
   // ======================================================
-  Future<void> _cleanupHistory(DatabaseReference historyRef) async {
-    try {
-      final snap = await historyRef.get();
-      if (!snap.exists) return;
-
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final limit = now - (_historyRetentionHours * 60 * 60 * 1000);
-
-      final data = snap.value as Map<dynamic, dynamic>;
-      final deleteOps = <Future<void>>[];
-
-      data.forEach((key, value) {
-        final ts = value['timestamp'] as int? ?? 0;
-        if (ts < limit) {
-          deleteOps.add(historyRef.child(key.toString()).remove());
-        }
-      });
-
-      if (deleteOps.isNotEmpty) {
-        await Future.wait(deleteOps);
-        print('🧹 Cleaned ${deleteOps.length} old history entries');
-      }
-    } catch (e) {
-      print('⚠️ History cleanup error: $e');
-    }
-  }
-
-  // ======================================================
-  // STATUS MANAGEMENT
-  // ======================================================
-  Future<void> _setStatus(String status, {String? jobId}) async {
-    final statusData = {
-      'status': status,
-      'lastSeen': ServerValue.timestamp,
-    };
-
-    if (jobId != null) {
-      statusData['currentJobId'] = jobId;
-    }
-
-    await _db
-        .child('driver_locations')
-        .child(driverId)
-        .child('status')
-        .set(statusData);
-
-    print('📍 RTDB Status updated: $status');
-  }
-
-  // ======================================================
-  // PUBLIC METHODS
-  // ======================================================
-
-  bool get isTracking => _positionStream != null;
-  bool get isMoving => _isMoving;
-  Position? get lastPosition => _lastPosition;
-
   void dispose() {
-    _positionStream?.cancel();
-    _idleCheckTimer?.cancel();
-    _jobStatusListener?.cancel();
-    _recentPositions.clear();
+    _positionSub?.cancel();
+    _jobSub?.cancel();
+    _updateTimer?.cancel();
   }
 }

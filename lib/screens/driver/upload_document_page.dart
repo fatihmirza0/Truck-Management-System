@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -79,7 +80,8 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
     });
 
     try {
-      final jobRef = FirebaseFirestore.instance.collection("jobs").doc(widget.jobId);
+      final jobRef =
+          FirebaseFirestore.instance.collection("jobs").doc(widget.jobId);
       final jobSnap = await jobRef.get();
 
       if (!jobSnap.exists) {
@@ -111,7 +113,8 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
               : snap.bytesTransferred / snap.totalBytes;
           if (!mounted) return;
           setState(() {
-            uploadProgress = (i / selectedFiles.length) + (p / selectedFiles.length);
+            uploadProgress =
+                (i / selectedFiles.length) + (p / selectedFiles.length);
           });
         });
 
@@ -130,9 +133,8 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
       });
 
       // 2. Driver'ı available yap ⭐
-      final userRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.driverId);
+      final userRef =
+          FirebaseFirestore.instance.collection('users').doc(widget.driverId);
 
       batch.update(userRef, {
         "jobStatus": "available",
@@ -140,11 +142,16 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
       });
 
       await batch.commit();
+      // 🔥 RTDB STATUS FIX
+      await FirebaseDatabase.instance
+          .ref("locations/${widget.driverId}")
+          .update({
+        "status": "online",
+        "timestamp": ServerValue.timestamp,
+      });
 
       if (!mounted) return;
       await _successDialog();
-
-      if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
       debugPrint("UPLOAD ERROR → $e");
@@ -321,48 +328,48 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
             child: selectedFiles.isEmpty
                 ? _emptyState()
                 : GridView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: selectedFiles.length,
-              gridDelegate:
-              const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-              ),
-              itemBuilder: (_, i) {
-                final file = selectedFiles[i];
-                return Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(
-                        File(file.path),
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                      ),
+                    padding: const EdgeInsets.all(16),
+                    itemCount: selectedFiles.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
                     ),
-                    Positioned(
-                      right: 6,
-                      top: 6,
-                      child: GestureDetector(
-                        onTap: () =>
-                            setState(() => selectedFiles.removeAt(i)),
-                        child: const CircleAvatar(
-                          radius: 14,
-                          backgroundColor: Colors.black54,
-                          child: Icon(
-                            Icons.close,
-                            size: 16,
-                            color: Colors.white,
+                    itemBuilder: (_, i) {
+                      final file = selectedFiles[i];
+                      return Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.file(
+                              File(file.path),
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
+                          Positioned(
+                            right: 6,
+                            top: 6,
+                            child: GestureDetector(
+                              onTap: () =>
+                                  setState(() => selectedFiles.removeAt(i)),
+                              child: const CircleAvatar(
+                                radius: 14,
+                                backgroundColor: Colors.black54,
+                                child: Icon(
+                                  Icons.close,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
           ),
 
           // Progress / Submit
@@ -370,59 +377,59 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
             padding: const EdgeInsets.all(16),
             child: isUploading
                 ? Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      "Yükleniyor...",
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            "Yükleniyor...",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            "%${(uploadProgress * 100).toStringAsFixed(0)}",
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: LinearProgressIndicator(
+                          value: uploadProgress,
+                          minHeight: 10,
+                          backgroundColor: Colors.grey[200],
+                          valueColor: const AlwaysStoppedAnimation(primary),
+                        ),
+                      ),
+                    ],
+                  )
+                : ElevatedButton.icon(
+                    onPressed: uploadFiles,
+                    icon: const Icon(Icons.check_circle),
+                    label: const Text(
+                      "Yüklemeyi Tamamla",
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    Text(
-                      "%${(uploadProgress * 100).toStringAsFixed(0)}",
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: primary,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 54),
+                      backgroundColor: primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: LinearProgressIndicator(
-                    value: uploadProgress,
-                    minHeight: 10,
-                    backgroundColor: Colors.grey[200],
-                    valueColor: const AlwaysStoppedAnimation(primary),
                   ),
-                ),
-              ],
-            )
-                : ElevatedButton.icon(
-              onPressed: uploadFiles,
-              icon: const Icon(Icons.check_circle),
-              label: const Text(
-                "Yüklemeyi Tamamla",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 54),
-                backgroundColor: primary,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
           ),
         ],
       ),
