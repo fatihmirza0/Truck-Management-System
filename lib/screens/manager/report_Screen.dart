@@ -774,28 +774,6 @@
       );
     }
 
-    Widget _buildMobileTableItem(String label, String value) {
-      return Row(
-        children: [
-          Text(
-            "$label: ",
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF64748B),
-            ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF0F172A),
-            ),
-          ),
-        ],
-      );
-    }
-
     DataColumn _buildDataColumn(String label, IconData icon) {
       return DataColumn(
         label: Row(

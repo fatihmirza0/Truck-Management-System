@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'job_service.dart';
-import 'job_documents.dart';
 
 
 class JobDetailPanel extends StatefulWidget {

@@ -248,27 +248,45 @@ class LiveTrackingService {
             continue;
           }
 
-          // Get history for this driver
+          // ✅ Get history for this driver - DÜZELTİLDİ
           final List<LatLng> driverHistory = [];
           if (history != null && history[driverId] != null) {
             try {
               final h = history[driverId] as Map<String, dynamic>;
-              final sorted = h.entries.toList()
-                ..sort((a, b) {
-                  final aTime = (a.value as Map)['timestamp'] ?? 0;
-                  final bTime = (b.value as Map)['timestamp'] ?? 0;
-                  return aTime.compareTo(bTime);
-                });
 
-              for (final e in sorted) {
-                final hLat = (e.value['lat'] as num?)?.toDouble();
-                final hLng = (e.value['lng'] as num?)?.toDouble();
+              // ✅ Tüm history noktalarını al
+              final historyPoints = <MapEntry<String, dynamic>>[];
+              h.forEach((key, value) {
+                if (value is Map && value['lat'] != null && value['lng'] != null) {
+                  historyPoints.add(MapEntry(key, value));
+                }
+              });
+
+              // ✅ Timestamp'e göre sırala (eskiden yeniye)
+              historyPoints.sort((a, b) {
+                final aTime = (a.value['timestamp'] as num?)?.toInt() ?? 0;
+                final bTime = (b.value['timestamp'] as num?)?.toInt() ?? 0;
+                return aTime.compareTo(bTime);
+              });
+
+              // ✅ Son 100 noktayı al (performans için)
+              final recentPoints = historyPoints.length > 100
+                  ? historyPoints.sublist(historyPoints.length - 100)
+                  : historyPoints;
+
+              for (final entry in recentPoints) {
+                final hLat = (entry.value['lat'] as num?)?.toDouble();
+                final hLng = (entry.value['lng'] as num?)?.toDouble();
                 if (hLat != null && hLng != null) {
                   driverHistory.add(LatLng(hLat, hLng));
                 }
               }
+
+              if (driverHistory.isNotEmpty) {
+                debugPrint('📍 History for $driverId: ${driverHistory.length} points');
+              }
             } catch (e) {
-              debugPrint('⚠️ History parse error: $e');
+              debugPrint('⚠️ History parse error for $driverId: $e');
             }
           }
 
@@ -341,7 +359,6 @@ class LiveTrackingService {
       await Future.delayed(Duration(seconds: _pollingIntervalSeconds));
     }
   }
-
   void dispose() {
     _jobsSubscription?.cancel();
     _userCache.clear();

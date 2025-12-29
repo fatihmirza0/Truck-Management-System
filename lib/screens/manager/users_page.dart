@@ -693,69 +693,6 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
   // ---------------------------------------------------------------------------
   // UI HELPERS - REFINED
   // ---------------------------------------------------------------------------
-  Widget _chipInfo(IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFFF8FAFC),
-            const Color(0xFFE2E8F0).withOpacity(0.2),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: const Color(0xFF64748B)),
-          const SizedBox(width: 7),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 260),
-            child: Text(
-              text,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13,
-                color: Color(0xFF475569),
-                fontWeight: FontWeight.w600,
-                height: 1.2,
-                letterSpacing: -0.1,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompactInfo(IconData icon, String? text) {
-    return Row(
-      children: [
-        Icon(icon, size: 13, color: const Color(0xFF64748B)),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            text ?? "-",
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFF64748B),
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              height: 1.2,
-              letterSpacing: -0.1,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildEmptyState(String message) {
     return Center(
       child: SingleChildScrollView(

@@ -109,23 +109,6 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
     return (route['unloadPort'] ?? job['unloadPort'] ?? '-').toString();
   }
 
-  String _cargoLabel(Map<String, dynamic> job) {
-    final cargo = (job['cargo'] as Map?)?.cast<String, dynamic>() ?? {};
-    final type = (cargo['type'] ?? '').toString().trim();
-    final desc = (cargo['description'] ?? '').toString().trim();
-    final w = cargo['weightKg'];
-    final weight = (w == null) ? '' : '${w.toString()} kg';
-
-    // kısa ve okunur başlık
-    final parts = <String>[];
-    if (type.isNotEmpty) parts.add(type);
-    if (weight.isNotEmpty) parts.add(weight);
-
-    final head = parts.isEmpty ? '-' : parts.join(' • ');
-    if (desc.isEmpty) return head;
-    return "$head — $desc";
-  }
-
   // ======================================================
   // FILTER LOGIC
   // ======================================================

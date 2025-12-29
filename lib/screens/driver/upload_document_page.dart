@@ -88,7 +88,7 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
         throw "Job bulunamadı";
       }
 
-      final jobData = (jobSnap.data() as Map<String, dynamic>?) ?? {};
+      final jobData = jobSnap.data() ?? {};
 
       // Zaten completed ise double submit engelle
       final status = (jobData["status"] ?? "").toString();

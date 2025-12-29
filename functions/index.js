@@ -6,10 +6,8 @@ const admin = require("firebase-admin");
 const cors = require("cors")({ origin: true });
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 
-// Global ayarlar
 setGlobalOptions({maxInstances: 10});
 
-// Firebase Admin'i SADECE BİR KEZ başlat
 admin.initializeApp();
 const db = admin.firestore();
 
@@ -242,7 +240,7 @@ exports.softDeleteUserHttp = onRequest((req, res) => {
 });
 
 /* =========================================================
-   JOB ACTIONS (APPROVE / REJECT / COMPLETE) - CALLABLE
+   JOB ACTIONS (APPROVE / REJECT / COMPLETE) ✅ DÜZELTİLDİ
 ========================================================= */
 exports.jobAction = onRequest((req, res) => {
   cors(req, res, async () => {
@@ -279,13 +277,15 @@ exports.jobAction = onRequest((req, res) => {
             currentJobId: jobId,
           });
 
-          // RTDB: status = busy (otomatik senkronize olacak ama yine de güncelle)
+          // ✅ RTDB: locations/${driverId} altına doğru güncelleme
           try {
-            await admin.database().ref(`locations/${job.driverId}/status`).update({
+            await admin.database().ref(`locations/${job.driverId}`).update({
               status: "busy",
-              lastSeen: admin.database.ServerValue.TIMESTAMP,
+              timestamp: admin.database.ServerValue.TIMESTAMP,
+              lastPing: admin.database.ServerValue.TIMESTAMP,
               currentJobId: jobId,
             });
+            console.log(`✅ RTDB: ${job.driverId} -> busy (job approved)`);
           } catch (rtdbError) {
             console.error("⚠️ RTDB update error:", rtdbError);
           }
@@ -303,7 +303,7 @@ exports.jobAction = onRequest((req, res) => {
         });
 
         if (job.driverId) {
-          // ✅ Firestore: jobStatus = available, currentJobId = null
+          // ✅ Firestore: jobStatus = available
           batch.update(db.collection("users").doc(job.driverId), {
             jobStatus: "available",
             currentJobId: null,
@@ -311,17 +311,18 @@ exports.jobAction = onRequest((req, res) => {
 
           // ✅ RTDB: status = online (eğer tracking aktifse)
           try {
-            const rtdbRef = admin.database().ref(`locations/${job.driverId}/status`);
+            const rtdbRef = admin.database().ref(`locations/${job.driverId}`);
             const statusSnap = await rtdbRef.get();
 
             if (statusSnap.exists()) {
-              const currentStatus = statusSnap.val().status;
+              const data = statusSnap.val();
 
               // Sadece busy ise online'a çek
-              if (currentStatus === "busy") {
+              if (data.status === "busy") {
                 await rtdbRef.update({
                   status: "online",
-                  lastSeen: admin.database.ServerValue.TIMESTAMP,
+                  timestamp: admin.database.ServerValue.TIMESTAMP,
+                  lastPing: admin.database.ServerValue.TIMESTAMP,
                   currentJobId: null,
                 });
                 console.log(`✅ RTDB: ${job.driverId} -> online (job rejected)`);
@@ -329,7 +330,6 @@ exports.jobAction = onRequest((req, res) => {
             }
           } catch (rtdbError) {
             console.error("⚠️ RTDB update error:", rtdbError);
-            // RTDB hatası critical değil, devam et
           }
         }
 
@@ -345,21 +345,22 @@ exports.jobAction = onRequest((req, res) => {
         });
 
         if (job.driverId) {
-          // ✅ Firestore: jobStatus = available, currentJobId = null
+          // ✅ Firestore: jobStatus = available
           batch.update(db.collection("users").doc(job.driverId), {
             jobStatus: "available",
             currentJobId: null,
           });
 
-          // ✅ RTDB: status = online (eğer tracking aktifse)
+          // ✅ RTDB: status = online
           try {
-            const rtdbRef = admin.database().ref(`locations/${job.driverId}/status`);
+            const rtdbRef = admin.database().ref(`locations/${job.driverId}`);
             const statusSnap = await rtdbRef.get();
 
             if (statusSnap.exists()) {
               await rtdbRef.update({
                 status: "online",
-                lastSeen: admin.database.ServerValue.TIMESTAMP,
+                timestamp: admin.database.ServerValue.TIMESTAMP,
+                lastPing: admin.database.ServerValue.TIMESTAMP,
                 currentJobId: null,
               });
               console.log(`✅ RTDB: ${job.driverId} -> online (job completed)`);
@@ -391,7 +392,9 @@ exports.jobAction = onRequest((req, res) => {
       res.status(400).json({ error: e.message });
     }
   });
-});/* =========================================================
+});
+
+/* =========================================================
    SYNC ACTIVE PLATE FROM VEHICLES
 ========================================================= */
 exports.syncActivePlateFromVehicles = onRequest(async (req, res) => {
@@ -444,10 +447,6 @@ exports.syncActivePlateFromVehicles = onRequest(async (req, res) => {
 /* =========================================================
    FCM NOTIFICATIONS - JOB CREATED
 ========================================================= */
-/* =========================================================
-   FCM NOTIFICATIONS - JOB CREATED
-   Dispatch iş oluşturur → SADECE MANAGER'A bildirim
-========================================================= */
 exports.notifyManagersOnJobCreated = onDocumentCreated(
     "jobs/{jobId}",
     async (event) => {
@@ -463,9 +462,6 @@ exports.notifyManagersOnJobCreated = onDocumentCreated(
       console.log("🚀 Yeni job oluşturuldu:", jobId);
 
       try {
-        // ========================================
-        // SADECE MANAGER'LARA BİLDİRİM GÖNDER
-        // ========================================
         const managersSnapshot = await db
             .collection("users")
             .where("role", "==", "manager")
@@ -666,7 +662,7 @@ exports.notifyOnJobStatusChange = onDocumentUpdated(
             console.log("✅ Manager'lara tamamlanma bildirimleri gönderildi");
           }
 
-          // B) DISPATCH'E (İŞİ ATAYAN) BİLDİRİM
+          // B) DISPATCH'E BİLDİRİM
           if (after.createdBy) {
             const dispatchDoc = await db
                 .collection("users")
@@ -703,8 +699,6 @@ exports.notifyOnJobStatusChange = onDocumentUpdated(
     },
 );
 
-
-
 exports.updateLastLoginHttp = onRequest((req, res) => {
   cors(req, res, async () => {
     try {
@@ -725,6 +719,7 @@ exports.updateLastLoginHttp = onRequest((req, res) => {
     }
   });
 });
+
 exports.clearFcmTokenHttp = onRequest((req, res) => {
   cors(req, res, async () => {
     try {
@@ -738,10 +733,8 @@ exports.clearFcmTokenHttp = onRequest((req, res) => {
     }
   });
 });
+
 exports.getLiveDriverLocations = onRequest(async (req, res) => {
-  // ===============================
-  // CORS
-  // ===============================
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
   res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -751,9 +744,6 @@ exports.getLiveDriverLocations = onRequest(async (req, res) => {
   }
 
   try {
-    // ===============================
-    // AUTH
-    // ===============================
     const authHeader = req.headers.authorization || "";
     if (!authHeader.startsWith("Bearer ")) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -762,9 +752,6 @@ exports.getLiveDriverLocations = onRequest(async (req, res) => {
     const token = authHeader.replace("Bearer ", "");
     const decoded = await admin.auth().verifyIdToken(token);
 
-    // ===============================
-    // ROLE CHECK
-    // ===============================
     const userSnap = await db.collection("users").doc(decoded.uid).get();
 
     if (!userSnap.exists) {
@@ -777,9 +764,6 @@ exports.getLiveDriverLocations = onRequest(async (req, res) => {
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    // ===============================
-    // RTDB READ
-    // ===============================
     const rtdb = admin.database();
 
     const [locationsSnap, historySnap] = await Promise.all([
@@ -787,17 +771,10 @@ exports.getLiveDriverLocations = onRequest(async (req, res) => {
       rtdb.ref("history").get(),
     ]);
 
-    const locations = locationsSnap.exists()
-      ? locationsSnap.val()
-      : {};
+    const locations = locationsSnap.exists() ? locationsSnap.val() : {};
+    const history = historySnap.exists() ? historySnap.val() : {};
 
-    const history = historySnap.exists()
-      ? historySnap.val()
-      : {};
-
-    console.log(
-      `✅ Live drivers: ${Object.keys(locations).length}`
-    );
+    console.log(`✅ Live drivers: ${Object.keys(locations).length}`);
 
     return res.status(200).json({
       success: true,
@@ -813,6 +790,10 @@ exports.getLiveDriverLocations = onRequest(async (req, res) => {
     });
   }
 });
+
+/* =========================================================
+   CHECK INACTIVE DRIVERS - ✅ BİLDİRİM EKLENDİ
+========================================================= */
 exports.checkInactiveDrivers = onSchedule(
   {
     schedule: "every 1 minutes",
@@ -820,50 +801,114 @@ exports.checkInactiveDrivers = onSchedule(
   },
   async () => {
     const now = Date.now();
+    const TIMEOUT_MS = 60_000; // 60 saniye
 
-    const [locationSnap, usersSnap] = await Promise.all([
-      admin.database().ref("locations").get(),
-      admin.firestore().collection("users").get(),
-    ]);
+    try {
+      const [locationSnap, usersSnap] = await Promise.all([
+        admin.database().ref("locations").get(),
+        admin.firestore().collection("users").where("role", "==", "driver").get(),
+      ]);
 
-    if (!locationSnap.exists()) return;
-
-    const usersMap = {};
-    usersSnap.forEach((doc) => {
-      usersMap[doc.id] = doc.data();
-    });
-
-    const updates = {};
-
-    for (const driverSnap of Object.values(locationSnap.val())) {
-      const driverId = driverSnap.driverId ?? null;
-      if (!driverId) continue;
-
-      const user = usersMap[driverId];
-      if (!user || user.jobStatus !== "busy") continue;
-
-      const lastPing = driverSnap.timestamp ?? 0;
-      const diff = now - lastPing;
-
-      // ⏱ 60 saniye sessizlik
-      if (diff > 60_000 && driverSnap.status !== "offline") {
-        updates[`locations/${driverId}/status`] = "offline";
-        updates[`locations/${driverId}/offlineNotified`] = true;
-        updates[`locations/${driverId}/timestamp`] =
-          admin.database.ServerValue.TIMESTAMP;
-
-        console.log(`⚠️ ${driverId} offline`);
+      if (!locationSnap.exists()) {
+        console.log("⚠️ No locations in RTDB");
+        return;
       }
-    }
 
-    if (Object.keys(updates).length > 0) {
-      await admin.database().ref().update(updates);
-      console.log("✅ Offline drivers updated");
+      // ✅ Users map oluştur
+      const usersMap = {};
+      usersSnap.forEach((doc) => {
+        usersMap[doc.id] = { id: doc.id, ...doc.data() };
+      });
+
+      const locations = locationSnap.val();
+      const updates = {};
+      const offlineDrivers = []; // Bildirim için
+
+      // ✅ DOĞRU LOOP - driverId = key
+      for (const [driverId, locationData] of Object.entries(locations)) {
+        const user = usersMap[driverId];
+
+        // Kullanıcı yoksa veya aktif değilse skip
+        if (!user || !user.isActive || user.softDeleted) {
+          continue;
+        }
+
+        // ✅ lastPing veya timestamp'i kontrol et
+        const lastPing = locationData.lastPing || locationData.timestamp || 0;
+        const diff = now - lastPing;
+
+        // ⏱️ 60 saniye sessizlik && status hala online/busy ise offline yap
+        if (diff > TIMEOUT_MS && locationData.status !== "offline") {
+          // Daha önce bildirim gönderilmediyse listeye ekle
+          if (!locationData.offlineNotified) {
+            offlineDrivers.push({
+              driverId,
+              name: user.name || "Bilinmeyen Sürücü",
+              plate: user.activePlate || "—",
+              inactiveSeconds: Math.round(diff / 1000),
+            });
+          }
+
+          updates[`locations/${driverId}/status`] = "offline";
+          updates[`locations/${driverId}/timestamp`] = admin.database.ServerValue.TIMESTAMP;
+          updates[`locations/${driverId}/offlineNotified`] = true;
+
+          console.log(`⚠️ ${driverId} -> offline (${Math.round(diff / 1000)}s inactive)`);
+        }
+      }
+
+      // ✅ Toplu güncelleme
+      if (Object.keys(updates).length > 0) {
+        await admin.database().ref().update(updates);
+        console.log(`✅ ${Object.keys(updates).length / 3} drivers set to offline`);
+      }
+
+      // ✅ Manager'lara bildirim gönder
+      if (offlineDrivers.length > 0) {
+        const managersSnapshot = await db
+          .collection("users")
+          .where("role", "==", "manager")
+          .get();
+
+        const tokens = [];
+        managersSnapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.fcmToken) {
+            tokens.push(data.fcmToken);
+          }
+        });
+
+        if (tokens.length > 0) {
+          const promises = offlineDrivers.flatMap((driver) =>
+            tokens.map((token) =>
+              admin.messaging().send({
+                notification: {
+                  title: "⚠️ Sürücü Çevrimdışı",
+                  body: `${driver.name} (${driver.plate}) ${driver.inactiveSeconds}s'dir pasif`,
+                },
+                data: {
+                  type: "driver_offline",
+                  driverId: driver.driverId,
+                  inactiveSeconds: driver.inactiveSeconds.toString(),
+                  click_action: "FLUTTER_NOTIFICATION_CLICK",
+                },
+                token: token,
+              }).catch((error) => {
+                console.error(`❌ FCM error for ${token.substring(0, 20)}...`, error.code);
+                return null;
+              })
+            )
+          );
+
+          const results = await Promise.all(promises);
+          const successCount = results.filter((r) => r !== null).length;
+          console.log(`📱 ${successCount} offline notifications sent`);
+        }
+      } else {
+        console.log("✅ All drivers are active");
+      }
+    } catch (error) {
+      console.error("❌ checkInactiveDrivers error:", error);
     }
   }
 );
-
-
-
-
-

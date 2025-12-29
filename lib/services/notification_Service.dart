@@ -72,7 +72,7 @@ class NotificationService {
 
       final res = await http.post(
         Uri.parse(
-          "https://us-central1-PROJECT_ID.cloudfunctions.net/saveFcmTokenHttp",
+          "https://us-central1-truck-dispatch-system.cloudfunctions.net/saveFcmTokenHttp",
         ),
         headers: {
           "Authorization": "Bearer $idToken",
@@ -126,6 +126,11 @@ class NotificationService {
         channelId = 'job_completed_channel';
         channelName = 'İş Tamamlama Bildirimleri';
         channelDesc = 'İş tamamlandığında gelen bildirimler';
+        break;
+      case 'driver_offline':
+        channelId = 'driver_offline_channel';
+        channelName = 'Sürücü Çevrimdışı';
+        channelDesc = 'Sürücü bağlantısı kesildi';
         break;
     }
 
@@ -198,6 +203,15 @@ class NotificationService {
   // ===============================
   static void _navigateBasedOnUserRole(String? jobId, String? type) async {
     if (jobId == null) return;
+    if (type == 'driver_offline') {
+      debugPrint("🚨 DRIVER OFFLINE NOTIFICATION CLICKED");
+
+      // Buraya istersen yönlendirme koyarsın
+      // Örn:
+      // Get.toNamed('/manager/live-tracking');
+
+      return;
+    }
 
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -259,7 +273,7 @@ class NotificationService {
         // Backend'den token'ı sil
         await http.post(
           Uri.parse(
-            "https://us-central1-PROJECT_ID.cloudfunctions.net/clearFcmTokenHttp",
+            "https://us-central1-truck-dispatch-system.cloudfunctions.net/clearFcmTokenHttp",
           ),
           headers: {
             "Authorization": "Bearer $idToken",

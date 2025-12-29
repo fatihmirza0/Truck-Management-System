@@ -18,9 +18,9 @@ import 'screens/driver/driver_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await _initServices();
 
   runApp(const MyApp());
-  await _initServices();
 }
 
 Future<void> _initServices() async {
