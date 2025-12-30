@@ -17,14 +17,12 @@ class NotificationService {
   // ===============================
   static Future<void> initialize() async {
     try {
-      // 🔔 Permission
       await _fcm.requestPermission(
         alert: true,
         badge: true,
         sound: true,
       );
 
-      // 🔔 Local notifications init
       const androidSettings =
       AndroidInitializationSettings('@mipmap/ic_launcher');
       const iosSettings = DarwinInitializationSettings();
@@ -39,18 +37,13 @@ class NotificationService {
         onDidReceiveNotificationResponse: _onNotificationTap,
       );
 
-      // 🔥 TOKEN → CLOUD FUNCTION
       await _sendTokenToBackend();
 
-      // 🔄 Token refresh
       _fcm.onTokenRefresh.listen((token) async {
         await _sendTokenToBackend(token: token);
       });
 
-      // 📬 Foreground messages
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-
-      // 📬 Background tap
       FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
     } catch (e) {
       debugPrint("🔕 NotificationService init skipped: $e");
@@ -58,7 +51,7 @@ class NotificationService {
   }
 
   // ===============================
-  // SEND TOKEN (NO FIRESTORE!)
+  // SEND TOKEN
   // ===============================
   static Future<void> _sendTokenToBackend({String? token}) async {
     try {
@@ -97,14 +90,12 @@ class NotificationService {
   // FOREGROUND MESSAGE
   // ===============================
   static Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    // Bildirim tipine göre özel ayarlar
     final notificationType = message.data['type'] ?? '';
 
     String channelId = 'default_channel';
     String channelName = 'Genel Bildirimler';
     String channelDesc = 'Genel bildirimler';
 
-    // Bildirim tipine göre kanal ayarla
     switch (notificationType) {
       case 'new_job':
         channelId = 'new_job_channel';
@@ -141,7 +132,6 @@ class NotificationService {
       importance: Importance.high,
       priority: Priority.high,
       icon: '@mipmap/ic_launcher',
-      // Ses ve titreşim
       playSound: true,
       enableVibration: true,
     );
@@ -164,6 +154,7 @@ class NotificationService {
       details,
       payload: jsonEncode({
         'jobId': message.data['jobId'],
+        'driverId': message.data['driverId'],
         'type': message.data['type'],
       }),
     );
@@ -177,12 +168,12 @@ class NotificationService {
       try {
         final data = jsonDecode(response.payload!);
         final jobId = data['jobId'];
+        final driverId = data['driverId'];
         final type = data['type'];
 
-        debugPrint("🔔 Notification tapped - JobID: $jobId, Type: $type");
+        debugPrint("🔔 Notification tapped - Type: $type");
 
-        _navigateBasedOnUserRole(jobId, type);
-
+        _navigateBasedOnUserRole(jobId, driverId, type);
       } catch (e) {
         debugPrint("❌ Payload parse error: $e");
       }
@@ -191,33 +182,23 @@ class NotificationService {
 
   static void _handleNotificationTap(RemoteMessage message) {
     final jobId = message.data['jobId'];
+    final driverId = message.data['driverId'];
     final type = message.data['type'];
 
-    debugPrint("🔔 Background notification tapped - JobID: $jobId, Type: $type");
+    debugPrint("🔔 Background notification tapped - Type: $type");
 
-    _navigateBasedOnUserRole(jobId, type);
+    _navigateBasedOnUserRole(jobId, driverId, type);
   }
 
   // ===============================
   // ROLE-BASED NAVIGATION
   // ===============================
-  static void _navigateBasedOnUserRole(String? jobId, String? type) async {
-    if (jobId == null) return;
-    if (type == 'driver_offline') {
-      debugPrint("🚨 DRIVER OFFLINE NOTIFICATION CLICKED");
-
-      // Buraya istersen yönlendirme koyarsın
-      // Örn:
-      // Get.toNamed('/manager/live-tracking');
-
-      return;
-    }
-
+  static void _navigateBasedOnUserRole(
+      String? jobId, String? driverId, String? type) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      // Kullanıcının rolünü al
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -227,28 +208,32 @@ class NotificationService {
 
       final role = userDoc.data()?['role'] as String?;
 
-      // Role göre navigation
+      // ✅ Driver Offline bildirimi için özel yönlendirme
+      if (type == 'driver_offline') {
+        debugPrint("🚨 DRIVER OFFLINE - Navigate to Live Tracking");
+        // Get.toNamed('/manager/live-tracking', arguments: {'driverId': driverId});
+        return;
+      }
+
+      if (jobId == null) return;
+
       switch (role) {
         case 'driver':
-        // Driver için iş detay sayfası
         // Get.toNamed('/driver/job-detail', arguments: {'jobId': jobId});
           debugPrint("🚛 Navigate to Driver Job Detail: $jobId");
           break;
 
         case 'manager':
-        // Manager için onay/red sayfası veya detay
         // Get.toNamed('/manager/job-detail', arguments: {'jobId': jobId});
           debugPrint("👔 Navigate to Manager Job Detail: $jobId");
           break;
 
         case 'dispatch':
-        // Dispatch için iş takip sayfası
         // Get.toNamed('/dispatch/job-detail', arguments: {'jobId': jobId});
           debugPrint("📋 Navigate to Dispatch Job Detail: $jobId");
           break;
 
         case 'admin':
-        // Admin için genel detay
         // Get.toNamed('/admin/job-detail', arguments: {'jobId': jobId});
           debugPrint("⚙️ Navigate to Admin Job Detail: $jobId");
           break;
@@ -270,7 +255,6 @@ class NotificationService {
       if (user != null) {
         final idToken = await user.getIdToken();
 
-        // Backend'den token'ı sil
         await http.post(
           Uri.parse(
             "https://us-central1-truck-dispatch-system.cloudfunctions.net/clearFcmTokenHttp",
@@ -282,7 +266,6 @@ class NotificationService {
         );
       }
 
-      // FCM token'ı sil
       await _fcm.deleteToken();
       debugPrint("✅ FCM token cleared");
     } catch (e) {

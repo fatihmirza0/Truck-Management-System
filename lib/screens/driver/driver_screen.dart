@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/services.dart';
 
 import 'active_jobs_page.dart';
 import 'completed_jobs_page.dart';
@@ -18,29 +19,35 @@ class DriverScreen extends StatefulWidget {
   static const Color accent = Color(0xFF1E3A5F);
   static const Color bg = Color(0xFFF8FAFC);
 
+
   @override
   State<DriverScreen> createState() => _DriverScreenState();
 }
 
 class _DriverScreenState extends State<DriverScreen>
     with WidgetsBindingObserver {
+  static const _channel = MethodChannel('location_service');
+
+
   int _index = 0;
   bool _isToggling = false;
 
   late DriverLocationService _locationService;
 
-  String _jobStatus = 'available';
-  String _rtdbStatus = 'offline';
+  String _jobStatus = 'available'; // Firestore
+  bool _isOnline = false; // RTDB
 
-  // 🔥 DÜZELTİLDİ: Tracking durumu artık RTDB status'undan belirleniyor
   StreamSubscription<DocumentSnapshot>? _jobStatusListener;
   StreamSubscription<DatabaseEvent>? _rtdbStatusListener;
 
-  // 🔥 Final status hesaplama (busy > online > offline)
-  String get _finalStatus => _jobStatus == 'busy' ? 'busy' : _rtdbStatus;
+  // ✅ FINAL STATUS
+  String get _finalStatus {
+    if (!_isOnline) return 'offline';
+    if (_jobStatus == 'busy') return 'busy';
+    return 'online';
+  }
 
-  // 🔥 Tracking durumu sadece status'tan okunuyor
-  bool get _isTrackingActive => _rtdbStatus == 'online' || _rtdbStatus == 'busy';
+  bool get _isTrackingActive => _isOnline;
 
   late final List<Widget> _pages = [
     ActiveJobsPage(uid: widget.uid),
@@ -58,6 +65,7 @@ class _DriverScreenState extends State<DriverScreen>
     WidgetsBinding.instance.addObserver(this);
     _locationService = DriverLocationService(widget.uid);
     _initialize();
+    startForegroundService();
   }
 
   @override
@@ -77,7 +85,13 @@ class _DriverScreenState extends State<DriverScreen>
       _startLocationTracking();
     }
   }
-
+  Future<void> startForegroundService() async {
+    try {
+      await _channel.invokeMethod('startService');
+    } catch (e) {
+      debugPrint("Service start error: $e");
+    }
+  }
   // ---------------------------------------------------
   // INIT
   // ---------------------------------------------------
@@ -97,20 +111,20 @@ class _DriverScreenState extends State<DriverScreen>
         });
       });
 
-      // 🔥 RTDB status - doğru path (locations/driverId/status)
+      // 🔥 RTDB isOnline
       _rtdbStatusListener = FirebaseDatabase.instance
-          .ref('locations/${widget.uid}/status')
+          .ref('locations/${widget.uid}/isOnline')
           .onValue
           .listen((event) {
         if (!mounted) return;
 
-        final status = event.snapshot.value?.toString() ?? 'offline';
+        final isOnline = event.snapshot.value as bool? ?? false;
 
         setState(() {
-          _rtdbStatus = status;
+          _isOnline = isOnline;
         });
 
-        debugPrint("📍 RTDB Status: $status | Job Status: $_jobStatus");
+        debugPrint("📍 RTDB isOnline: $isOnline | Job Status: $_jobStatus");
       });
 
       await _startLocationTracking();
@@ -216,11 +230,10 @@ class _DriverScreenState extends State<DriverScreen>
         ],
       ),
       actions: [
-        // 🔥 DÜZELTİLDİ: İkon artık sadece görsel, toggle mantığı değişti
         IconButton(
           icon: Icon(
-            Icons.location_on, // 🔥 HER ZAMAN AYNI İKON
-            color: _getStatusColor(_finalStatus), // 🔥 SADECE RENK DEĞİŞİYOR
+            Icons.location_on,
+            color: _getStatusColor(_finalStatus),
           ),
           onPressed: _isToggling
               ? null
@@ -229,10 +242,8 @@ class _DriverScreenState extends State<DriverScreen>
 
             try {
               if (_isTrackingActive) {
-                // Aktifse kapat
                 await _stopLocationTracking();
               } else {
-                // Kapalıysa aç
                 await _startLocationTracking();
               }
             } catch (e) {

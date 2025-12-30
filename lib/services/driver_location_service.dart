@@ -23,8 +23,7 @@ class DriverLocationService {
   bool _isUpdating = false;
   bool _isMoving = false;
 
-  String _jobStatus = 'available';
-  String _rtdbStatus = 'offline';
+  String _jobStatus = 'available'; // Firestore'dan gelecek
 
   final List<Position> _buffer = [];
 
@@ -53,6 +52,12 @@ class DriverLocationService {
 
     await _initLocation();
     await _setOnline();
+
+    // 🔥 KRİTİK SATIR (BUNU EKLİYORSUN)
+    _db.child("locations/$driverId").onDisconnect().update({
+      "isOnline": false,
+      "lastPing": ServerValue.timestamp,
+    });
 
     _positionSub = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
@@ -112,7 +117,6 @@ class DriverLocationService {
         if (_jobStatus != newStatus) {
           _jobStatus = newStatus;
           debugPrint("🔄 Job status changed: $_jobStatus");
-          // Status değiştiğinde hemen RTDB'yi güncelle
           _updateToRTDB();
         }
       }
@@ -166,7 +170,7 @@ class DriverLocationService {
   }
 
   // ======================================================
-  // RTDB UPDATE - DÜZELTİLDİ ✅
+  // RTDB UPDATE - YENİ YAPI ✅
   // ======================================================
   Future<void> _updateToRTDB() async {
     if (_lastPosition == null || _isUpdating) return;
@@ -180,9 +184,7 @@ class DriverLocationService {
           !_isMoving &&
           _lastMoveTime != null &&
           now.difference(_lastMoveTime!).inSeconds > _idleTimeout) {
-        if (_rtdbStatus != "offline") {
-          await _setOffline();
-        }
+        await _setOffline();
         return;
       }
 
@@ -196,18 +198,13 @@ class DriverLocationService {
           _lastPosition!.longitude,
         );
 
-        // 50m'den fazla hareket varsa history'ye ekle
         shouldAddToHistory = d >= 50;
 
         // Busy değilse ve minimum mesafe yoksa skip
         if (_jobStatus != 'busy' && d < _minMoveDistance && !_isMoving) return;
       } else {
-        // İlk konum, history'ye ekle
         shouldAddToHistory = true;
       }
-
-      // Status belirleme
-      final currentStatus = _jobStatus == 'busy' ? 'busy' : 'online';
 
       final data = {
         "lat": _lastPosition!.latitude,
@@ -216,23 +213,22 @@ class DriverLocationService {
         "speed": _isMoving ? _calcSpeed() : 0,
         "accuracy": _lastPosition!.accuracy,
         "isMoving": _isMoving,
-        "status": currentStatus,
+        "isOnline": true, // ✅ SADECE BOOLEAN
         "timestamp": ServerValue.timestamp,
         "lastPing": ServerValue.timestamp,
+        "offlineNotified": false, // ✅ Reset notification flag
       };
 
       await _db.child("locations/$driverId").update(data);
 
-      // ✅ Anlamlı mesafe varsa history'ye ekle
       if (shouldAddToHistory) {
         await _addToHistory(data);
-        debugPrint("📍 Added to history (${_lastSentPosition != null ? '${Geolocator.distanceBetween(_lastSentPosition!.latitude, _lastSentPosition!.longitude, _lastPosition!.latitude, _lastPosition!.longitude).toStringAsFixed(0)}m' : 'first'})");
+        debugPrint("📍 Added to history");
       }
 
-      _rtdbStatus = currentStatus;
       _lastSentPosition = LatLng(_lastPosition!.latitude, _lastPosition!.longitude);
 
-      debugPrint("📍 Location updated: $currentStatus (moving: $_isMoving)");
+      debugPrint("📍 Location updated: online (moving: $_isMoving)");
     } catch (e) {
       debugPrint("❌ RTDB update error: $e");
     } finally {
@@ -263,11 +259,10 @@ class DriverLocationService {
   }
 
   // ======================================================
-  // HISTORY - ✅ DÜZELTİLDİ
+  // HISTORY
   // ======================================================
   Future<void> _addToHistory(Map data) async {
     try {
-      // Push ile otomatik unique key oluştur
       await _db.child("history/$driverId").push().set({
         "lat": data['lat'],
         "lng": data['lng'],
@@ -279,34 +274,30 @@ class DriverLocationService {
   }
 
   // ======================================================
-  // STATUS
+  // STATUS - YENİ YAPI ✅
   // ======================================================
   Future<void> _setOnline() async {
     if (_lastPosition == null) return;
-
-    _rtdbStatus = _jobStatus == 'busy' ? 'busy' : 'online';
 
     try {
       await _db.child("locations/$driverId").update({
         "lat": _lastPosition!.latitude,
         "lng": _lastPosition!.longitude,
-        "status": _rtdbStatus,
+        "isOnline": true, // ✅ BOOLEAN
         "timestamp": ServerValue.timestamp,
         "lastPing": ServerValue.timestamp,
         "offlineNotified": false,
       });
-      debugPrint("✅ Set online: $_rtdbStatus");
+      debugPrint("✅ Set online");
     } catch (e) {
       debugPrint("❌ Set online error: $e");
     }
   }
 
   Future<void> _setOffline() async {
-    _rtdbStatus = "offline";
-
     try {
       await _db.child("locations/$driverId").update({
-        "status": "offline",
+        "isOnline": false, // ✅ BOOLEAN
         "timestamp": ServerValue.timestamp,
         "lastPing": ServerValue.timestamp,
       });

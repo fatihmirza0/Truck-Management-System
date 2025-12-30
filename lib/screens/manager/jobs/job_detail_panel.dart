@@ -560,6 +560,11 @@ class _JobDetailPanelState extends State<JobDetailPanel> {
         iconColor = const Color(0xFF3B82F6);
         actionLabel = "İş oluşturuldu";
         break;
+      case "approve":
+        icon = Icons.check_circle_outline;
+        iconColor = const Color(0xFF059669);
+        actionLabel = "Onaylandı";
+        break;
       case "approved":
         icon = Icons.check_circle_outline;
         iconColor = const Color(0xFF059669);

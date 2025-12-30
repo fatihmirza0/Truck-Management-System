@@ -17,7 +17,7 @@ class LiveDriver {
   final double speed;
   final double accuracy;
   final bool isMoving;
-  final String status;
+  final String status; // ✅ busy, online, offline
   final DateTime? lastSeen;
   final String? currentJobId;
   final List<LatLng> history;
@@ -48,16 +48,18 @@ class LiveTrackingService {
 
   static const int _pollingIntervalSeconds = 10;
 
-  // 🔥 Caches
   final Map<String, Map<String, dynamic>> _userCache = {};
-  final Set<String> _busyDriversCache = {};
+  final Map<String, String> _jobStatusCache = {}; // ✅ driverId -> jobStatus
 
-  // 🔥 Jobs Listener
   StreamSubscription<QuerySnapshot>? _jobsSubscription;
+  StreamSubscription<QuerySnapshot>? _usersSubscription;
+
+  bool _isActive = false; // ✅ Service aktif mi kontrolü
 
   /// 🔥 Preload Firestore Data
   Future<void> preloadFirestore() async {
     try {
+      // ✅ TEK SEFERLIK QUERY - Listener değil
       final users = await _firestore
           .collection('users')
           .where('role', isEqualTo: 'driver')
@@ -73,60 +75,80 @@ class LiveTrackingService {
           'phone': d['phone'] ?? '',
           'activeVehicleId': d['activeVehicleId'],
         };
+
+        // ✅ Job status cache
+        _jobStatusCache[u.id] = d['jobStatus'] ?? 'available';
       }
 
-      // Load plates
-      for (final entry in _userCache.entries) {
-        final vehicleId = entry.value['activeVehicleId'];
-        if (vehicleId != null) {
-          try {
-            final vehicleDoc =
-            await _firestore.collection('vehicles').doc(vehicleId).get();
+      // ✅ TEK SEFERLIK QUERY - Vehicles
+      final vehicleIds = _userCache.values
+          .map((v) => v['activeVehicleId'])
+          .where((id) => id != null)
+          .toSet();
 
-            if (vehicleDoc.exists) {
-              entry.value['plate'] = vehicleDoc.data()?['plate'] ?? '';
+      if (vehicleIds.isNotEmpty) {
+        final vehiclesSnap = await _firestore
+            .collection('vehicles')
+            .where(FieldPath.documentId, whereIn: vehicleIds.toList())
+            .get();
+
+        for (final vehicleDoc in vehiclesSnap.docs) {
+          final plate = vehicleDoc.data()['plate'] ?? '';
+
+          // Cache'de bu vehicle'ı kullanan driver'ı bul
+          _userCache.forEach((driverId, data) {
+            if (data['activeVehicleId'] == vehicleDoc.id) {
+              data['plate'] = plate;
             }
-          } catch (e) {
-            debugPrint('⚠️ Vehicle fetch error: $e');
-          }
+          });
         }
       }
 
       debugPrint('✅ Preloaded ${_userCache.length} drivers');
 
-      // Start jobs listener
-      _startJobsListener();
+      // ✅ Listener'ları başlat (sadece service aktifken)
+      _startListeners();
     } catch (e) {
       debugPrint('❌ Preload error: $e');
     }
   }
 
-  /// 🔥 Jobs Listener
+  /// 🔥 Listener'ları başlat
+  void _startListeners() {
+    if (!_isActive) {
+      _isActive = true;
+      _startJobsListener();
+      _startUsersListener();
+    }
+  }
+
+  /// 🔥 Jobs Listener (SADECE busy cache için)
   void _startJobsListener() {
+    _jobsSubscription?.cancel(); // Önceki listener varsa iptal et
+
     _jobsSubscription = _firestore
         .collection('jobs')
         .where('status', whereIn: ['approved', 'in_progress'])
-        .snapshots(includeMetadataChanges: false)
+        .snapshots(includeMetadataChanges: false) // ✅ Sadece server değişiklikleri
         .listen(
           (snapshot) {
-        if (snapshot.docChanges.isEmpty) return;
-
+        // ✅ SADECE DEĞİŞİKLİKLERİ İŞLE (tüm documents değil)
         for (final change in snapshot.docChanges) {
           final driverId = change.doc.get('driverId');
           if (driverId != null && driverId is String) {
             switch (change.type) {
               case DocumentChangeType.added:
               case DocumentChangeType.modified:
-                _busyDriversCache.add(driverId);
+                _jobStatusCache[driverId] = 'busy';
                 break;
               case DocumentChangeType.removed:
-                _busyDriversCache.remove(driverId);
+                _jobStatusCache[driverId] = 'available';
                 break;
             }
           }
         }
 
-        debugPrint('🔄 Jobs cache: ${_busyDriversCache.length} busy drivers');
+        debugPrint('🔄 Jobs cache updated: ${snapshot.docChanges.length} changes');
       },
       onError: (e) {
         debugPrint('❌ Jobs listener error: $e');
@@ -134,49 +156,58 @@ class LiveTrackingService {
     );
   }
 
-  /// 📍 Get User Data
-  Future<Map<String, dynamic>> _getUserData(String driverId) async {
+  /// 🔥 Users Listener (SADECE jobStatus değişiklikleri için)
+  void _startUsersListener() {
+    _usersSubscription?.cancel(); // Önceki listener varsa iptal et
+
+    _usersSubscription = _firestore
+        .collection('users')
+        .where('role', isEqualTo: 'driver')
+        .snapshots(includeMetadataChanges: false) // ✅ Sadece server değişiklikleri
+        .listen(
+          (snapshot) {
+        // ✅ SADECE DEĞİŞİKLİKLERİ İŞLE
+        for (final change in snapshot.docChanges) {
+          if (change.type == DocumentChangeType.modified ||
+              change.type == DocumentChangeType.added) {
+            final driverId = change.doc.id;
+            final jobStatus = change.doc.data()?['jobStatus'] ?? 'available';
+            _jobStatusCache[driverId] = jobStatus;
+          }
+        }
+
+        debugPrint('🔄 JobStatus cache updated: ${snapshot.docChanges.length} changes');
+      },
+      onError: (e) {
+        debugPrint('❌ Users listener error: $e');
+      },
+    );
+  }
+
+  /// 🔥 Listener'ları durdur
+  void _stopListeners() {
+    _jobsSubscription?.cancel();
+    _usersSubscription?.cancel();
+    _jobsSubscription = null;
+    _usersSubscription = null;
+    _isActive = false;
+    debugPrint('⏸️ Listeners stopped');
+  }
+
+  /// 📍 Get User Data (cache'den)
+  Map<String, dynamic> _getUserDataFromCache(String driverId) {
     if (_userCache.containsKey(driverId)) {
       return _userCache[driverId]!;
     }
-
-    try {
-      final userDoc = await _firestore.collection('users').doc(driverId).get();
-
-      if (!userDoc.exists) {
-        return {'name': '', 'phone': '', 'plate': ''};
-      }
-
-      final userData = userDoc.data()!;
-      String plate = '';
-
-      final activeVehicleId = userData['activeVehicleId'];
-      if (activeVehicleId != null) {
-        final vehicleDoc =
-        await _firestore.collection('vehicles').doc(activeVehicleId).get();
-
-        if (vehicleDoc.exists) {
-          plate = vehicleDoc.data()?['plate'] ?? '';
-        }
-      }
-
-      final result = {
-        'name': userData['name'] ?? '',
-        'phone': userData['phone'] ?? '',
-        'plate': plate,
-      };
-
-      _userCache[driverId] = result;
-      return result;
-    } catch (e) {
-      debugPrint('⚠️ getUserData error: $e');
-      return {'name': '', 'phone': '', 'plate': ''};
-    }
+    return {'name': '', 'phone': '', 'plate': ''};
   }
 
   /// 🌐 HTTP Polling - RTDB Data
   Stream<List<LiveDriver>> liveDrivers() async* {
     int errorCount = 0;
+
+    // ✅ Service başladı
+    _isActive = true;
 
     while (true) {
       try {
@@ -217,10 +248,8 @@ class LiveTrackingService {
           continue;
         }
 
-        // ✅ Parse new RTDB structure
         final raw = jsonDecode(res.body) as Map<String, dynamic>;
 
-        // Check if we have locations and history separately
         final locations = raw['locations'] as Map<String, dynamic>?;
         final history = raw['history'] as Map<String, dynamic>?;
 
@@ -236,25 +265,22 @@ class LiveTrackingService {
           final driverId = entry.key;
           final data = entry.value as Map<String, dynamic>;
 
-          // Get user data from cache
-          final userData = await _getUserData(driverId);
+          // ✅ Cache'den al (Firestore query yok)
+          final userData = _getUserDataFromCache(driverId);
 
-          // Parse location data (flat structure)
           final lat = (data['lat'] as num?)?.toDouble();
           final lng = (data['lng'] as num?)?.toDouble();
 
           if (lat == null || lng == null) {
-            debugPrint('⚠️ Invalid location for $driverId');
             continue;
           }
 
-          // ✅ Get history for this driver - DÜZELTİLDİ
+          // ✅ History parse
           final List<LatLng> driverHistory = [];
           if (history != null && history[driverId] != null) {
             try {
               final h = history[driverId] as Map<String, dynamic>;
 
-              // ✅ Tüm history noktalarını al
               final historyPoints = <MapEntry<String, dynamic>>[];
               h.forEach((key, value) {
                 if (value is Map && value['lat'] != null && value['lng'] != null) {
@@ -262,14 +288,12 @@ class LiveTrackingService {
                 }
               });
 
-              // ✅ Timestamp'e göre sırala (eskiden yeniye)
               historyPoints.sort((a, b) {
                 final aTime = (a.value['timestamp'] as num?)?.toInt() ?? 0;
                 final bTime = (b.value['timestamp'] as num?)?.toInt() ?? 0;
                 return aTime.compareTo(bTime);
               });
 
-              // ✅ Son 100 noktayı al (performans için)
               final recentPoints = historyPoints.length > 100
                   ? historyPoints.sublist(historyPoints.length - 100)
                   : historyPoints;
@@ -281,16 +305,11 @@ class LiveTrackingService {
                   driverHistory.add(LatLng(hLat, hLng));
                 }
               }
-
-              if (driverHistory.isNotEmpty) {
-                debugPrint('📍 History for $driverId: ${driverHistory.length} points');
-              }
             } catch (e) {
               debugPrint('⚠️ History parse error for $driverId: $e');
             }
           }
 
-          // LastSeen
           DateTime? lastSeen;
           if (data['timestamp'] != null) {
             try {
@@ -302,17 +321,14 @@ class LiveTrackingService {
             }
           }
 
-          // Status from RTDB
-          final rtdbStatus = data['status']?.toString() ?? 'online';
+          // ✅ STATUS BELİRLEME
+          final isOnline = data['isOnline'] as bool? ?? false;
+          final jobStatus = _jobStatusCache[driverId] ?? 'available';
 
-          // Check if busy from cache
-          final isBusy = _busyDriversCache.contains(driverId);
-
-          // Final status
           String finalStatus;
-          if (rtdbStatus == 'offline') {
+          if (!isOnline) {
             finalStatus = 'offline';
-          } else if (isBusy || rtdbStatus == 'busy') {
+          } else if (jobStatus == 'busy') {
             finalStatus = 'busy';
           } else {
             finalStatus = 'online';
@@ -359,16 +375,17 @@ class LiveTrackingService {
       await Future.delayed(Duration(seconds: _pollingIntervalSeconds));
     }
   }
+
   void dispose() {
-    _jobsSubscription?.cancel();
+    _stopListeners(); // ✅ Listener'ları kapat
     _userCache.clear();
-    _busyDriversCache.clear();
+    _jobStatusCache.clear();
     debugPrint('🧹 Service disposed');
   }
 
   void clearCache() {
     _userCache.clear();
-    _busyDriversCache.clear();
+    _jobStatusCache.clear();
     debugPrint('🧹 Cache cleared');
   }
 }
