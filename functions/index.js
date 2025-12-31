@@ -792,139 +792,139 @@ exports.checkDriverOffline = onSchedule(
     region: "us-central1",
   },
   async () => {
-    console.log("=".repeat(60));
-    console.log("🚀 DRIVER OFFLINE CHECK STARTED");
+        console.log("=".repeat(60));
+        console.log("🚀 DRIVER OFFLINE CHECK STARTED");
 
-    try {
-      const now = Date.now();
-      const OFFLINE_THRESHOLD = 120000; // 2 dk
-
-      // 1️⃣ Busy driver'ları al
-      const driversSnap = await admin
-        .firestore()
-        .collection("users")
-        .where("role", "==", "driver")
-        .where("jobStatus", "==", "busy")
-        .where("isActive", "==", true)
-        .where("softDeleted", "==", false)
-        .get();
-
-      if (driversSnap.empty) {
-        console.log("ℹ️ No busy drivers");
-        return null;
-      }
-
-      // 2️⃣ Tüm RTDB locations tek seferde al
-      const locationsSnap = await admin.database().ref("locations").get();
-      const locations = locationsSnap.val() || {};
-
-      const notifications = [];
-
-      for (const doc of driversSnap.docs) {
-        const driverId = doc.id;
-        const driver = doc.data();
-        const location = locations[driverId];
-
-        if (!location) {
-          console.log(`⚠️ ${driverId} → no RTDB record`);
-          continue;
-        }
-
-        const lastPing = location.lastPing || 0;
-        const offlineNotified = location.offlineNotified === true;
-        const timeDiff = now - lastPing;
-
-        console.log(`🔍 ${driver.name} | Δ ${Math.floor(timeDiff / 1000)}s`);
-
-        // ✅ HÂLÂ ONLINE → geç
-        if (timeDiff < OFFLINE_THRESHOLD) continue;
-
-        // ✅ Zaten bildirildiyse geç
-        if (offlineNotified) {
-          console.log("   ⏭️ Already notified");
-          continue;
-        }
-
-        if (!driver.fcmToken) {
-          console.log("   ⚠️ No FCM token");
-          continue;
-        }
-
-        notifications.push({
-          driverId,
-          token: driver.fcmToken,
-          name: driver.name || "Sürücü",
-          plate: driver.activePlate || "—",
-        });
-      }
-
-      console.log(`📤 Notifications to send: ${notifications.length}`);
-
-      // 3️⃣ Bildirim gönder
-      for (const item of notifications) {
         try {
-          await admin.messaging().send({
-            token: item.token,
-            notification: {
-              title: "⚠️ Konum Bağlantısı Kesildi",
-              body: `${item.name} (${item.plate}) konum göndermiyor.`,
-            },
-            data: {
-              type: "driver_offline",
-              driverId: item.driverId,
-            },
-            android: {
-              priority: "high",
-              notification: {
-                channelId: "driver_offline_channel",
-                sound: "default",
-              },
-            },
-            apns: {
-              payload: {
-                aps: {
-                  sound: "default",
-                  badge: 1,
-                },
-              },
-            },
-          });
+          const now = Date.now();
+          const OFFLINE_THRESHOLD = 120000; // 2 dk
 
-          // 🔥 SADECE SERVER YAZAR
-          await admin
-            .database()
-            .ref(`locations/${item.driverId}`)
-            .update({
-              offlineNotified: true,
+          // 1️⃣ Busy driver'ları al
+          const driversSnap = await admin
+            .firestore()
+            .collection("users")
+            .where("role", "==", "driver")
+            .where("jobStatus", "==", "busy")
+            .where("isActive", "==", true)
+            .where("softDeleted", "==", false)
+            .get();
+
+          if (driversSnap.empty) {
+            console.log("ℹ️ No busy drivers");
+            return null;
+          }
+
+          // 2️⃣ Tüm RTDB locations tek seferde al
+          const locationsSnap = await admin.database().ref("locations").get();
+          const locations = locationsSnap.val() || {};
+
+          const notifications = [];
+
+          for (const doc of driversSnap.docs) {
+            const driverId = doc.id;
+            const driver = doc.data();
+            const location = locations[driverId];
+
+            if (!location) {
+              console.log(`⚠️ ${driverId} → no RTDB record`);
+              continue;
+            }
+
+            const lastPing = location.lastPing || 0;
+            const offlineNotified = location.offlineNotified === true;
+            const timeDiff = now - lastPing;
+
+            console.log(`🔍 ${driver.name} | Δ ${Math.floor(timeDiff / 1000)}s`);
+
+            // ✅ HÂLÂ ONLINE → geç
+            if (timeDiff < OFFLINE_THRESHOLD) continue;
+
+            // ✅ Zaten bildirildiyse geç
+            if (offlineNotified) {
+              console.log("   ⏭️ Already notified");
+              continue;
+            }
+
+            if (!driver.fcmToken) {
+              console.log("   ⚠️ No FCM token");
+              continue;
+            }
+
+            notifications.push({
+              driverId,
+              token: driver.fcmToken,
+              name: driver.name || "Sürücü",
+              plate: driver.activePlate || "—",
             });
+          }
 
-          console.log(`✅ Notification sent → ${item.name}`);
-        } catch (err) {
-          console.error(`❌ Notification failed:`, err.code);
+          console.log(`📤 Notifications to send: ${notifications.length}`);
 
-          if (
-            err.code === "messaging/invalid-registration-token" ||
-            err.code === "messaging/registration-token-not-registered"
-          ) {
-            await admin
-              .firestore()
-              .collection("users")
-              .doc(item.driverId)
-              .update({
-                fcmToken: admin.firestore.FieldValue.delete(),
+          // 3️⃣ Bildirim gönder
+          for (const item of notifications) {
+            try {
+              await admin.messaging().send({
+                token: item.token,
+                notification: {
+                  title: "⚠️ Konum Bağlantısı Kesildi",
+                  body: `${item.name} (${item.plate}) konum göndermiyor.`,
+                },
+                data: {
+                  type: "driver_offline",
+                  driverId: item.driverId,
+                },
+                android: {
+                  priority: "high",
+                  notification: {
+                    channelId: "driver_offline_channel",
+                    sound: "default",
+                  },
+                },
+                apns: {
+                  payload: {
+                    aps: {
+                      sound: "default",
+                      badge: 1,
+                    },
+                  },
+                },
               });
 
-            console.log("🧹 Invalid FCM token cleaned");
-          }
-        }
-      }
+              // 🔥 SADECE SERVER YAZAR
+              await admin
+                .database()
+                .ref(`locations/${item.driverId}`)
+                .update({
+                  offlineNotified: true,
+                });
 
-      console.log("✅ OFFLINE CHECK FINISHED");
-      console.log("=".repeat(60));
-      return null;
-    } catch (err) {
-      console.error("🔥 FATAL ERROR:", err);
-      return null;
-    }
+              console.log(`✅ Notification sent → ${item.name}`);
+            } catch (err) {
+              console.error(`❌ Notification failed:`, err.code);
+
+              if (
+                err.code === "messaging/invalid-registration-token" ||
+                err.code === "messaging/registration-token-not-registered"
+              ) {
+                await admin
+                  .firestore()
+                  .collection("users")
+                  .doc(item.driverId)
+                  .update({
+                    fcmToken: admin.firestore.FieldValue.delete(),
+                  });
+
+                console.log("🧹 Invalid FCM token cleaned");
+              }
+            }
+          }
+
+          console.log("✅ OFFLINE CHECK FINISHED");
+          console.log("=".repeat(60));
+          return null;
+        } catch (err) {
+          console.error("🔥 FATAL ERROR:", err);
+          return null;
+        }
   }
 );

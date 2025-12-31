@@ -3,7 +3,9 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart'; // 🔥 BUNU EKLE
 import 'package:latlong2/latlong.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class DriverLocationService {
   final String driverId;
@@ -11,9 +13,13 @@ class DriverLocationService {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // 🔥 BUNU EKLE
+  static const _channel = MethodChannel('location_service');
+
   StreamSubscription<Position>? _positionSub;
   StreamSubscription<DocumentSnapshot>? _jobSub;
   Timer? _updateTimer;
+  Timer? _permissionCheckTimer; // 🔥 YENİ
 
   Position? _lastPosition;
   LatLng? _lastSentPosition;
@@ -23,13 +29,12 @@ class DriverLocationService {
   bool _isUpdating = false;
   bool _isMoving = false;
 
-  String _jobStatus = 'available'; // Firestore'dan gelecek
+  String _jobStatus = 'available';
 
   final List<Position> _buffer = [];
 
-  // ================= CONFIG =================
-  static const int _updateInterval = 10; // saniye
-  static const int _idleTimeout = 300; // 5 dk
+  static const int _updateInterval = 10;
+  static const int _idleTimeout = 300;
   static const int _bufferSize = 5;
   static const double _minMoveDistance = 10;
   static const double _minAccuracy = 30;
@@ -45,6 +50,14 @@ class DriverLocationService {
     if (_isTracking) return;
     _isTracking = true;
 
+    // 🔥 KRİTİK: Driver ID'yi native tarafa kaydet
+    try {
+      await _channel.invokeMethod('saveDriverId', {'driverId': driverId});
+      debugPrint("✅ Driver ID saved to native: $driverId");
+    } catch (e) {
+      debugPrint("⚠️ Could not save driver ID to native: $e");
+    }
+
     final permission = await Geolocator.requestPermission();
     if (permission == LocationPermission.deniedForever) {
       throw Exception("Location permission denied");
@@ -53,7 +66,7 @@ class DriverLocationService {
     await _initLocation();
     await _setOnline();
 
-    // 🔥 KRİTİK SATIR (BUNU EKLİYORSUN)
+    // onDisconnect
     _db.child("locations/$driverId").onDisconnect().update({
       "isOnline": false,
       "lastPing": ServerValue.timestamp,
@@ -68,12 +81,35 @@ class DriverLocationService {
 
     _updateTimer = Timer.periodic(
       const Duration(seconds: _updateInterval),
-          (_) => _updateToRTDB(),
+      (_) => _updateToRTDB(),
+    );
+    _permissionCheckTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _checkLocationPermission(),
     );
 
     _listenJobStatus();
 
     debugPrint("✅ Tracking started");
+  }
+
+  Future<void> _checkLocationPermission() async {
+    final status = await Permission.location.status;
+
+    if (!status.isGranted && _isTracking) {
+      debugPrint("⚠️ Location permission revoked by user");
+
+      // RTDB'ye offline yaz VE flag'i set et
+      await _db.child("locations/$driverId").update({
+        "isOnline": false,
+        "timestamp": ServerValue.timestamp,
+        "lastPing": ServerValue.timestamp,
+        "permissionRevoked": true, // 🔥 YENİ FLAG
+      });
+
+      // Tracking'i durdur
+      await stopTracking();
+    }
   }
 
   // ======================================================
@@ -107,11 +143,8 @@ class DriverLocationService {
   }
 
   void _listenJobStatus() {
-    _jobSub = _firestore
-        .collection('users')
-        .doc(driverId)
-        .snapshots()
-        .listen((doc) {
+    _jobSub =
+        _firestore.collection('users').doc(driverId).snapshots().listen((doc) {
       if (doc.exists) {
         final newStatus = doc['jobStatus'] ?? 'available';
         if (_jobStatus != newStatus) {
@@ -170,7 +203,7 @@ class DriverLocationService {
   }
 
   // ======================================================
-  // RTDB UPDATE - YENİ YAPI ✅
+  // RTDB UPDATE - DÜZELTME ✅
   // ======================================================
   Future<void> _updateToRTDB() async {
     if (_lastPosition == null || _isUpdating) return;
@@ -179,7 +212,6 @@ class DriverLocationService {
     try {
       final now = DateTime.now();
 
-      // 🔥 SADECE AVAILABLE VE DURGUN SÜRÜCÜLER İÇİN OFFLINE KONTROLÜ
       if (_jobStatus == 'available' &&
           !_isMoving &&
           _lastMoveTime != null &&
@@ -188,7 +220,6 @@ class DriverLocationService {
         return;
       }
 
-      // 🔥 History için mesafe kontrolü
       bool shouldAddToHistory = false;
       if (_lastSentPosition != null) {
         final d = Geolocator.distanceBetween(
@@ -200,7 +231,6 @@ class DriverLocationService {
 
         shouldAddToHistory = d >= 50;
 
-        // Busy değilse ve minimum mesafe yoksa skip
         if (_jobStatus != 'busy' && d < _minMoveDistance && !_isMoving) return;
       } else {
         shouldAddToHistory = true;
@@ -213,10 +243,11 @@ class DriverLocationService {
         "speed": _isMoving ? _calcSpeed() : 0,
         "accuracy": _lastPosition!.accuracy,
         "isMoving": _isMoving,
-        "isOnline": true, // ✅ SADECE BOOLEAN
+        "isOnline": true,
         "timestamp": ServerValue.timestamp,
         "lastPing": ServerValue.timestamp,
-        "offlineNotified": false, // ✅ Reset notification flag
+        // 🔥 KRİTİK: Busy veya hareket ediyorsa resetle
+        if (_isMoving || _jobStatus == 'busy') "offlineNotified": false,
       };
 
       await _db.child("locations/$driverId").update(data);
@@ -226,9 +257,11 @@ class DriverLocationService {
         debugPrint("📍 Added to history");
       }
 
-      _lastSentPosition = LatLng(_lastPosition!.latitude, _lastPosition!.longitude);
+      _lastSentPosition =
+          LatLng(_lastPosition!.latitude, _lastPosition!.longitude);
 
-      debugPrint("📍 Location updated: online (moving: $_isMoving)");
+      debugPrint(
+          "📍 Location updated: online (moving: $_isMoving, job: $_jobStatus)");
     } catch (e) {
       debugPrint("❌ RTDB update error: $e");
     } finally {
@@ -249,10 +282,8 @@ class DriverLocationService {
         _buffer[i].latitude,
         _buffer[i].longitude,
       );
-      time += _buffer[i]
-          .timestamp
-          .difference(_buffer[i - 1].timestamp)
-          .inSeconds;
+      time +=
+          _buffer[i].timestamp.difference(_buffer[i - 1].timestamp).inSeconds;
     }
 
     return time == 0 ? 0 : (dist / time) * 3.6;
@@ -274,7 +305,7 @@ class DriverLocationService {
   }
 
   // ======================================================
-  // STATUS - YENİ YAPI ✅
+  // STATUS
   // ======================================================
   Future<void> _setOnline() async {
     if (_lastPosition == null) return;
@@ -283,7 +314,7 @@ class DriverLocationService {
       await _db.child("locations/$driverId").update({
         "lat": _lastPosition!.latitude,
         "lng": _lastPosition!.longitude,
-        "isOnline": true, // ✅ BOOLEAN
+        "isOnline": true,
         "timestamp": ServerValue.timestamp,
         "lastPing": ServerValue.timestamp,
         "offlineNotified": false,
@@ -297,7 +328,7 @@ class DriverLocationService {
   Future<void> _setOffline() async {
     try {
       await _db.child("locations/$driverId").update({
-        "isOnline": false, // ✅ BOOLEAN
+        "isOnline": false,
         "timestamp": ServerValue.timestamp,
         "lastPing": ServerValue.timestamp,
       });

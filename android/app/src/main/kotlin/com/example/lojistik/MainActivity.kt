@@ -14,16 +14,27 @@ class MainActivity : FlutterActivity() {
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            CHANNEL
+            "location_service"
         ).setMethodCallHandler { call, result ->
 
-            if (call.method == "startService") {
-                val intent = Intent(this, LocationForegroundService::class.java)
-                startForegroundService(intent)
-                result.success(null)
-            } else {
-                result.notImplemented()
+            when (call.method) {
+                // 🔥 YENİ: Driver ID kaydet
+                "saveDriverId" -> {
+                    val driverId = call.argument<String>("driverId")
+                    getSharedPreferences("app", MODE_PRIVATE)
+                        .edit()
+                        .putString("driverId", driverId)
+                        .apply()
+                    result.success(null)
+                }
+
+                "startService" -> {
+                    val intent = Intent(this, LocationForegroundService::class.java)
+                    startForegroundService(intent)
+                    result.success(null)
+                }
+
+                else -> result.notImplemented()
             }
         }
-    }
-}
+    }}
