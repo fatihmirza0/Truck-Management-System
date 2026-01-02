@@ -775,156 +775,166 @@ exports.getLiveDriverLocations = onRequest(async (req, res) => {
   }
 });
 
+
 /* =========================================================
-   CHECK INACTIVE DRIVERS - ✅ BİLDİRİM EKLENDİ
-========================================================= */
-/* =========================================================
-   CHECK DRIVER OFFLINE - YENİ YAPI ✅ (isOnline boolean)
-   - isOnline boolean kontrolü
-   - Sadece busy driver'lar için bildirim
-   - offlineNotified flag ile tek bildirim garantisi
-   - 1 dakika konum güncellemesi olmayınca tetiklenir
+   CHECK DRIVER OFFLINE - ✅ COMPLETE FIX
+   - 3 dakika boyunca lastPing güncellemeyenleri OFFLINE yap
+   - Busy olanlar için bildirim gönder (TEK SEFER)
+   - isOnline: false YAPARAK DÜZELT
 ========================================================= */
 exports.checkDriverOffline = onSchedule(
   {
-    schedule: "every 1 minutes",
+    schedule: "every 2 minutes",
     timeZone: "Europe/Istanbul",
     region: "us-central1",
   },
   async () => {
-        console.log("=".repeat(60));
-        console.log("🚀 DRIVER OFFLINE CHECK STARTED");
+    console.log("=".repeat(60));
+    console.log("🚀 DRIVER OFFLINE CHECK STARTED");
 
-        try {
-          const now = Date.now();
-          const OFFLINE_THRESHOLD = 120000; // 2 dk
+    try {
+      const now = Date.now();
+      const OFFLINE_THRESHOLD = 180000; // 3 dakika
 
-          // 1️⃣ Busy driver'ları al
-          const driversSnap = await admin
-            .firestore()
-            .collection("users")
-            .where("role", "==", "driver")
-            .where("jobStatus", "==", "busy")
-            .where("isActive", "==", true)
-            .where("softDeleted", "==", false)
-            .get();
+      // 1️⃣ RTDB'den TÜM location'ları al
+      const locationsSnap = await admin.database().ref("locations").get();
 
-          if (driversSnap.empty) {
-            console.log("ℹ️ No busy drivers");
-            return null;
-          }
+      if (!locationsSnap.exists()) {
+        console.log("ℹ️ No locations data in RTDB");
+        return null;
+      }
 
-          // 2️⃣ Tüm RTDB locations tek seferde al
-          const locationsSnap = await admin.database().ref("locations").get();
-          const locations = locationsSnap.val() || {};
+      const locations = locationsSnap.val();
+      const updates = {}; // Batch update için
+      const notifications = []; // Bildirim listesi
 
-          const notifications = [];
+      let onlineCount = 0;
+      let offlineCount = 0;
+      let processedCount = 0;
 
-          for (const doc of driversSnap.docs) {
-            const driverId = doc.id;
-            const driver = doc.data();
-            const location = locations[driverId];
+      // 2️⃣ Her driver'ı kontrol et
+      for (const [driverId, location] of Object.entries(locations)) {
+        processedCount++;
 
-            if (!location) {
-              console.log(`⚠️ ${driverId} → no RTDB record`);
-              continue;
-            }
+        // 🔥 disconnectTest gibi test node'larını atla
+        if (typeof location !== 'object' || location === null) {
+          continue;
+        }
 
-            const lastPing = location.lastPing || 0;
-            const offlineNotified = location.offlineNotified === true;
-            const timeDiff = now - lastPing;
+        const lastPing = location.lastPing || 0;
+        const isOnline = location.isOnline === true;
+        const timeDiff = now - lastPing;
 
-            console.log(`🔍 ${driver.name} | Δ ${Math.floor(timeDiff / 1000)}s`);
+        // ✅ Zaten offline ise geç
+        if (!isOnline) {
+          offlineCount++;
+          continue;
+        }
 
-            // ✅ HÂLÂ ONLINE → geç
-            if (timeDiff < OFFLINE_THRESHOLD) continue;
+        // ✅ 3 dakikadan fazla ping yoksa OFFLINE yap
+        if (timeDiff > OFFLINE_THRESHOLD) {
+          updates[`locations/${driverId}/isOnline`] = false;
+          updates[`locations/${driverId}/timestamp`] = admin.database.ServerValue.TIMESTAMP;
 
-            // ✅ Zaten bildirildiyse geç
-            if (offlineNotified) {
-              console.log("   ⏭️ Already notified");
-              continue;
-            }
+          offlineCount++;
+          console.log(`⚠️ ${driverId} marked offline (${Math.floor(timeDiff / 1000)}s)`);
 
-            if (!driver.fcmToken) {
-              console.log("   ⚠️ No FCM token");
-              continue;
-            }
+          // 3️⃣ SADECE BUSY driver'lar için bildirim
+          try {
+            const driverDoc = await admin
+              .firestore()
+              .collection("users")
+              .doc(driverId)
+              .get();
 
-            notifications.push({
-              driverId,
-              token: driver.fcmToken,
-              name: driver.name || "Sürücü",
-              plate: driver.activePlate || "—",
-            });
-          }
+            if (driverDoc.exists) {
+              const driver = driverDoc.data();
 
-          console.log(`📤 Notifications to send: ${notifications.length}`);
-
-          // 3️⃣ Bildirim gönder
-          for (const item of notifications) {
-            try {
-              await admin.messaging().send({
-                token: item.token,
-                notification: {
-                  title: "⚠️ Konum Bağlantısı Kesildi",
-                  body: `${item.name} (${item.plate}) konum göndermiyor.`,
-                },
-                data: {
-                  type: "driver_offline",
-                  driverId: item.driverId,
-                },
-                android: {
-                  priority: "high",
-                  notification: {
-                    channelId: "driver_offline_channel",
-                    sound: "default",
-                  },
-                },
-                apns: {
-                  payload: {
-                    aps: {
-                      sound: "default",
-                      badge: 1,
-                    },
-                  },
-                },
-              });
-
-              // 🔥 SADECE SERVER YAZAR
-              await admin
-                .database()
-                .ref(`locations/${item.driverId}`)
-                .update({
-                  offlineNotified: true,
+              // 🔥 Busy + FCM token var + henüz bildirilmemiş
+              if (
+                driver.jobStatus === "busy" &&
+                driver.fcmToken &&
+                !location.offlineNotified
+              ) {
+                notifications.push({
+                  driverId,
+                  token: driver.fcmToken,
+                  name: driver.name || "Sürücü",
+                  plate: driver.activePlate || "—",
                 });
 
-              console.log(`✅ Notification sent → ${item.name}`);
-            } catch (err) {
-              console.error(`❌ Notification failed:`, err.code);
-
-              if (
-                err.code === "messaging/invalid-registration-token" ||
-                err.code === "messaging/registration-token-not-registered"
-              ) {
-                await admin
-                  .firestore()
-                  .collection("users")
-                  .doc(item.driverId)
-                  .update({
-                    fcmToken: admin.firestore.FieldValue.delete(),
-                  });
-
-                console.log("🧹 Invalid FCM token cleaned");
+                updates[`locations/${driverId}/offlineNotified`] = true;
               }
             }
+          } catch (err) {
+            console.error(`⚠️ Firestore read error for ${driverId}:`, err.message);
           }
-
-          console.log("✅ OFFLINE CHECK FINISHED");
-          console.log("=".repeat(60));
-          return null;
-        } catch (err) {
-          console.error("🔥 FATAL ERROR:", err);
-          return null;
+        } else {
+          onlineCount++;
         }
+      }
+
+      // 4️⃣ RTDB'yi toplu güncelle
+      if (Object.keys(updates).length > 0) {
+        await admin.database().ref().update(updates);
+        console.log(`✅ Updated ${Object.keys(updates).length / 2} drivers to offline`);
+      } else {
+        console.log("ℹ️ No offline drivers to update");
+      }
+
+      // 5️⃣ Bildirimleri gönder
+      if (notifications.length > 0) {
+        console.log(`📤 Sending ${notifications.length} notifications`);
+
+        for (const item of notifications) {
+          try {
+            await admin.messaging().send({
+              token: item.token,
+              notification: {
+                title: "⚠️ Sürücü Bağlantısı Kesildi",
+                body: `${item.name} (${item.plate}) konum göndermiyor.`,
+              },
+              data: {
+                type: "driver_offline",
+                driverId: item.driverId,
+              },
+              android: {
+                priority: "high",
+                notification: {
+                  channelId: "driver_offline_channel",
+                  sound: "default",
+                },
+              },
+            });
+
+            console.log(`✅ Notification sent → ${item.name}`);
+          } catch (err) {
+            console.error(`❌ Notification failed:`, err.code);
+
+            // Token geçersizse temizle
+            if (
+              err.code === "messaging/invalid-registration-token" ||
+              err.code === "messaging/registration-token-not-registered"
+            ) {
+              await admin
+                .firestore()
+                .collection("users")
+                .doc(item.driverId)
+                .update({
+                  fcmToken: admin.firestore.FieldValue.delete(),
+                });
+            }
+          }
+        }
+      }
+
+      console.log(`📊 Stats: Processed=${processedCount} Online=${onlineCount} Offline=${offlineCount}`);
+      console.log("✅ OFFLINE CHECK FINISHED");
+      console.log("=".repeat(60));
+      return null;
+    } catch (err) {
+      console.error("🔥 FATAL ERROR:", err);
+      return null;
+    }
   }
 );

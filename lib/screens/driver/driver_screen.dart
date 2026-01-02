@@ -19,7 +19,6 @@ class DriverScreen extends StatefulWidget {
   static const Color accent = Color(0xFF1E3A5F);
   static const Color bg = Color(0xFFF8FAFC);
 
-
   @override
   State<DriverScreen> createState() => _DriverScreenState();
 }
@@ -27,7 +26,6 @@ class DriverScreen extends StatefulWidget {
 class _DriverScreenState extends State<DriverScreen>
     with WidgetsBindingObserver {
   static const _channel = MethodChannel('location_service');
-
 
   int _index = 0;
   bool _isToggling = false;
@@ -85,6 +83,7 @@ class _DriverScreenState extends State<DriverScreen>
       _startLocationTracking();
     }
   }
+
   Future<void> startForegroundService() async {
     try {
       await _channel.invokeMethod('startService');
@@ -92,6 +91,7 @@ class _DriverScreenState extends State<DriverScreen>
       debugPrint("Service start error: $e");
     }
   }
+
   // ---------------------------------------------------
   // INIT
   // ---------------------------------------------------
@@ -178,7 +178,7 @@ class _DriverScreenState extends State<DriverScreen>
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const LoginScreen()),
-              (_) => false,
+          (_) => false,
         );
       });
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -238,27 +238,27 @@ class _DriverScreenState extends State<DriverScreen>
           onPressed: _isToggling
               ? null
               : () async {
-            setState(() => _isToggling = true);
+                  setState(() => _isToggling = true);
 
-            try {
-              if (_isTrackingActive) {
-                await _stopLocationTracking();
-              } else {
-                await _startLocationTracking();
-              }
-            } catch (e) {
-              debugPrint("❌ Toggle error: $e");
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Hata: $e')),
-                );
-              }
-            } finally {
-              if (mounted) {
-                setState(() => _isToggling = false);
-              }
-            }
-          },
+                  try {
+                    if (_isTrackingActive) {
+                      await _stopLocationTracking();
+                    } else {
+                      await _startLocationTracking();
+                    }
+                  } catch (e) {
+                    debugPrint("❌ Toggle error: $e");
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Hata: $e')),
+                      );
+                    }
+                  } finally {
+                    if (mounted) {
+                      setState(() => _isToggling = false);
+                    }
+                  }
+                },
         ),
         IconButton(
           icon: const Icon(Icons.person_outline),

@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -10,7 +9,7 @@ import 'package:http/http.dart' as http;
 class NotificationService {
   static final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   static final FlutterLocalNotificationsPlugin _localNotifications =
-  FlutterLocalNotificationsPlugin();
+      FlutterLocalNotificationsPlugin();
 
   // ===============================
   // INIT
@@ -24,7 +23,7 @@ class NotificationService {
       );
 
       const androidSettings =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
+          AndroidInitializationSettings('@mipmap/ic_launcher');
       const iosSettings = DarwinInitializationSettings();
 
       const initSettings = InitializationSettings(
@@ -219,22 +218,22 @@ class NotificationService {
 
       switch (role) {
         case 'driver':
-        // Get.toNamed('/driver/job-detail', arguments: {'jobId': jobId});
+          // Get.toNamed('/driver/job-detail', arguments: {'jobId': jobId});
           debugPrint("🚛 Navigate to Driver Job Detail: $jobId");
           break;
 
         case 'manager':
-        // Get.toNamed('/manager/job-detail', arguments: {'jobId': jobId});
+          // Get.toNamed('/manager/job-detail', arguments: {'jobId': jobId});
           debugPrint("👔 Navigate to Manager Job Detail: $jobId");
           break;
 
         case 'dispatch':
-        // Get.toNamed('/dispatch/job-detail', arguments: {'jobId': jobId});
+          // Get.toNamed('/dispatch/job-detail', arguments: {'jobId': jobId});
           debugPrint("📋 Navigate to Dispatch Job Detail: $jobId");
           break;
 
         case 'admin':
-        // Get.toNamed('/admin/job-detail', arguments: {'jobId': jobId});
+          // Get.toNamed('/admin/job-detail', arguments: {'jobId': jobId});
           debugPrint("⚙️ Navigate to Admin Job Detail: $jobId");
           break;
 

@@ -9,7 +9,7 @@ import 'firebase_options.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 
 // Screens
-import 'services/notification_Service.dart';
+import 'services/notification_service.dart';
 import 'screens/commons/login_screen.dart';
 import 'screens/manager/manager_screen.dart';
 import 'screens/dispatch/dispatch_main_screen.dart';

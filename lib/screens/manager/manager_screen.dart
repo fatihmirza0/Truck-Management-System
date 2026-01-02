@@ -27,12 +27,10 @@ class _ManagerScreenState extends State<ManagerScreen> {
   bool _sidebarOpen = true;
 
   bool get isDesktop => MediaQuery.of(context).size.width >= 900;
-
   bool get showText => _sidebarOpen;
 
   String? userName;
 
-  // ------------------------------------------------------
   final List<Widget> _pages = const [
     LiveTrackingPanel(),
     JobsPage(),
@@ -69,14 +67,12 @@ class _ManagerScreenState extends State<ManagerScreen> {
     Icons.bar_chart_outlined,
   ];
 
-  // ------------------------------------------------------
   @override
   void initState() {
     super.initState();
     userName = FirebaseAuth.instance.currentUser?.email;
   }
 
-  // ------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -86,7 +82,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const LoginScreen()),
-          (_) => false,
+              (_) => false,
         );
       });
       return const Scaffold(
@@ -98,7 +94,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
   }
 
   // ======================================================
-  // MOBILE
+  // MOBILE - DRAWER İLE
   // ======================================================
   Widget _mobile() {
     return Scaffold(
@@ -106,12 +102,49 @@ class _ManagerScreenState extends State<ManagerScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: Text(
-          _titles[_index],
-          style: const TextStyle(
-            color: Color(0xFF0F172A),
-            fontWeight: FontWeight.w700,
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu_rounded, color: ManagerScreen.accent),
+            onPressed: () => Scaffold.of(context).openDrawer(),
           ),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: ManagerScreen.accent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.local_shipping_outlined,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _titles[_index],
+                  style: const TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+                Text(
+                  _subTitles[_index],
+                  style: const TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
         actions: [
           IconButton(
@@ -120,25 +153,223 @@ class _ManagerScreenState extends State<ManagerScreen> {
           ),
         ],
       ),
+      drawer: _mobileDrawer(),
       body: _pages[_index],
+      // 🔥 BottomNavigationBar SADECE ÖNEMLİ SAYFALARI GÖSTER
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _index,
+        currentIndex: _index > 2 ? 0 : _index, // Drawer'dakiler için 0
         onTap: (i) => setState(() => _index = i),
         selectedItemColor: ManagerScreen.accent,
         unselectedItemColor: const Color(0xFF94A3B8),
         type: BottomNavigationBarType.fixed,
+        elevation: 8,
+        backgroundColor: Colors.white,
         items: const [
           BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard_customize_outlined), label: "İşler"),
+            icon: Icon(Icons.map_outlined),
+            label: "Canlı Takip",
+          ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.task_alt_outlined), label: "Tamamlanan"),
+            icon: Icon(Icons.dashboard_customize_outlined),
+            label: "İşler",
+          ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.person_add_outlined), label: "Ekle"),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.people_alt_outlined), label: "Kullanıcılar"),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.bar_chart_outlined), label: "Rapor"),
+            icon: Icon(Icons.task_alt_outlined),
+            label: "Tamamlanan",
+          ),
         ],
+      ),
+    );
+  }
+
+  // ======================================================
+  // MOBILE DRAWER
+  // ======================================================
+  Widget _mobileDrawer() {
+    return Drawer(
+      backgroundColor: ManagerScreen.sidebar,
+      child: SafeArea(
+        child: Column(
+          children: [
+            const SizedBox(height: 24),
+            // Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: ManagerScreen.accent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.local_shipping_outlined,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          "Yönetim Paneli",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          "Truck Management",
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+            // Menu Items
+            _mobileDrawerItem("Canlı Takip", Icons.map_outlined, 0),
+            _mobileDrawerItem("İş Yönetimi", Icons.dashboard_customize_outlined, 1),
+            _mobileDrawerItem("Tamamlanan İşler", Icons.task_alt_outlined, 2),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Divider(color: Color(0xFF334155), thickness: 1),
+            ),
+            _mobileDrawerItem("Personel Ekle", Icons.person_add_outlined, 3),
+            _mobileDrawerItem("Kullanıcılar", Icons.people_alt_outlined, 4),
+            _mobileDrawerItem("Raporlar", Icons.bar_chart_outlined, 5),
+            const Spacer(),
+            // Profile
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: InkWell(
+                onTap: () {
+                  Navigator.pop(context);
+                  _openProfile();
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.1),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: ManagerScreen.accent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.person,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              userName ?? "Kullanıcı",
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              "Profilimi Görüntüle",
+                              style: TextStyle(
+                                color: Color(0xFF94A3B8),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: Color(0xFF64748B),
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _mobileDrawerItem(String text, IconData icon, int idx) {
+    final selected = _index == idx;
+
+    return InkWell(
+      onTap: () {
+        setState(() => _index = idx);
+        Navigator.pop(context); // Drawer'ı kapat
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: selected
+              ? ManagerScreen.accent.withOpacity(0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: selected ? ManagerScreen.accent : Colors.white.withOpacity(0.7),
+              size: 22,
+            ),
+            const SizedBox(width: 16),
+            Text(
+              text,
+              style: TextStyle(
+                color: selected ? Colors.white : Colors.white70,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                fontSize: 15,
+              ),
+            ),
+            if (selected) ...[
+              const Spacer(),
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: ManagerScreen.accent,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -153,23 +384,19 @@ class _ManagerScreenState extends State<ManagerScreen> {
       backgroundColor: ManagerScreen.bg,
       body: Stack(
         children: [
-          // ================= CONTENT =================
           Positioned.fill(
-            left: sidebarWidth, // 🔥 KRİTİK
+            left: sidebarWidth,
             child: Column(
               children: [
                 _topBar(),
                 Expanded(
                   child: ClipRect(
-                    // 🔥 ekstra garanti
                     child: _pages[_index],
                   ),
                 ),
               ],
             ),
           ),
-
-          // ================= SIDEBAR =================
           Positioned(
             left: 0,
             top: 0,
@@ -184,7 +411,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
                   const SizedBox(height: 16),
                   Align(
                     alignment:
-                        _sidebarOpen ? Alignment.centerRight : Alignment.center,
+                    _sidebarOpen ? Alignment.centerRight : Alignment.center,
                     child: IconButton(
                       icon: Icon(
                         _sidebarOpen ? Icons.chevron_left : Icons.chevron_right,
@@ -217,52 +444,46 @@ class _ManagerScreenState extends State<ManagerScreen> {
     );
   }
 
-  // ======================================================
-  // SIDEBAR HEADER
-  // ======================================================
   Widget _sidebarHeader() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Align(
         alignment: showText ? Alignment.centerLeft : Alignment.center,
         child: Row(
-          mainAxisSize: MainAxisSize.min, // 🔥 KRİTİK
+          mainAxisSize: MainAxisSize.min,
           children: showText
               ? [
-                  _squareIcon(Icons.local_shipping_outlined),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        "Yönetim Paneli",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        "Truck Management System",
-                        style: TextStyle(
-                          color: Color(0xFF64748B),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
+            _squareIcon(Icons.local_shipping_outlined),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  "Yönetim Paneli",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
                   ),
-                ]
+                ),
+                Text(
+                  "Truck Management System",
+                  style: TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ]
               : [
-                  _squareIcon(Icons.local_shipping_outlined),
-                ],
+            _squareIcon(Icons.local_shipping_outlined),
+          ],
         ),
       ),
     );
   }
 
-  // ======================================================
-  // MENU ITEM
-  // ======================================================
   Widget _menuItem(String text, IconData icon, int idx) {
     final selected = _index == idx;
 
@@ -279,45 +500,42 @@ class _ManagerScreenState extends State<ManagerScreen> {
         ),
         child: Row(
           mainAxisAlignment:
-              showText ? MainAxisAlignment.start : MainAxisAlignment.center,
+          showText ? MainAxisAlignment.start : MainAxisAlignment.center,
           children: showText
               ? [
-                  Icon(
-                    icon,
-                    color: selected
-                        ? ManagerScreen.accent
-                        : Colors.white.withOpacity(0.6),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      text,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: selected ? Colors.white : Colors.white70,
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w400,
-                      ),
-                    ),
-                  ),
-                ]
+            Icon(
+              icon,
+              color: selected
+                  ? ManagerScreen.accent
+                  : Colors.white.withOpacity(0.6),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? Colors.white : Colors.white70,
+                  fontWeight:
+                  selected ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ),
+          ]
               : [
-                  Icon(
-                    icon,
-                    color: selected
-                        ? ManagerScreen.accent
-                        : Colors.white.withOpacity(0.6),
-                  ),
-                ],
+            Icon(
+              icon,
+              color: selected
+                  ? ManagerScreen.accent
+                  : Colors.white.withOpacity(0.6),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // ======================================================
-  // TOP BAR
-  // ======================================================
   Widget _topBar() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
@@ -350,9 +568,6 @@ class _ManagerScreenState extends State<ManagerScreen> {
     );
   }
 
-  // ======================================================
-  // PROFILE CARD
-  // ======================================================
   Widget _profileCard() {
     return InkWell(
       onTap: _openProfile,
@@ -365,46 +580,45 @@ class _ManagerScreenState extends State<ManagerScreen> {
         ),
         child: Row(
           mainAxisAlignment:
-              showText ? MainAxisAlignment.start : MainAxisAlignment.center,
+          showText ? MainAxisAlignment.start : MainAxisAlignment.center,
           children: showText
               ? [
-                  _squareIcon(Icons.person),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 150,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          userName ?? "Kullanıcı",
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const Text(
-                          "Profilimi Görüntüle",
-                          style: TextStyle(
-                            color: Color(0xFF94A3B8),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+            _squareIcon(Icons.person),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 150,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    userName ?? "Kullanıcı",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                ]
-              : [
-                  _squareIcon(Icons.person),
+                  const Text(
+                    "Profilimi Görüntüle",
+                    style: TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
+              ),
+            ),
+          ]
+              : [
+            _squareIcon(Icons.person),
+          ],
         ),
       ),
     );
   }
 
-  // ======================================================
   Widget _squareIcon(IconData icon) {
     return SizedBox(
       width: 36,

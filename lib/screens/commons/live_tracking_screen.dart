@@ -163,6 +163,8 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
     return _buildDesktopLayout(isTablet);
   }
 
+// 🔥 SADECE _buildMobileLayout() METODUNU DEĞİŞTİRDİM
+
   Widget _buildMobileLayout() {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -174,6 +176,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
 
             return Stack(
               children: [
+                // ============= HARITA =============
                 FlutterMap(
                   mapController: _mapController,
                   options: const MapOptions(
@@ -189,19 +192,19 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                       PolylineLayer(
                         polylines: allDrivers
                             .where((d) =>
-                                d.driverId == _selectedDriverId &&
-                                d.history.length > 1)
+                        d.driverId == _selectedDriverId &&
+                            d.history.length > 1)
                             .map((d) => Polyline(
-                                  points: d.history,
-                                  strokeWidth: 3.5,
-                                  color: const Color(0xFF3B82F6),
-                                  borderStrokeWidth: 1.5,
-                                  borderColor: Colors.white,
-                                  gradientColors: [
-                                    const Color(0xFF3B82F6).withOpacity(0.3),
-                                    const Color(0xFF3B82F6),
-                                  ],
-                                ))
+                          points: d.history,
+                          strokeWidth: 3.5,
+                          color: const Color(0xFF3B82F6),
+                          borderStrokeWidth: 1.5,
+                          borderColor: Colors.white,
+                          gradientColors: [
+                            const Color(0xFF3B82F6).withOpacity(0.3),
+                            const Color(0xFF3B82F6),
+                          ],
+                        ))
                             .toList(),
                       ),
                     MarkerLayer(
@@ -209,12 +212,15 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                     ),
                   ],
                 ),
+
+                // ============= ARAMA & STATS =============
                 Positioned(
                   top: 16,
                   left: 16,
                   right: 16,
                   child: Column(
                     children: [
+                      // Arama
                       Container(
                         decoration: BoxDecoration(
                           color: Colors.white,
@@ -240,10 +246,16 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                               size: 22,
                               color: Color(0xFF64748B),
                             ),
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.tune_rounded, size: 22),
-                              onPressed: () => _showMobileFilters(),
-                            ),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                              icon: const Icon(
+                                Icons.clear_rounded,
+                                size: 20,
+                              ),
+                              onPressed: () =>
+                                  setState(() => _searchQuery = ''),
+                            )
+                                : null,
                             border: InputBorder.none,
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 20,
@@ -254,13 +266,12 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                         ),
                       ),
                       const SizedBox(height: 12),
+                      // Stats
                       Row(
                         children: [
                           _buildMobileStatChip(
                             'Müsait',
-                            allDrivers
-                                .where((d) => d.status == 'online')
-                                .length,
+                            allDrivers.where((d) => d.status == 'online').length,
                             const Color(0xFF10B981),
                             Icons.check_circle_rounded,
                           ),
@@ -274,9 +285,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                           const SizedBox(width: 8),
                           _buildMobileStatChip(
                             'Pasif',
-                            allDrivers
-                                .where((d) => d.status == 'offline')
-                                .length,
+                            allDrivers.where((d) => d.status == 'offline').length,
                             const Color(0xFFEF4444),
                             Icons.remove_circle_outline_rounded,
                           ),
@@ -285,8 +294,10 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                     ],
                   ),
                 ),
+
+                // ============= FLOATING BUTTONS (SAĞ ALT) =============
                 Positioned(
-                  bottom: 100,
+                  bottom: 180, // 🔥 Bottom sheet'in üstünde
                   right: 16,
                   child: Column(
                     children: [
@@ -304,10 +315,12 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                     ],
                   ),
                 ),
+
+                // ============= BOTTOM SHEET (SÜRÜCÜLER) =============
                 if (filtered.isNotEmpty)
                   DraggableScrollableSheet(
-                    initialChildSize: 0.18,
-                    minChildSize: 0.18,
+                    initialChildSize: 0.2,
+                    minChildSize: 0.2,
                     maxChildSize: 0.75,
                     builder: (context, scrollController) {
                       return Container(
@@ -326,63 +339,87 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                         ),
                         child: Column(
                           children: [
-                            const SizedBox(height: 12),
-                            Container(
-                              width: 48,
-                              height: 5,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFE2E8F0),
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 20),
-                              child: Row(
-                                children: [
-                                  const Text(
-                                    'Aktif Sürücüler',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      color: Color(0xFF0F172A),
-                                      letterSpacing: -0.3,
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 5,
-                                    ),
+                            // 🔥 HANDLE (Kaydırma Butonu)
+                            GestureDetector(
+                              onTap: () {
+                                // Tap'e basınca açılsın
+                                DraggableScrollableActuator.reset(context);
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                child: Center(
+                                  child: Container(
+                                    width: 48,
+                                    height: 5,
                                     decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          Color(0xFF1E3A5F),
-                                          Color(0xFF2D5F8D)
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      '${filtered.length}',
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                      ),
+                                      color: const Color(0xFFE2E8F0),
+                                      borderRadius: BorderRadius.circular(3),
                                     ),
                                   ),
-                                ],
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 16),
+
+                            // 🔥 HEADER (Tıklanabilir Filtre)
+                            InkWell(
+                              onTap: () => _showMobileFilters(),
+                              child: Padding(
+                                padding:
+                                const EdgeInsets.symmetric(horizontal: 20),
+                                child: Row(
+                                  children: [
+                                    const Text(
+                                      'Aktif Sürücüler',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF0F172A),
+                                        letterSpacing: -0.3,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          colors: [
+                                            Color(0xFF1E3A5F),
+                                            Color(0xFF2D5F8D)
+                                          ],
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        '${filtered.length}',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Icon(
+                                      Icons.tune_rounded,
+                                      size: 20,
+                                      color: Color(0xFF64748B),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+
+                            // 🔥 SÜRÜCÜ LİSTESİ
                             Expanded(
                               child: ListView.builder(
                                 controller: scrollController,
                                 padding:
-                                    const EdgeInsets.symmetric(horizontal: 16),
+                                const EdgeInsets.symmetric(horizontal: 16),
                                 itemCount: filtered.length,
                                 itemBuilder: (_, i) =>
                                     _buildMobileDriverCard(filtered[i]),
@@ -393,6 +430,8 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                       );
                     },
                   ),
+
+                // ============= LOADING STATE =============
                 if (_isLoading)
                   Container(
                     color: Colors.white,
@@ -403,7 +442,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                           const CircularProgressIndicator(
                             strokeWidth: 3,
                             valueColor:
-                                AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+                            AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
                           ),
                           const SizedBox(height: 20),
                           Text(
@@ -425,7 +464,6 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
       ),
     );
   }
-
   Widget _buildDesktopLayout(bool isTablet) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),

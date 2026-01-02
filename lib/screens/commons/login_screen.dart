@@ -55,6 +55,8 @@ class _LoginScreenState extends State<LoginScreen>
       errorMessage = null;
     });
 
+    await AuthService.logout();
+
     // 🔥 AuthService ile giriş yap
     final result = await AuthService.login(
       email: email,
@@ -232,8 +234,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   ),
                                   onPressed: () {
                                     setState(() {
-                                      _isPasswordVisible =
-                                      !_isPasswordVisible;
+                                      _isPasswordVisible = !_isPasswordVisible;
                                     });
                                   },
                                 ),
@@ -245,30 +246,30 @@ class _LoginScreenState extends State<LoginScreen>
                             // LOGIN BUTONU
                             isLoading
                                 ? RotationTransition(
-                              turns: Tween(begin: 0.0, end: 1.0)
-                                  .animate(_animationController),
-                              child: Icon(Icons.local_shipping_rounded,
-                                  size: 55, color: primaryColor),
-                            )
+                                    turns: Tween(begin: 0.0, end: 1.0)
+                                        .animate(_animationController),
+                                    child: Icon(Icons.local_shipping_rounded,
+                                        size: 55, color: primaryColor),
+                                  )
                                 : SizedBox(
-                              width: double.infinity,
-                              height: 52,
-                              child: ElevatedButton(
-                                onPressed: login,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: primaryColor,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                    BorderRadius.circular(14),
+                                    width: double.infinity,
+                                    height: 52,
+                                    child: ElevatedButton(
+                                      onPressed: login,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: primaryColor,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        "Giriş Yap",
+                                        style: TextStyle(
+                                            fontSize: 18, color: Colors.white),
+                                      ),
+                                    ),
                                   ),
-                                ),
-                                child: const Text(
-                                  "Giriş Yap",
-                                  style: TextStyle(
-                                      fontSize: 18, color: Colors.white),
-                                ),
-                              ),
-                            ),
 
                             const SizedBox(height: 20),
 

@@ -1,7 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'notification_Service.dart';
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -140,29 +143,62 @@ class AuthService {
   /// Logout işlemi
   static Future<void> logout() async {
     try {
-      // Firebase'den çıkış
+      final user = _auth.currentUser;
+
+      if (user != null) {
+        debugPrint("🔓 Logout başladı: ${user.uid}");
+
+        // 1️⃣ FCM Token temizle
+        try {
+          await NotificationService.clearToken();
+          debugPrint("✅ FCM token cleared");
+        } catch (e) {
+          debugPrint("⚠️ FCM clear error (non-critical): $e");
+        }
+
+        // 2️⃣ Firestore'daki FCM token'ı sil
+        try {
+          await _firestore.collection('users').doc(user.uid).update({
+            'fcmToken': FieldValue.delete(),
+          });
+          debugPrint("✅ Firestore FCM token deleted");
+        } catch (e) {
+          debugPrint("⚠️ Firestore FCM delete error: $e");
+        }
+      }
+
+      // 3️⃣ Firebase Auth'dan çıkış
       await _auth.signOut();
+      debugPrint("✅ Firebase Auth signed out");
 
-      // SharedPreferences'ı temizle
+      // 4️⃣ SharedPreferences temizle
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_keyIsLoggedIn);
-      await prefs.remove(_keyUserId);
-      await prefs.remove(_keyUserEmail);
-      await prefs.remove(_keyUserName);
-      await prefs.remove(_keyUserRole);
+      await prefs.clear();
+      debugPrint("✅ SharedPreferences cleared");
 
-      // FCM token'ı temizle (eğer NotificationService varsa)
-      // await NotificationService.clearToken();
+      // 5️⃣ Location service durdur (driver ise)
+      // Bu DriverScreen dispose'unda otomatik olur
+
+      debugPrint("🎉 Logout completed successfully");
     } catch (e) {
-      print('Logout error: $e');
+      debugPrint("❌ Logout error: $e");
+      // Hata olsa bile devam et
+      try {
+        await _auth.signOut();
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+      } catch (e2) {
+        debugPrint("❌ Emergency logout error: $e2");
+      }
     }
   }
-
   /// Tüm verileri temizle (debug için)
   static Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
   }
+
+
   static Future<void> _callUpdateLastLoginHttp(User user) async {
     final token = await user.getIdToken();
 
