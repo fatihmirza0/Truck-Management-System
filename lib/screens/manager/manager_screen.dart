@@ -187,6 +187,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
   // ======================================================
   Widget _mobileDrawer() {
     return Drawer(
+      width: 265,
       backgroundColor: ManagerScreen.sidebar,
       child: SafeArea(
         child: Column(

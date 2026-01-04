@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart'; // 🔥 YENİ
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,6 +10,9 @@ import 'notification_Service.dart';
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // 🔥 YENİ: Native method channel
+  static const _channel = MethodChannel('location_service');
 
   // SharedPreferences keys
   static const String _keyIsLoggedIn = 'isLoggedIn';
@@ -94,7 +98,6 @@ class AuthService {
       // lastLoginAt güncelle
       await _callUpdateLastLoginHttp(user);
 
-
       // SharedPreferences'a kaydet
       await saveUserData(
         uid: user.uid,
@@ -125,7 +128,8 @@ class AuthService {
           message = 'Bu hesap devre dışı bırakılmış';
           break;
         case 'too-many-requests':
-          message = 'Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin';
+          message =
+          'Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin';
           break;
         case 'network-request-failed':
           message = 'İnternet bağlantısı yok';
@@ -140,64 +144,38 @@ class AuthService {
     }
   }
 
-  /// Logout işlemi
-  static Future<void> logout() async {
-    try {
-      final user = _auth.currentUser;
-
-      if (user != null) {
-        debugPrint("🔓 Logout başladı: ${user.uid}");
-
-        // 1️⃣ FCM Token temizle
-        try {
-          await NotificationService.clearToken();
-          debugPrint("✅ FCM token cleared");
-        } catch (e) {
-          debugPrint("⚠️ FCM clear error (non-critical): $e");
-        }
-
-        // 2️⃣ Firestore'daki FCM token'ı sil
-        try {
-          await _firestore.collection('users').doc(user.uid).update({
-            'fcmToken': FieldValue.delete(),
-          });
-          debugPrint("✅ Firestore FCM token deleted");
-        } catch (e) {
-          debugPrint("⚠️ Firestore FCM delete error: $e");
-        }
-      }
-
-      // 3️⃣ Firebase Auth'dan çıkış
-      await _auth.signOut();
-      debugPrint("✅ Firebase Auth signed out");
-
-      // 4️⃣ SharedPreferences temizle
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
-      debugPrint("✅ SharedPreferences cleared");
-
-      // 5️⃣ Location service durdur (driver ise)
-      // Bu DriverScreen dispose'unda otomatik olur
-
-      debugPrint("🎉 Logout completed successfully");
-    } catch (e) {
-      debugPrint("❌ Logout error: $e");
-      // Hata olsa bile devam et
-      try {
-        await _auth.signOut();
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.clear();
-      } catch (e2) {
-        debugPrint("❌ Emergency logout error: $e2");
-      }
-    }
-  }
-  /// Tüm verileri temizle (debug için)
-  static Future<void> clearAll() async {
+  /// 🔥 Logout işlemi - TAM TEMİZLİK
+  static Future<void> logoutFast() async {
+    await _auth.signOut();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
   }
 
+  static Future<void> logoutCleanup() async {
+    try {
+      await NotificationService.clearToken();
+      await _firestore.collection('users')
+          .doc(_auth.currentUser?.uid)
+          .update({'fcmToken': FieldValue.delete()});
+
+      await _channel.invokeMethod('logout');
+    } catch (e) {
+      debugPrint("⚠️ Background cleanup error: $e");
+    }
+  }
+
+  /// Tüm verileri temizle (debug için)
+  static Future<void> clearAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+
+    // 🔥 Native temizlik de yap
+    try {
+      await _channel.invokeMethod('logout');
+    } catch (e) {
+      debugPrint("⚠️ Native clear error: $e");
+    }
+  }
 
   static Future<void> _callUpdateLastLoginHttp(User user) async {
     final token = await user.getIdToken();
@@ -216,5 +194,4 @@ class AuthService {
       throw Exception("updateLastLoginHttp failed");
     }
   }
-
 }

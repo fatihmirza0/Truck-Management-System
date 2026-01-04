@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// 📄 REPORT EXPORTER – LOGO + KPI + TÜRKÇE FONT + 12 AY GRAFİK
+// 📄 REPORT EXPORTER – LOGO + KPI + TÜRKÇE FONT + 12 AY GRAFİK + FİLTRELİ EXPORT
 // -----------------------------------------------------------------------------
 
 import 'dart:io';
@@ -29,16 +29,19 @@ class ReportExporter {
   /// PDF EXPORT
   // ---------------------------------------------------------
   static Future<File?> exportPdf({
+    required int year,
+    required int? month,
     required List<Map<String, dynamic>> drivers,
     required List<Map<String, dynamic>> dispatchers,
     required List<int> monthlyChart,
     required int today,
     required int weekly,
     required int monthly,
+    required int prevYearJobs,
+    required double jobChangePercent,
     required int totalDrivers,
     required int totalDispatch,
   }) async {
-
     final font = await _fontRegular();
     final bold = await _fontBold();
 
@@ -59,6 +62,16 @@ class ReportExporter {
       theme: pw.ThemeData.withFont(base: font, bold: bold),
     );
 
+    // Dönem metni oluştur
+    String periodText = "$year";
+    if (month != null) {
+      const monthNames = [
+        "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+        "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
+      ];
+      periodText = "${monthNames[month - 1]} $year";
+    }
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -73,10 +86,25 @@ class ReportExporter {
                   height: 60,
                   child: pw.Image(pw.MemoryImage(logoBytes)),
                 ),
-              pw.Text(
-                "Lojistik Yönetim Raporu",
-                style: pw.TextStyle(
-                    fontSize: 22, fontWeight: pw.FontWeight.bold),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text(
+                    "Lojistik Yönetim Raporu",
+                    style: pw.TextStyle(
+                      fontSize: 22,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    "Dönem: $periodText",
+                    style: pw.TextStyle(
+                      fontSize: 14,
+                      color: PdfColors.grey700,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -85,38 +113,58 @@ class ReportExporter {
 
           // KPI ÖZET
           pw.SizedBox(height: 12),
-          _kpiTable(today, weekly, monthly, totalDrivers, totalDispatch),
+          _kpiTable(
+            today,
+            weekly,
+            monthly,
+            prevYearJobs,
+            jobChangePercent,
+            totalDrivers,
+            totalDispatch,
+          ),
           pw.SizedBox(height: 25),
 
           // AYLIK GRAFİK
-          pw.Text("Aylık İş Dağılımı",
-              style:
-              pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+          pw.Text(
+            "Aylık İş Dağılımı",
+            style: pw.TextStyle(
+              fontSize: 18,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
           pw.SizedBox(height: 10),
           _chart(monthlyChart),
           pw.SizedBox(height: 15),
 
           // ŞOFÖR PERFORMANCE
-          pw.Text("Şoför Performansı",
-              style:
-              pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+          pw.Text(
+            "Şoför Performansı",
+            style: pw.TextStyle(
+              fontSize: 18,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
           pw.SizedBox(height: 8),
-          _table(drivers),
+          _driverTable(drivers),
           pw.SizedBox(height: 30),
 
           // DISPATCH PERFORMANCE
-          pw.Text("Dispatch Performansı",
-              style:
-              pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+          pw.Text(
+            "Dispatch Performansı",
+            style: pw.TextStyle(
+              fontSize: 18,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
           pw.SizedBox(height: 8),
-          _table(dispatchers),
+          _dispatchTable(dispatchers),
         ],
       ),
     );
 
     final path = await FilePicker.platform.saveFile(
       dialogTitle: "PDF Kaydet",
-      fileName: "lojistik_rapor.pdf",
+      fileName: "lojistik_rapor_$periodText.pdf",
       allowedExtensions: ["pdf"],
       type: FileType.custom,
     );
@@ -128,16 +176,29 @@ class ReportExporter {
   }
 
   // KPI TABLE
-  static pw.Widget _kpiTable(int today, int weekly, int monthly,
-      int totalDrivers, int totalDispatch) {
+  static pw.Widget _kpiTable(
+      int today,
+      int weekly,
+      int monthly,
+      int prevYearJobs,
+      double jobChangePercent,
+      int totalDrivers,
+      int totalDispatch,
+      ) {
+    final changeText = jobChangePercent >= 0
+        ? "+${jobChangePercent.toStringAsFixed(1)}%"
+        : "${jobChangePercent.toStringAsFixed(1)}%";
+
     return pw.Table.fromTextArray(
-      headers: const ["Metrik", "Değer"],        // headerVisible yerine
+      headers: const ["Metrik", "Değer"],
       data: [
-        ["Bugünkü İşler", today],
-        ["Haftalık İşler", weekly],
-        ["Aylık İşler", monthly],
-        ["Toplam Şoför", totalDrivers],
-        ["Toplam Dispatch", totalDispatch],
+        ["Bugünkü İşler", today.toString()],
+        ["Haftalık İşler", weekly.toString()],
+        ["Aylık İşler", monthly.toString()],
+        ["Geçen Yıl Aynı Dönem", prevYearJobs.toString()],
+        ["Değişim Oranı", changeText],
+        ["Toplam Şoför", totalDrivers.toString()],
+        ["Toplam Dispatch", totalDispatch.toString()],
       ],
       border: pw.TableBorder.all(color: PdfColors.grey),
       headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
@@ -147,13 +208,14 @@ class ReportExporter {
     );
   }
 
-
   // 12 AYLIK GRAFİK
-// 12 AYLIK GRAFİK – değerler üstte görünüyor, boş aylar da gösteriliyor
   static pw.Widget _chart(List<int> list) {
-    final months = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
+    const months = [
+      "Oca", "Şub", "Mar", "Nis", "May", "Haz",
+      "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"
+    ];
 
-    final int maxVal = list.reduce((a,b) => a>b?a:b);
+    final int maxVal = list.reduce((a, b) => a > b ? a : b);
     final double max = maxVal == 0 ? 1 : maxVal.toDouble();
 
     return pw.Container(
@@ -161,21 +223,18 @@ class ReportExporter {
       padding: const pw.EdgeInsets.symmetric(horizontal: 8),
       child: pw.Column(
         children: [
-
           // ---- ÇUBUKLAR + DEĞERLER ----
           pw.Expanded(
             child: pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: List.generate(12, (i) {
-
-                final double h = ((list[i] / max) * 150).clamp(3, 150); // sıfır olsa da ince bar
+                final double h = ((list[i] / max) * 150).clamp(3, 150);
                 final v = list[i];
 
                 return pw.Column(
                   mainAxisAlignment: pw.MainAxisAlignment.end,
                   children: [
-
                     // değer yazısı
                     pw.Text(
                       v.toString(),
@@ -199,8 +258,10 @@ class ReportExporter {
                     pw.SizedBox(height: 6),
 
                     // ay etiketi
-                    pw.Text(months[i],
-                        style: const pw.TextStyle(fontSize: 9)),
+                    pw.Text(
+                      months[i],
+                      style: const pw.TextStyle(fontSize: 9),
+                    ),
                   ],
                 );
               }),
@@ -211,24 +272,58 @@ class ReportExporter {
     );
   }
 
-  // TABLO
-  static pw.Widget _table(List<Map<String, dynamic>> data) {
-    final columnsTr = {
-      "name": "Ad Soyad",
-      "plate": "Plaka",
-      "jobs": "İş Sayısı",
-      "km": "Toplam KM",
-    };
+  // ŞOFÖR TABLOSU (GENİŞLETİLMİŞ)
+  static pw.Widget _driverTable(List<Map<String, dynamic>> data) {
+    if (data.isEmpty) {
+      return pw.Text("Şoför verisi yok", style: pw.TextStyle(fontSize: 12));
+    }
 
     return pw.Table.fromTextArray(
-      headers: data.first.keys.map((e) => columnsTr[e] ?? e).toList(),
-      data: data.map((e) => e.values.toList()).toList(),
+      headers: const [
+        "Ad Soyad",
+        "Plaka",
+        "İş Sayısı",
+        "Toplam KM",
+        "Ort. KM/İş",
+        "Ort. Süre (saat)"
+      ],
+      data: data.map((e) {
+        return [
+          e["name"] ?? "-",
+          e["plate"] ?? "-",
+          e["jobs"]?.toString() ?? "0",
+          e["km"]?.toString() ?? "0",
+          e["avgKm"]?.toString() ?? "0",
+          e["avgHours"]?.toString() ?? "0",
+        ];
+      }).toList(),
       border: pw.TableBorder.all(color: PdfColors.grey),
       cellAlignment: pw.Alignment.centerLeft,
       cellHeight: 20,
       headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-      headerDecoration:
-      const pw.BoxDecoration(color: PdfColor(0.85, 0.9, 1)),
+      headerDecoration: const pw.BoxDecoration(color: PdfColor(0.85, 0.9, 1)),
+    );
+  }
+
+  // DISPATCH TABLOSU
+  static pw.Widget _dispatchTable(List<Map<String, dynamic>> data) {
+    if (data.isEmpty) {
+      return pw.Text("Dispatch verisi yok", style: pw.TextStyle(fontSize: 12));
+    }
+
+    return pw.Table.fromTextArray(
+      headers: const ["Ad Soyad", "İş Sayısı"],
+      data: data.map((e) {
+        return [
+          e["name"] ?? "-",
+          e["jobs"]?.toString() ?? "0",
+        ];
+      }).toList(),
+      border: pw.TableBorder.all(color: PdfColors.grey),
+      cellAlignment: pw.Alignment.centerLeft,
+      cellHeight: 20,
+      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+      headerDecoration: const pw.BoxDecoration(color: PdfColor(0.85, 0.9, 1)),
     );
   }
 
@@ -236,6 +331,8 @@ class ReportExporter {
   /// EXCEL EXPORT
   // ---------------------------------------------------------
   static Future<File?> exportExcel({
+    required int year,
+    required int? month,
     required List<Map<String, dynamic>> drivers,
     required List<Map<String, dynamic>> dispatchers,
   }) async {
@@ -244,18 +341,28 @@ class ReportExporter {
     // Drivers sheet
     final s1 = wb.worksheets[0];
     s1.name = "Soforler";
-    _writeExcelSheet(s1, drivers);
+    _writeDriverSheet(s1, drivers, year, month);
 
     // Dispatch sheet
     final s2 = wb.worksheets.addWithName("Dispatch");
-    _writeExcelSheet(s2, dispatchers);
+    _writeDispatchSheet(s2, dispatchers, year, month);
 
     final bytes = wb.saveAsStream();
     wb.dispose();
 
+    // Dönem metni oluştur
+    String periodText = "$year";
+    if (month != null) {
+      const monthNames = [
+        "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+        "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
+      ];
+      periodText = "${monthNames[month - 1]} $year";
+    }
+
     final path = await FilePicker.platform.saveFile(
       dialogTitle: "Excel Kaydet",
-      fileName: "lojistik_rapor.xlsx",
+      fileName: "lojistik_rapor_$periodText.xlsx",
       type: FileType.custom,
       allowedExtensions: ["xlsx"],
     );
@@ -267,19 +374,100 @@ class ReportExporter {
     return f;
   }
 
-  static void _writeExcelSheet(Worksheet sheet, List<Map<String, dynamic>> data) {
-    if (data.isEmpty) return;
-    var headers = data.first.keys.toList();
-
-    for (int i = 0; i < headers.length; i++) {
-      sheet.getRangeByIndex(1, i + 1).setText(headers[i]);
+  static void _writeDriverSheet(
+      Worksheet sheet,
+      List<Map<String, dynamic>> data,
+      int year,
+      int? month,
+      ) {
+    // Dönem başlığı
+    String periodText = "$year";
+    if (month != null) {
+      const monthNames = [
+        "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+        "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
+      ];
+      periodText = "${monthNames[month - 1]} $year";
     }
 
+    sheet.getRangeByIndex(1, 1).setText("ŞOFÖR PERFORMANS RAPORU - $periodText");
+    sheet.getRangeByIndex(1, 1).cellStyle.bold = true;
+    sheet.getRangeByIndex(1, 1).cellStyle.fontSize = 14;
+
+    // Header (3. satırdan başla)
+    const headers = [
+      "Ad Soyad",
+      "Plaka",
+      "İş Sayısı",
+      "Toplam KM",
+      "Ort. KM/İş",
+      "Ort. Süre (saat)"
+    ];
+
+    for (int i = 0; i < headers.length; i++) {
+      final cell = sheet.getRangeByIndex(3, i + 1);
+      cell.setText(headers[i]);
+      cell.cellStyle.bold = true;
+      cell.cellStyle.backColor = "#D6EAF8";
+    }
+
+    // Data
     for (int r = 0; r < data.length; r++) {
-      var row = data[r].values.toList();
-      for (int c = 0; c < row.length; c++) {
-        sheet.getRangeByIndex(r + 2, c + 1).setText(row[c].toString());
-      }
+      final row = data[r];
+      sheet.getRangeByIndex(r + 4, 1).setText(row["name"]?.toString() ?? "-");
+      sheet.getRangeByIndex(r + 4, 2).setText(row["plate"]?.toString() ?? "-");
+      sheet.getRangeByIndex(r + 4, 3).setNumber(double.tryParse(row["jobs"]?.toString() ?? "0") ?? 0);
+      sheet.getRangeByIndex(r + 4, 4).setText(row["km"]?.toString() ?? "0");
+      sheet.getRangeByIndex(r + 4, 5).setText(row["avgKm"]?.toString() ?? "0");
+      sheet.getRangeByIndex(r + 4, 6).setText(row["avgHours"]?.toString() ?? "0");
+    }
+
+    // Otomatik kolon genişliği
+    for (int i = 1; i <= headers.length; i++) {
+      sheet.autoFitColumn(i);
+    }
+  }
+
+  static void _writeDispatchSheet(
+      Worksheet sheet,
+      List<Map<String, dynamic>> data,
+      int year,
+      int? month,
+      ) {
+    // Dönem başlığı
+    String periodText = "$year";
+    if (month != null) {
+      const monthNames = [
+        "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+        "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
+      ];
+      periodText = "${monthNames[month - 1]} $year";
+    }
+
+    sheet.getRangeByIndex(1, 1).setText("DISPATCH PERFORMANS RAPORU - $periodText");
+    sheet.getRangeByIndex(1, 1).cellStyle.bold = true;
+    sheet.getRangeByIndex(1, 1).cellStyle.fontSize = 14;
+
+    // Header
+    const headers = ["Ad Soyad", "İş Sayısı"];
+
+    for (int i = 0; i < headers.length; i++) {
+      final cell = sheet.getRangeByIndex(3, i + 1);
+      cell.setText(headers[i]);
+      cell.cellStyle.bold = true;
+      cell.cellStyle.backColor = "#D6EAF8";
+    }
+
+    // Data
+    for (int r = 0; r < data.length; r++) {
+      final row = data[r];
+      sheet.getRangeByIndex(r + 4, 1).setText(row["name"]?.toString() ?? "-");
+      sheet.getRangeByIndex(r + 4, 2).setNumber(double.tryParse(row["jobs"]?.toString() ?? "0") ?? 0);
+    }
+
+    // Otomatik kolon genişliği
+    for (int i = 1; i <= headers.length; i++) {
+      sheet.autoFitColumn(i);
     }
   }
 }

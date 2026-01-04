@@ -55,7 +55,7 @@ class _LoginScreenState extends State<LoginScreen>
       errorMessage = null;
     });
 
-    await AuthService.logout();
+    await AuthService.logoutFast();
 
     // 🔥 AuthService ile giriş yap
     final result = await AuthService.login(

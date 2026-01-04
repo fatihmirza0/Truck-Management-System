@@ -1,7 +1,3 @@
-// ============================================
-// MODERN ENTERPRISE USERS PAGE - REFINED DESIGN
-// Enhanced visual hierarchy & micro-interactions
-// ============================================
 import 'package:flutter/material.dart';
 import 'package:lojistik/services/firestore_Service.dart';
 import 'user_detail_page.dart';
@@ -19,7 +15,7 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
 
   String _role = "driver";
   String search = "";
-  int _viewMode = 2; // 1: Detailed List, 2: Compact Grid, 3: Dense Grid
+  int _viewMode = 1; // 1: Detailed List, 2: Compact Grid, 3: Dense Grid
 
   bool get isDesktop => MediaQuery.of(context).size.width > 900;
 
@@ -68,14 +64,14 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
         child: FadeTransition(
           opacity: _animController,
           child: Padding(
-            padding: const EdgeInsets.all(32.0),
+            padding: EdgeInsets.all(isDesktop ? 20.0 : 16.0), // 🔥 Küçültüldü
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeader(),
-                const SizedBox(height: 32),
+                SizedBox(height: isDesktop ? 16 : 12), // 🔥 Küçültüldü
                 _buildSearchBar(),
-                const SizedBox(height: 24),
+                SizedBox(height: isDesktop ? 12 : 10), // 🔥 Küçültüldü
                 Row(
                   children: [
                     _buildSegmentedControl(),
@@ -83,7 +79,7 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
                     if (isDesktop) _buildViewModeSelector(),
                   ],
                 ),
-                const SizedBox(height: 28),
+                SizedBox(height: isDesktop ? 16 : 12), // 🔥 Küçültüldü
                 Expanded(child: _buildUserList()),
               ],
             ),
@@ -93,58 +89,55 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // REFINED HEADER with gradient accent
-  // ---------------------------------------------------------------------------
+  // 🔥 Header - Küçültüldü
   Widget _buildHeader() {
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(10), // 14 → 10
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [Color(0xFF1E3A5F), Color(0xFF2D4A6F)],
             ),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12), // 16 → 12
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF1E3A5F).withOpacity(0.3),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+                blurRadius: 8, // 12 → 8
+                offset: const Offset(0, 3), // 4 → 3
               ),
             ],
           ),
           child: const Icon(
             Icons.people_rounded,
             color: Colors.white,
-            size: 32,
+            size: 20, // 18 → 20 (daha okunabilir)
           ),
         ),
-        const SizedBox(width: 20),
+        const SizedBox(width: 12), // 15 → 12
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 "Kullanıcı Yönetimi",
                 style: TextStyle(
-                  fontSize: 32,
+                  fontSize: isDesktop ? 20 : 17, // 18 → 20/17
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1E3A5F),
-                  letterSpacing: -0.8,
-                  height: 1.1,
+                  color: const Color(0xFF1E3A5F),
+                  letterSpacing: -0.5,
+                  height: 1.2,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 2), // 4 → 2
               Text(
                 "Şoför ve dispatch kullanıcılarını yönetin",
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: isDesktop ? 13 : 12, // 13 → 12
                   color: Colors.grey[600],
                   fontWeight: FontWeight.w400,
-                  letterSpacing: -0.2,
                 ),
               ),
             ],
@@ -154,20 +147,18 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // ENHANCED SEARCH BAR with focus state
-  // ---------------------------------------------------------------------------
+  // 🔥 Search Bar - Küçültüldü
   Widget _buildSearchBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3), // 18,4 → 14,3
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+        borderRadius: BorderRadius.circular(12), // 14 → 12
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
+            blurRadius: 8, // 12 → 8
             offset: const Offset(0, 2),
           ),
         ],
@@ -175,19 +166,19 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6), // 8 → 6
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.search_rounded, color: Color(0xFF64748B), size: 22),
+            child: const Icon(Icons.search_rounded, color: Color(0xFF64748B), size: 18), // 22 → 18
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10), // 14 → 10
           Expanded(
             child: TextField(
               controller: _searchController,
               style: const TextStyle(
-                fontSize: 15,
+                fontSize: 14, // 15 → 14
                 color: Color(0xFF0F172A),
                 fontWeight: FontWeight.w500,
               ),
@@ -195,11 +186,11 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
                 hintText: _searchHint,
                 hintStyle: const TextStyle(
                   color: Color(0xFF94A3B8),
-                  fontSize: 15,
+                  fontSize: 14, // 15 → 14
                   fontWeight: FontWeight.w400,
                 ),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 18),
+                contentPadding: const EdgeInsets.symmetric(vertical: 12), // 18 → 12
               ),
             ),
           ),
@@ -210,9 +201,9 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Icon(Icons.close_rounded, size: 18),
+                child: const Icon(Icons.close_rounded, size: 16), // 18 → 16
               ),
               color: const Color(0xFF64748B),
             ),
@@ -221,20 +212,18 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // REFINED SEGMENTED CONTROL with smooth transitions
-  // ---------------------------------------------------------------------------
+  // 🔥 Segmented Control - Küçültüldü
   Widget _buildSegmentedControl() {
     return Container(
-      padding: const EdgeInsets.all(5),
+      padding: const EdgeInsets.all(4), // 5 → 4
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+        borderRadius: BorderRadius.circular(10), // 14 → 10
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
@@ -255,16 +244,12 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () {
-          setState(() {
-            _role = key;
-          });
-        },
-        borderRadius: BorderRadius.circular(10),
+        onTap: () => setState(() => _role = key),
+        borderRadius: BorderRadius.circular(8),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), // 24,14 → 16,10
           decoration: BoxDecoration(
             gradient: selected
                 ? const LinearGradient(
@@ -273,12 +258,12 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
               colors: [Color(0xFF1E3A5F), Color(0xFF2D4A6F)],
             )
                 : null,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             boxShadow: selected
                 ? [
               BoxShadow(
                 color: const Color(0xFF1E3A5F).withOpacity(0.2),
-                blurRadius: 8,
+                blurRadius: 6, // 8 → 6
                 offset: const Offset(0, 2),
               ),
             ]
@@ -288,14 +273,14 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
             children: [
               Icon(
                 icon,
-                size: 20,
+                size: 16, // 20 → 16
                 color: selected ? Colors.white : const Color(0xFF64748B),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8), // 10 → 8
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: 13, // 15 → 13
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                   color: selected ? Colors.white : const Color(0xFF64748B),
                   letterSpacing: -0.2,
@@ -308,20 +293,18 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // REFINED VIEW MODE SELECTOR
-  // ---------------------------------------------------------------------------
+  // 🔥 View Mode Selector - Küçültüldü
   Widget _buildViewModeSelector() {
     return Container(
-      padding: const EdgeInsets.all(5),
+      padding: const EdgeInsets.all(4), // 5 → 4
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
@@ -350,7 +333,7 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
           borderRadius: BorderRadius.circular(8),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 250),
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(8), // 10 → 8
             decoration: BoxDecoration(
               gradient: selected
                   ? const LinearGradient(
@@ -372,7 +355,7 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
             ),
             child: Icon(
               icon,
-              size: 20,
+              size: 18, // 20 → 18
               color: selected ? Colors.white : const Color(0xFF64748B),
             ),
           ),
@@ -381,9 +364,6 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // USER LIST (FirestoreService)
-  // ---------------------------------------------------------------------------
   Widget _buildUserList() {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: FirestoreService.streamUsersWithVehicle(_role),
@@ -391,14 +371,14 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
         if (!snap.hasData) {
           return Center(
             child: Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16), // 20 → 16
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.04),
-                    blurRadius: 12,
+                    blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
                 ],
@@ -442,57 +422,50 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // MODE 1: Detailed List - ENHANCED DESIGN
-  // ---------------------------------------------------------------------------
+  // 🔥 Detailed List - Küçültüldü
   Widget _buildDetailedList(List<Map<String, dynamic>> users) {
     return ListView.separated(
       itemCount: users.length,
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      padding: const EdgeInsets.symmetric(vertical: 4), // 6 → 4
+      separatorBuilder: (_, __) => const SizedBox(height: 6), // 8 → 6
       itemBuilder: (_, i) {
         final u = users[i];
         final uid = (u["uid"] ?? "").toString();
         final isDriver = (u['role'] ?? "") == 'driver';
 
         return InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           onTap: () => _navigateToDetail(uid, u),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), // 16,14 → 12,10
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               border: Border.all(color: const Color(0xFFE5E7EB)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.025),
-                  blurRadius: 6,
+                  blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
               ],
             ),
             child: Row(
               children: [
-                // ICON
                 Container(
-                  width: 36,
-                  height: 36,
+                  width: 32, // 36 → 32
+                  height: 32,
                   decoration: BoxDecoration(
                     color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
-                    isDriver
-                        ? Icons.local_shipping_outlined
-                        : Icons.support_agent_outlined,
-                    size: 18,
+                    isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
+                    size: 16, // 18 → 16
                     color: const Color(0xFF1E3A5F),
                   ),
                 ),
-                const SizedBox(width: 14),
-
-                // NAME + INFO
+                const SizedBox(width: 10), // 14 → 10
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -502,12 +475,12 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 14.5,
+                          fontSize: 13.5, // 14.5 → 13.5
                           fontWeight: FontWeight.w600,
                           color: Color(0xFF111827),
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 3), // 4 → 3
                       Text(
                         isDriver
                             ? "Araç Plakası: ${(u['plateNumber'] ?? "-")}"
@@ -515,16 +488,14 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 12.5,
+                          fontSize: 11.5, // 12.5 → 11.5
                           color: Color(0xFF6B7280),
                         ),
                       ),
                     ],
                   ),
                 ),
-
-                const Icon(Icons.chevron_right,
-                    size: 20, color: Color(0xFF9CA3AF)),
+                const Icon(Icons.chevron_right, size: 18, color: Color(0xFF9CA3AF)),
               ],
             ),
           ),
@@ -533,17 +504,14 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // MODE 2: Compact Grid - ENHANCED
-  // ---------------------------------------------------------------------------
   Widget _buildCompactGrid(List<Map<String, dynamic>> users) {
     return GridView.builder(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: 4),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 14,
-        childAspectRatio: 3.6,
+        crossAxisSpacing: 13,
+        mainAxisSpacing: 7,
+        childAspectRatio: 8.7,
       ),
       itemCount: users.length,
       itemBuilder: (_, i) {
@@ -552,40 +520,38 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
         final isDriver = (u['role'] ?? '') == 'driver';
 
         return InkWell(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           onTap: () => _navigateToDetail(uid, u),
           child: Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xFFE5E7EB)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.03),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
             child: Row(
               children: [
                 Container(
-                  width: 38,
-                  height: 38,
+                  width: 34,
+                  height: 34,
                   decoration: BoxDecoration(
                     color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
-                    isDriver
-                        ? Icons.local_shipping_outlined
-                        : Icons.support_agent_outlined,
-                    size: 18,
+                    isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
+                    size: 16,
                     color: const Color(0xFF1E3A5F),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -596,20 +562,18 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: Color(0xFF111827),
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 3),
                       Text(
-                        isDriver
-                            ? (u['plateNumber'] ?? "-").toString()
-                            : (u['phone'] ?? "-").toString(),
+                        isDriver ? ("Araç Plakası: ${u['plateNumber']}" ?? "-").toString() : (u['phone'] ?? "-").toString(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 12.5,
+                          fontSize: 11.5,
                           color: Color(0xFF6B7280),
                         ),
                       ),
@@ -624,17 +588,14 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // MODE 3: Dense Grid - ENHANCED
-  // ---------------------------------------------------------------------------
   Widget _buildDenseGrid(List<Map<String, dynamic>> users) {
     return GridView.builder(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: 4),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 4.4,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 5.7,
       ),
       itemCount: users.length,
       itemBuilder: (_, i) {
@@ -643,32 +604,30 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
         final isDriver = (u['role'] ?? '') == 'driver';
 
         return InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           onTap: () => _navigateToDetail(uid, u),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
             child: Row(
               children: [
                 Icon(
-                  isDriver
-                      ? Icons.local_shipping_outlined
-                      : Icons.support_agent_outlined,
-                  size: 16,
+                  isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
+                  size: 14,
                   color: const Color(0xFF475569),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     (u['name'] ?? "-").toString(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: Color(0xFF111827),
                     ),
@@ -676,9 +635,9 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
                 ),
                 if (isDriver)
                   Text(
-                    (u['plateNumber'] ?? "-").toString(),
+                    ("Araç Plakası: ${u['plateNumber']}" ?? "-").toString(),
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       color: Color(0xFF6B7280),
                     ),
                   ),
@@ -690,9 +649,6 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // UI HELPERS - REFINED
-  // ---------------------------------------------------------------------------
   Widget _buildEmptyState(String message) {
     return Center(
       child: SingleChildScrollView(
@@ -700,7 +656,7 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(28),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -710,31 +666,31 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
                     const Color(0xFFE2E8F0).withOpacity(0.3),
                   ],
                 ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
               ),
               child: Icon(
                 search.isNotEmpty ? Icons.search_off_rounded : Icons.people_rounded,
-                size: 72,
+                size: 48,
                 color: const Color(0xFF94A3B8),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             Text(
               message,
               style: const TextStyle(
-                fontSize: 20,
+                fontSize: 17,
                 fontWeight: FontWeight.w700,
                 color: Color(0xFF0F172A),
                 letterSpacing: -0.3,
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Text(
               search.isNotEmpty ? "Farklı bir arama terimi deneyin" : "Yeni kullanıcılar eklemek için yönetim panelini kullanın",
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 14,
+                fontSize: 13,
                 color: Color(0xFF64748B),
                 fontWeight: FontWeight.w500,
               ),

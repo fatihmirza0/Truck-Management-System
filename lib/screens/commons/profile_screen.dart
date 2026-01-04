@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -254,13 +256,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (res == true) {
-      // 🔥 AuthService ile çıkış yap (Firebase + SharedPreferences temizlenir)
-      await AuthService.logout();
+      // 🔥 PAT DİYE GÖNDER
+      await AuthService.logoutFast();
 
-      if (mounted) {
+      if (context.mounted) {
         Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
       }
+
+      // 🧹 ARKA PLAN TEMİZLİĞİ
+      unawaited(AuthService.logoutCleanup());
     }
+
   }
 
   String _getRoleName() {

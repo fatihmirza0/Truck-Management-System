@@ -72,7 +72,18 @@ class _DriverScreenState extends State<DriverScreen>
     _jobStatusListener?.cancel();
     _rtdbStatusListener?.cancel();
     _locationService.dispose();
+    _stopForegroundService();
+
     super.dispose();
+  }
+
+  Future<void> _stopForegroundService() async {
+    try {
+      await _channel.invokeMethod('stopService');
+      debugPrint("✅ Service stopped");
+    } catch (e) {
+      debugPrint("⚠️ Service stop error: $e");
+    }
   }
 
   @override
@@ -178,7 +189,7 @@ class _DriverScreenState extends State<DriverScreen>
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const LoginScreen()),
-          (_) => false,
+              (_) => false,
         );
       });
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -238,27 +249,27 @@ class _DriverScreenState extends State<DriverScreen>
           onPressed: _isToggling
               ? null
               : () async {
-                  setState(() => _isToggling = true);
+            setState(() => _isToggling = true);
 
-                  try {
-                    if (_isTrackingActive) {
-                      await _stopLocationTracking();
-                    } else {
-                      await _startLocationTracking();
-                    }
-                  } catch (e) {
-                    debugPrint("❌ Toggle error: $e");
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Hata: $e')),
-                      );
-                    }
-                  } finally {
-                    if (mounted) {
-                      setState(() => _isToggling = false);
-                    }
-                  }
-                },
+            try {
+              if (_isTrackingActive) {
+                await _stopLocationTracking();
+              } else {
+                await _startLocationTracking();
+              }
+            } catch (e) {
+              debugPrint("❌ Toggle error: $e");
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Hata: $e')),
+                );
+              }
+            } finally {
+              if (mounted) {
+                setState(() => _isToggling = false);
+              }
+            }
+          },
         ),
         IconButton(
           icon: const Icon(Icons.person_outline),
@@ -346,16 +357,17 @@ class _DriverScreenState extends State<DriverScreen>
   void _showBusyWarning() {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Konum Takibi Gerekli"),
-        content: const Text("Aktif iş varken konum kapatılamaz."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Tamam"),
+      builder: (_) =>
+          AlertDialog(
+            title: const Text("Konum Takibi Gerekli"),
+            content: const Text("Aktif iş varken konum kapatılamaz."),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Tamam"),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }
