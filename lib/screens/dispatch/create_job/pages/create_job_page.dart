@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lojistik/services/firestore_Service.dart';
 import 'package:lojistik/utils/route_utils.dart';
-import 'widgets/driver_selection_card.dart';
-import 'widgets/vehicle_selection_card.dart';
-import 'widgets/driver_selection_panel.dart';
-import 'widgets/vehicle_selection_panel.dart';
+import '../widgets/driver_selection_card.dart';
+import '../widgets/vehicle_selection_card.dart';
+import '../widgets/driver_selection_panel.dart';
+import '../widgets/vehicle_selection_panel.dart';
 
 class CreateJobPage extends StatefulWidget {
   const CreateJobPage({super.key});

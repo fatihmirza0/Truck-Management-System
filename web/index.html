@@ -4,10 +4,9 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
   <meta name="description" content="Truck Management System">
 
-  <!-- iOS meta tags & icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="truck_management">
@@ -16,27 +15,27 @@
   <title>Truck Management</title>
   <link rel="manifest" href="manifest.json">
 
-  <script>
-    var serviceWorkerVersion = null;
-  </script>
-  <script src="flutter_bootstrap.js" async></script>
-
-  <!-- ============================================ -->
-  <!-- GOOGLE MAPS API - BURAYA KENDİ KEY'İNİ EKLE -->
-  <!-- ============================================ -->
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBW9ivbOndjriQ50cwHN6d3VUiWmQJ9VdE"></script>
-
+  <!-- Flutter bootstrap -->
+  <script src="flutter_bootstrap.js" defer></script>
 </head>
+
 <body>
 <script>
-  window.addEventListener('load', function(ev) {
-    _flutter.loader.loadEntrypoint({
+  window.addEventListener('load', function () {
+    _flutter.loader.load({
       serviceWorker: {
-        serviceWorkerVersion: serviceWorkerVersion,
+        serviceWorkerVersion: "{{flutter_service_worker_version}}",
       },
-      onEntrypointLoaded: function(engineInitializer) {
-        engineInitializer.initializeEngine().then(function(appRunner) {
-          appRunner.runApp();
+      onEntrypointLoaded: function (engineInitializer) {
+        engineInitializer.initializeEngine().then(function (appRunner) {
+          appRunner.runApp().then(() => {
+            // 🔥 GOOGLE MAPS — FLUTTER SONRA
+            const script = document.createElement('script');
+            script.src =
+              "https://maps.googleapis.com/maps/api/js?key=AIzaSyBW9ivbOndjriQ50cwHN6d3VUiWmQJ9VdE";
+            script.async = true;
+            document.body.appendChild(script);
+          });
         });
       }
     });

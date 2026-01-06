@@ -19,45 +19,46 @@ class DriverLocationService {
   StreamSubscription<DocumentSnapshot>? _jobSub;
   Timer? _updateTimer;
   Timer? _permissionCheckTimer;
-  Timer? _historyCleanupTimer; // 🔥 YENİ: Otomatik temizlik
+  Timer? _historyCleanupTimer;
 
   Position? _lastPosition;
   LatLng? _lastSentPosition;
   DateTime? _lastMoveTime;
 
   bool _isTracking = false;
-  bool _isUpdating = false;
+  bool _isUpdating = false; // 🔥 Lock mekanizması
   bool _isMoving = false;
+  bool _isIdle = false; // 🔥 YENİ: Idle state tracking
 
   String _jobStatus = 'available';
 
   final List<Position> _buffer = [];
 
   // ======================================================
-  // 🔥 HISTORY CONFIGURATION
+  // CONFIGURATION
   // ======================================================
   static const int _updateInterval = 10;
   static const int _idleTimeout = 300;
-  static const int _bufferSize = 5;
+  static const int _bufferSize = 6;
   static const double _minMoveDistance = 10;
-  static const double _minAccuracy = 30;
+  static const double _minAccuracy = 25;
 
-  // 🔥 YENİ: History ayarları
-  static const double _historyMinDistance = 25.0; // 25m - rota gözüksün ama çok sık olmasın
-  static const int _historyRetentionHours = 24; // 24 saat tut
-  static const int _historyMaxPoints = 500; // Max 500 nokta tut
-  static const int _historyCleanupIntervalHours = 24; // 30dk'da bir temizle
+  static const double _historyMinDistance = 25.0;
+  static const int _historyRetentionHours = 24;
+  static const int _historyMaxPoints = 500;
+  static const int _historyCleanupIntervalHours = 24;
 
   DriverLocationService(this.driverId);
 
   bool get isTracking => _isTracking;
 
   // ======================================================
-  // START
+  // START - 🔥 İYİLEŞTİRİLDİ
   // ======================================================
   Future<void> startTracking() async {
     if (_isTracking) return;
     _isTracking = true;
+    _isIdle = false;
 
     try {
       await _channel.invokeMethod('saveDriverId', {'driverId': driverId});
@@ -74,18 +75,21 @@ class DriverLocationService {
     await _initLocation();
     await _setOnline();
 
-    // onDisconnect
-    _db.child("locations/$driverId").onDisconnect().update({
-      "isOnline": false,
-      "lastPing": ServerValue.timestamp,
-    });
+    // 🔥 onDisconnect her zaman güncelle
+    await _setupDisconnectHandler();
 
     _positionSub = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
         distanceFilter: 5,
       ),
-    ).listen(_onLocation);
+    ).listen(
+      _onLocation,
+      onError: (error) {
+        debugPrint("❌ Position stream error: $error");
+      },
+      cancelOnError: false,
+    );
 
     _updateTimer = Timer.periodic(
       const Duration(seconds: _updateInterval),
@@ -97,24 +101,36 @@ class DriverLocationService {
           (_) => _checkLocationPermission(),
     );
 
-    // 🔥 YENİ: History temizlik timer'ı
     _historyCleanupTimer = Timer.periodic(
       const Duration(hours: _historyCleanupIntervalHours),
           (_) => _cleanupOldHistory(),
     );
 
     _listenJobStatus();
-
-    // 🔥 İlk başlangıçta bir kere temizlik yap
     _cleanupOldHistory();
 
     debugPrint("✅ Tracking started");
   }
 
+  // 🔥 YENİ: onDisconnect handler'ı ayarla
+  Future<void> _setupDisconnectHandler() async {
+    try {
+      await _db.child("locations/$driverId").onDisconnect().update({
+        "isOnline": false,
+        "lastPing": ServerValue.timestamp,
+      });
+      debugPrint("✅ Disconnect handler set");
+    } catch (e) {
+      debugPrint("⚠️ Could not set disconnect handler: $e");
+    }
+  }
+
   Future<void> _checkLocationPermission() async {
+    if (!_isTracking) return;
+
     final status = await Permission.location.status;
 
-    if (!status.isGranted && _isTracking) {
+    if (!status.isGranted) {
       debugPrint("⚠️ Location permission revoked by user");
 
       await _db.child("locations/$driverId").update({
@@ -129,21 +145,33 @@ class DriverLocationService {
   }
 
   // ======================================================
-  // STOP
+  // STOP - 🔥 İYİLEŞTİRİLDİ
   // ======================================================
   Future<void> stopTracking() async {
     if (!_isTracking) return;
 
     _isTracking = false;
 
+    // 🔥 Stream'leri önce iptal et
     await _positionSub?.cancel();
     await _jobSub?.cancel();
+
+    // 🔥 Timer'ları iptal et
     _updateTimer?.cancel();
     _permissionCheckTimer?.cancel();
-    _historyCleanupTimer?.cancel(); // 🔥 YENİ
+    _historyCleanupTimer?.cancel();
+
+    // 🔥 Buffer'ı temizle
+    _buffer.clear();
+    _lastPosition = null;
+    _lastSentPosition = null;
+    _lastMoveTime = null;
+    _isMoving = false;
+    _isIdle = false;
 
     await _setOffline();
 
+    // 🔥 Referansları null'la
     _positionSub = null;
     _jobSub = null;
     _updateTimer = null;
@@ -163,23 +191,41 @@ class DriverLocationService {
   }
 
   void _listenJobStatus() {
-    _jobSub =
-        _firestore.collection('users').doc(driverId).snapshots().listen((doc) {
-          if (doc.exists) {
-            final newStatus = doc['jobStatus'] ?? 'available';
-            if (_jobStatus != newStatus) {
-              _jobStatus = newStatus;
-              debugPrint("🔄 Job status changed: $_jobStatus");
-              _updateToRTDB();
+    _jobSub = _firestore
+        .collection('users')
+        .doc(driverId)
+        .snapshots()
+        .listen(
+          (doc) {
+        if (!_isTracking) return; // 🔥 Tracking yoksa işleme
+
+        if (doc.exists) {
+          final newStatus = doc['jobStatus'] ?? 'available';
+          if (_jobStatus != newStatus) {
+            _jobStatus = newStatus;
+            debugPrint("🔄 Job status changed: $_jobStatus");
+
+            // 🔥 Job status değişince idle durumunu resetle
+            if (_jobStatus == 'busy') {
+              _isIdle = false;
             }
+
+            _updateToRTDB();
           }
-        });
+        }
+      },
+      onError: (error) {
+        debugPrint("❌ Job status stream error: $error");
+      },
+      cancelOnError: false,
+    );
   }
 
   // ======================================================
-  // LOCATION HANDLING
+  // LOCATION HANDLING - 🔥 İYİLEŞTİRİLDİ
   // ======================================================
   void _onLocation(Position pos) {
+    if (!_isTracking) return; // 🔥 Tracking yoksa işleme
     if (pos.accuracy > _minAccuracy) return;
 
     _lastPosition = pos;
@@ -193,51 +239,99 @@ class DriverLocationService {
   }
 
   void _calculateMovement() {
-    if (_buffer.length < 2) return;
+    if (_buffer.length < 3) return;
 
-    double distance = 0;
-    int time = 0;
+    // Accuracy kontrolü artık _onLocation'da
+    final goodPoints = _buffer.toList();
+    if (goodPoints.length < 3) return;
 
-    for (int i = 1; i < _buffer.length; i++) {
-      final a = _buffer[i - 1];
-      final b = _buffer[i];
+    double totalDistance = 0;
+    int totalTime = 0;
+    final List<double> speeds = [];
 
-      distance += Geolocator.distanceBetween(
+    for (int i = 1; i < goodPoints.length; i++) {
+      final a = goodPoints[i - 1];
+      final b = goodPoints[i];
+
+      final segmentDistance = Geolocator.distanceBetween(
         a.latitude,
         a.longitude,
         b.latitude,
         b.longitude,
       );
 
-      time += b.timestamp.difference(a.timestamp).inSeconds;
+      final segmentTime = b.timestamp.difference(a.timestamp).inSeconds;
+
+      if (segmentTime < 2) continue;
+
+      totalDistance += segmentDistance;
+      totalTime += segmentTime;
+
+      final segmentSpeed = (segmentDistance / segmentTime) * 3.6;
+
+      if (segmentSpeed <= 150) {
+        speeds.add(segmentSpeed);
+      }
     }
 
-    if (time == 0) return;
+    if (totalTime < 5 || speeds.isEmpty) {
+      _isMoving = false;
+      return;
+    }
 
-    final speed = (distance / time) * 3.6;
-    _isMoving = distance >= 15 && speed > 5;
+    final avgSpeed = speeds.reduce((a, b) => a + b) / speeds.length;
+    _isMoving = totalDistance >= 20 && avgSpeed >= 8;
 
     if (_isMoving) {
       _lastMoveTime = DateTime.now();
+      _isIdle = false; // 🔥 Hareket varsa idle değil
     }
+
+    debugPrint("🚗 Movement: dist=${totalDistance.toStringAsFixed(1)}m, "
+        "speed=${avgSpeed.toStringAsFixed(1)}km/h, moving=$_isMoving");
   }
 
   // ======================================================
-  // RTDB UPDATE
+  // RTDB UPDATE - 🔥 İYİLEŞTİRİLDİ
   // ======================================================
   Future<void> _updateToRTDB() async {
-    if (_lastPosition == null || _isUpdating) return;
+    if (!_isTracking) return; // 🔥 Tracking yoksa çıkış
+    if (_lastPosition == null) return;
+
+    // 🔥 Update lock - race condition önleme
+    if (_isUpdating) {
+      debugPrint("⏳ Update already in progress, skipping...");
+      return;
+    }
+
     _isUpdating = true;
 
     try {
       final now = DateTime.now();
 
+      // 🔥 İyileştirilmiş idle logic
       if (_jobStatus == 'available' &&
           !_isMoving &&
           _lastMoveTime != null &&
-          now.difference(_lastMoveTime!).inSeconds > _idleTimeout) {
+          now.difference(_lastMoveTime!).inSeconds > _idleTimeout &&
+          !_isIdle) {
+
+        _isIdle = true;
         await _setOffline();
+        debugPrint("😴 Driver went idle, set offline");
         return;
+      }
+
+      // 🔥 Idle durumda ve hala hareket yoksa güncelleme yapma
+      if (_isIdle && !_isMoving && _jobStatus == 'available') {
+        return;
+      }
+
+      // 🔥 İdle'dan çıkış
+      if (_isIdle && _isMoving) {
+        _isIdle = false;
+        await _setOnline();
+        debugPrint("🚗 Driver active again, set online");
       }
 
       bool shouldAddToHistory = false;
@@ -249,7 +343,6 @@ class DriverLocationService {
           _lastPosition!.longitude,
         );
 
-        // 🔥 YENİ: History için configurable threshold
         shouldAddToHistory = d >= _historyMinDistance;
 
         if (_jobStatus != 'busy' && d < _minMoveDistance && !_isMoving) return;
@@ -273,7 +366,8 @@ class DriverLocationService {
       await _db.child("locations/$driverId").update(data);
 
       if (shouldAddToHistory) {
-        await _addToHistory(data);
+        // 🔥 History ekleme başarısız olsa bile devam et
+        unawaited(_addToHistory(data));
         debugPrint("📍 Added to history (${_historyMinDistance}m threshold)");
       }
 
@@ -290,31 +384,53 @@ class DriverLocationService {
   }
 
   double _calcSpeed() {
-    if (_buffer.length < 2) return 0;
+    if (_buffer.length < 3) return 0;
 
-    double dist = 0;
-    int time = 0;
+    final goodPoints = _buffer.toList();
+    if (goodPoints.length < 3) return 0;
 
-    for (int i = 1; i < _buffer.length; i++) {
-      dist += Geolocator.distanceBetween(
-        _buffer[i - 1].latitude,
-        _buffer[i - 1].longitude,
-        _buffer[i].latitude,
-        _buffer[i].longitude,
+    double totalDist = 0;
+    int totalTime = 0;
+    final List<double> speeds = [];
+
+    for (int i = 1; i < goodPoints.length; i++) {
+      final a = goodPoints[i - 1];
+      final b = goodPoints[i];
+
+      final segmentDist = Geolocator.distanceBetween(
+        a.latitude,
+        a.longitude,
+        b.latitude,
+        b.longitude,
       );
-      time +=
-          _buffer[i].timestamp.difference(_buffer[i - 1].timestamp).inSeconds;
+
+      final segmentTime = b.timestamp.difference(a.timestamp).inSeconds;
+
+      if (segmentTime < 2) continue;
+
+      totalDist += segmentDist;
+      totalTime += segmentTime;
+
+      final segmentSpeed = (segmentDist / segmentTime) * 3.6;
+
+      if (segmentSpeed <= 150) {
+        speeds.add(segmentSpeed);
+      }
     }
 
-    return time == 0 ? 0 : (dist / time) * 3.6;
+    if (totalTime < 3 || speeds.isEmpty) return 0;
+
+    final avgSpeed = speeds.reduce((a, b) => a + b) / speeds.length;
+    return avgSpeed < 3 ? 0 : avgSpeed;
   }
 
   // ======================================================
-  // 🔥 HISTORY MANAGEMENT - YENİ BÖLÜM
+  // HISTORY MANAGEMENT - 🔥 İYİLEŞTİRİLDİ
   // ======================================================
 
-  /// History'e yeni nokta ekle
   Future<void> _addToHistory(Map data) async {
+    if (!_isTracking) return;
+
     try {
       await _db.child("history/$driverId").push().set({
         "lat": data['lat'],
@@ -323,11 +439,13 @@ class DriverLocationService {
       });
     } catch (e) {
       debugPrint("⚠️ History add error: $e");
+      // Hata olsa bile devam et
     }
   }
 
-  /// 🔥 YENİ: Eski history kayıtlarını temizle
   Future<void> _cleanupOldHistory() async {
+    if (!_isTracking) return;
+
     try {
       debugPrint("🧹 Starting history cleanup for driver: $driverId");
 
@@ -345,7 +463,6 @@ class DriverLocationService {
 
       final List<MapEntry<String, int>> entries = [];
 
-      // Tüm history noktalarını topla
       historyData.forEach((key, value) {
         if (value is Map && value['timestamp'] != null) {
           try {
@@ -362,12 +479,10 @@ class DriverLocationService {
         return;
       }
 
-      // Timestamp'e göre sırala (en eski -> en yeni)
       entries.sort((a, b) => a.value.compareTo(b.value));
 
       final List<String> keysToDelete = [];
 
-      // 1️⃣ Zaman bazlı temizlik: _historyRetentionHours'dan eski olanlar
       for (final entry in entries) {
         final entryTime = DateTime.fromMillisecondsSinceEpoch(entry.value);
         if (entryTime.isBefore(cutoffTime)) {
@@ -375,12 +490,10 @@ class DriverLocationService {
         }
       }
 
-      // 2️⃣ Boyut bazlı temizlik: Max _historyMaxPoints nokta tut
       final remainingCount = entries.length - keysToDelete.length;
       if (remainingCount > _historyMaxPoints) {
         final excessCount = remainingCount - _historyMaxPoints;
 
-        // En eski noktalardan başla (zaten silinecekler hariç)
         final notMarkedForDeletion = entries
             .where((e) => !keysToDelete.contains(e.key))
             .toList();
@@ -395,27 +508,40 @@ class DriverLocationService {
         return;
       }
 
-      // Toplu silme işlemi
+      // 🔥 Batch silme - hata olursa devam et
       final updates = <String, dynamic>{};
       for (final key in keysToDelete) {
-        updates[key] = null; // RTDB'de null = delete
+        updates[key] = null;
       }
 
-      await historyRef.update(updates);
+      try {
+        await historyRef.update(updates);
+        final remainingPoints = entries.length - keysToDelete.length;
+        debugPrint(
+            "🧹 Cleaned ${keysToDelete.length} old history points. "
+                "Remaining: $remainingPoints (max: $_historyMaxPoints, "
+                "retention: ${_historyRetentionHours}h)");
+      } catch (e) {
+        debugPrint("⚠️ Batch delete failed, trying individual deletes: $e");
 
-      final remainingPoints = entries.length - keysToDelete.length;
-      debugPrint(
-          "🧹 Cleaned ${keysToDelete.length} old history points. "
-              "Remaining: $remainingPoints (max: $_historyMaxPoints, "
-              "retention: ${_historyRetentionHours}h)"
-      );
+        // 🔥 Fallback: Tek tek sil
+        int deleted = 0;
+        for (final key in keysToDelete) {
+          try {
+            await historyRef.child(key).remove();
+            deleted++;
+          } catch (e) {
+            debugPrint("⚠️ Could not delete key $key: $e");
+          }
+        }
+        debugPrint("🧹 Deleted $deleted of ${keysToDelete.length} points individually");
+      }
 
     } catch (e) {
       debugPrint("❌ History cleanup error: $e");
     }
   }
 
-  /// 🔥 YENİ: Manuel history temizleme (isteğe bağlı - test/debug için)
   Future<void> clearAllHistory() async {
     try {
       await _db.child("history/$driverId").remove();
@@ -440,6 +566,10 @@ class DriverLocationService {
         "lastPing": ServerValue.timestamp,
         "offlineNotified": false,
       });
+
+      // 🔥 onDisconnect'i yeniden ayarla
+      await _setupDisconnectHandler();
+
       debugPrint("✅ Set online");
     } catch (e) {
       debugPrint("❌ Set online error: $e");
@@ -460,13 +590,32 @@ class DriverLocationService {
   }
 
   // ======================================================
-  // CLEANUP
+  // CLEANUP - 🔥 İYİLEŞTİRİLDİ
   // ======================================================
   void dispose() {
+    // Stream'leri iptal et
     _positionSub?.cancel();
     _jobSub?.cancel();
+
+    // Timer'ları iptal et
     _updateTimer?.cancel();
     _permissionCheckTimer?.cancel();
     _historyCleanupTimer?.cancel();
+
+    // Buffer'ı temizle
+    _buffer.clear();
+
+    // 🔥 Tüm state'i resetle
+    _isTracking = false;
+    _isUpdating = false;
+    _isMoving = false;
+    _isIdle = false;
+
+    // Position verilerini temizle
+    _lastPosition = null;
+    _lastSentPosition = null;
+    _lastMoveTime = null;
+
+    debugPrint("🧹 Service disposed and cleaned up");
   }
 }

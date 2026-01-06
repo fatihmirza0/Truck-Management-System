@@ -46,6 +46,7 @@ dependencies:
   flutter_map: ^8.2.2
   latlong2: ^0.9.1
   flutter_background_service: ^5.1.0
+  dio: ^5.9.0
 
   # Windows için desktop SDK
 #  firebase_core_desktop:

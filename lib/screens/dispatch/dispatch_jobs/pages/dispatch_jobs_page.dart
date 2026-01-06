@@ -3,13 +3,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:lojistik/services/firestore_Service.dart';
-import 'package:lojistik/screens/dispatch/dispatch_job_detail_page.dart';
-import '../../../widgets/empty_state.dart' hide EmptyState;
-import 'widgets/jobs_page_header.dart';
-import 'widgets/jobs_search_bar.dart';
-import 'widgets/jobs_status_tabs.dart';
-import 'widgets/job_card.dart';
-import 'widgets/empty_state.dart';
+import 'package:lojistik/screens/dispatch/dispatch_job_detail/pages/dispatch_job_detail_page.dart';
+import '../../../../widgets/empty_state.dart' hide EmptyState;
+import '../widgets/jobs_page_header.dart';
+import '../widgets/jobs_search_bar.dart';
+import '../widgets/jobs_status_tabs.dart';
+import '../widgets/job_card.dart';
+import '../widgets/empty_state.dart';
 
 class DispatchJobsPage extends StatefulWidget {
   const DispatchJobsPage({super.key});

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'pages/create_job_page.dart';
-import 'pages/add_driver_page.dart';
-import 'pages/dispatch_jobs_page.dart';
+import 'create_job/pages/create_job_page.dart';
+import 'add_driver/pages/add_driver_page.dart';
+import 'dispatch_jobs/pages/dispatch_jobs_page.dart';
 import 'package:lojistik/screens/commons/profile_screen.dart';
 
 class DispatchMainScreen extends StatefulWidget {

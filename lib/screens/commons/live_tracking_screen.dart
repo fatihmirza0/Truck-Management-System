@@ -21,6 +21,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
   final LiveTrackingService _service = LiveTrackingService();
   final ValueNotifier<List<LiveDriver>> _driversNotifier =
       ValueNotifier<List<LiveDriver>>([]);
+  bool _isStreamActive = false; // 🔥 YENİ: Stream kontrolü
 
   StreamSubscription<List<LiveDriver>>? _driversSubscription;
 
@@ -49,6 +50,8 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
 
   @override
   void dispose() {
+    _isStreamActive = false; // 🔥 Stream'i durdur
+
     _driversSubscription?.cancel();
     _service.dispose();
     _mapController.dispose();
@@ -58,20 +61,29 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
   }
 
   Future<void> _initializeTracking() async {
+    if (_isStreamActive) {
+      debugPrint('⚠️ Tracking already active');
+      return;
+    }
+
     try {
       setState(() => _isLoading = true);
+
       await _service.preloadFirestore();
 
+      _isStreamActive = true; // 🔥 Stream başladı
+
       _driversSubscription = _service.liveDrivers().listen(
-        (drivers) {
-          if (!mounted) return;
+            (drivers) {
+          if (!mounted || !_isStreamActive) return; // 🔥 Kontrol ekle
+
           _driversNotifier.value = drivers;
 
           if (_autoCenter && drivers.isNotEmpty) {
             _fitMapToDrivers(drivers);
           }
 
-          if (_isLoading) {
+          if (_isLoading && mounted) {
             setState(() {
               _isLoading = false;
               _errorMessage = null;
@@ -79,18 +91,30 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
           }
         },
         onError: (error) {
-          if (!mounted) return;
-          setState(() {
-            _errorMessage = 'Veri akışı hatası';
-            _isLoading = false;
-          });
+          if (!mounted || !_isStreamActive) return;
+
+          debugPrint('❌ Stream error: $error');
+          if (mounted) {
+            setState(() {
+              _errorMessage = 'Veri akışı hatası: $error';
+              _isLoading = false;
+            });
+          }
         },
+        onDone: () {
+          debugPrint('✅ Stream completed');
+          _isStreamActive = false;
+        },
+        cancelOnError: false, // 🔥 Hata olsa bile stream devam etsin
       );
     } catch (e) {
       if (!mounted) return;
+
+      debugPrint('❌ Initialize error: $e');
       setState(() {
         _errorMessage = 'Başlatma hatası: $e';
         _isLoading = false;
+        _isStreamActive = false;
       });
     }
   }
@@ -319,9 +343,11 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                 // ============= BOTTOM SHEET (SÜRÜCÜLER) =============
                 if (filtered.isNotEmpty)
                   DraggableScrollableSheet(
-                    initialChildSize: 0.2,
-                    minChildSize: 0.2,
-                    maxChildSize: 0.75,
+                    initialChildSize: 0.25, // 🔥 Biraz daha büyük başlangıç
+                    minChildSize: 0.15,     // 🔥 Daha küçük minimum
+                    maxChildSize: 0.8,      // 🔥 Daha büyük maksimum
+                    snap: true,             // 🔥 YENİ: Snap noktaları
+                    snapSizes: const [0.15, 0.25, 0.5, 0.8], // 🔥 YENİ: Snap pozisyonları
                     builder: (context, scrollController) {
                       return Container(
                         decoration: BoxDecoration(
@@ -1426,12 +1452,20 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () {
+              onPressed: () async {
+                if (!mounted) return; // 🔥 mounted kontrolü
+
                 setState(() {
                   _isLoading = true;
                   _errorMessage = null;
                 });
-                _initializeTracking();
+
+                // 🔥 Stream'i durdur ve yeniden başlat
+                await _driversSubscription?.cancel();
+                _driversSubscription = null;
+                _isStreamActive = false;
+
+                await _initializeTracking();
               },
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Yeniden Dene'),
@@ -1453,7 +1487,6 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
       ),
     );
   }
-
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -1537,14 +1570,22 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
 
   Marker _marker(LiveDriver d) {
     final selected = d.driverId == _selectedDriverId;
+
     return Marker(
       width: 140,
       height: 90,
       point: d.position,
       child: GestureDetector(
         onTap: () {
+          if (!mounted) return; // 🔥 mounted kontrolü
+
           setState(() => _selectedDriverId = d.driverId);
-          _mapController.move(d.position, 15);
+
+          try {
+            _mapController.move(d.position, 15);
+          } catch (e) {
+            debugPrint('⚠️ Map move error: $e');
+          }
         },
         child: Column(
           children: [
@@ -1605,7 +1646,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
             ),
             const SizedBox(height: 6),
             Transform.rotate(
-              angle: d.heading * pi / 180,
+              angle: (d.heading * pi / 180).clamp(-pi, pi), // 🔥 Angle clamp
               child: Container(
                 padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
