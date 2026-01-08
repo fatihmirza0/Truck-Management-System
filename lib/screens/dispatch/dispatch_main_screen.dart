@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'create_job/pages/create_job_page.dart';
 import 'add_driver/pages/add_driver_page.dart';
 import 'dispatch_jobs/pages/dispatch_jobs_page.dart';
-import 'package:lojistik/screens/commons/profile_screen.dart';
+import 'package:lojistik/screens/commons/profile/pages/profile_screen.dart';
 
 class DispatchMainScreen extends StatefulWidget {
   final String uid;

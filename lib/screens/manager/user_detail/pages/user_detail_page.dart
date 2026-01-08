@@ -3,7 +3,10 @@
 // Desktop & Mobile Optimized
 // ============================================
 import 'package:flutter/material.dart';
-import '../../services/firestore_Service.dart';
+import '../../../../services/firestore_Service.dart';
+
+import '../widgets/user_detail_info_card.dart';
+import '../widgets/user_detail_info_tile.dart';
 
 class UserDetailPage extends StatefulWidget {
   final String userId;
@@ -355,25 +358,25 @@ class _UserDetailPageState extends State<UserDetailPage> {
                         flex: 1,
                         child: Column(
                           children: [
-                            _buildInfoCard(
-                              "Hesap Durumu",
-                              Icons.verified_user_outlined,
-                              "Aktif",
-                              const Color(0xFF059669),
+                            UserDetailInfoCard(
+                              title: "Hesap Durumu",
+                              icon: Icons.verified_user_outlined,
+                              value: "Aktif",
+                              color: const Color(0xFF059669),
                             ),
                             const SizedBox(height: 16),
-                            _buildInfoCard(
-                              "Rol",
-                              Icons.badge_outlined,
-                              isDriver ? "Şoför" : "Dispatch",
-                              const Color(0xFF1E3A5F),
+                            UserDetailInfoCard(
+                              title: "Rol",
+                              icon: Icons.badge_outlined,
+                              value: isDriver ? "Şoför" : "Dispatch",
+                              color: const Color(0xFF1E3A5F),
                             ),
                             const SizedBox(height: 16),
-                            _buildInfoCard(
-                              "Kullanıcı ID",
-                              Icons.fingerprint_outlined,
-                              widget.userId.substring(0, 8) + "...",
-                              const Color(0xFF64748B),
+                            UserDetailInfoCard(
+                              title: "Kullanıcı ID",
+                              icon: Icons.fingerprint_outlined,
+                              value: widget.userId.substring(0, 8) + "...",
+                              color: const Color(0xFF64748B),
                             ),
                           ],
                         ),
@@ -393,60 +396,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
                 ),
               ),
             ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoCard(
-      String title, IconData icon, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 20, color: color),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF64748B),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
         ],
       ),
     );
@@ -600,56 +549,28 @@ class _UserDetailPageState extends State<UserDetailPage> {
   Widget _buildViewMode() {
     return Column(
       children: [
-        _infoTile(Icons.person_outline, "İsim", _nameCtrl.text),
-        _infoTile(Icons.email_outlined, "E-posta", _emailCtrl.text),
-        _infoTile(Icons.phone_outlined, "Telefon", _phoneCtrl.text),
+        UserDetailInfoTile(
+          icon: Icons.person_outline,
+          label: "İsim",
+          value: _nameCtrl.text,
+        ),
+        UserDetailInfoTile(
+          icon: Icons.email_outlined,
+          label: "E-posta",
+          value: _emailCtrl.text,
+        ),
+        UserDetailInfoTile(
+          icon: Icons.phone_outlined,
+          label: "Telefon",
+          value: _phoneCtrl.text,
+        ),
         if (isDriver)
-          _infoTile(Icons.car_rental_outlined, "Plaka", _plateCtrl.text),
+          UserDetailInfoTile(
+            icon: Icons.car_rental_outlined,
+            label: "Plaka",
+            value: _plateCtrl.text,
+          ),
       ],
-    );
-  }
-
-  Widget _infoTile(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, size: 18, color: const Color(0xFF64748B)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF64748B),
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  value.isNotEmpty ? value : "-",
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: Color(0xFF0F172A),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -766,3 +687,4 @@ class _UserDetailPageState extends State<UserDetailPage> {
     );
   }
 }
+

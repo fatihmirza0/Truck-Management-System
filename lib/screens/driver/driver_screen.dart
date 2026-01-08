@@ -5,10 +5,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/services.dart';
 
-import 'active_jobs_page.dart';
-import 'completed_jobs_page.dart';
-import '../commons/login_screen.dart';
-import '../commons/profile_screen.dart';
+import 'active_jobs/pages/active_jobs_page.dart';
+import 'completed_jobs/pages/completed_jobs_page.dart';
+import '../commons/login/pages/login_screen.dart';
+import '../commons/profile/pages/profile_screen.dart';
 import 'package:lojistik/services/driver_location_service.dart';
 
 class DriverScreen extends StatefulWidget {

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'job_detail_panel.dart';
-import 'job_service.dart';
+import '../job_detail_panel.dart';
+import '../job_service.dart';
+import '../widgets/jobs_page_header.dart';
+import '../widgets/jobs_search_bar.dart';
 
 class JobsPage extends StatefulWidget {
   const JobsPage({super.key});
@@ -210,87 +212,11 @@ class _JobsPageState extends State<JobsPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Modern Header
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E3A5F),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF1E3A5F).withOpacity(0.2),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.local_shipping_outlined,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "İş Yönetimi",
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF1E3A5F),
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "Tüm nakliye operasyonlarını takip edin",
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w400,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              const JobsPageHeader(),
               const SizedBox(height: 24),
 
               // Search Bar
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: const InputDecoration(
-                    hintText:
-                        "Referans no, şoför, plaka, yük bilgisi ile ara...",
-                    hintStyle: TextStyle(
-                      color: Color(0xFF94A3B8),
-                      fontSize: 14,
-                    ),
-                    prefixIcon: Icon(Icons.search, color: Color(0xFF64748B)),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 16),
-                  ),
-                ),
-              ),
+              JobsSearchBar(controller: _searchController),
               const SizedBox(height: 20),
 
               // Status Tabs
@@ -997,3 +923,5 @@ class _JobsPageState extends State<JobsPage> {
     });
   }
 }
+
+

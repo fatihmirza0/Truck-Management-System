@@ -5,7 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/rendering.dart';
 
-import '../../services/auth_Service.dart';
+import '../../../../services/auth_Service.dart';
+import '../widgets/profile_logout_dialog.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -99,7 +100,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _emailController.text = user.email ?? "";
         _phoneController.text = originalPhone!;
 
-        // NEW: driver plaka vehicles’dan gelir
+        // NEW: driver plaka vehicles'dan gelir
         if (userRole == "driver") {
           await _loadDriverVehiclePlate(userId!);
         }
@@ -223,50 +224,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _logout() async {
-    final res = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.logout_outlined, color: Color(0xFFDC2626)),
-            SizedBox(width: 12),
-            Text("Oturumu Kapat"),
-          ],
-        ),
-        content: const Text("Çıkış yapmak istediğinize emin misiniz?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("İptal"),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text("Çıkış Yap"),
-          ),
-        ],
-      ),
-    );
+    final res = await ProfileLogoutDialog.show(context);
 
     if (res == true) {
-      // 🔥 PAT DİYE GÖNDER
       await AuthService.logoutFast();
 
       if (context.mounted) {
         Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
       }
 
-      // 🧹 ARKA PLAN TEMİZLİĞİ
       unawaited(AuthService.logoutCleanup());
     }
-
   }
 
   String _getRoleName() {
@@ -335,7 +303,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // --- UI aynı, sadece plaka alanı enable logic değişti ---
   Widget _buildDesktopSidebar() {
     return Container(
       width: 320,
@@ -934,3 +901,5 @@ class _RenderSliverToConstrainedBox extends RenderProxySliver {
     );
   }
 }
+
+

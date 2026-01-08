@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:lojistik/screens/manager/jobs/completed_jobs_page.dart';
 
-import '../commons/login_screen.dart';
+import '../commons/login/pages/login_screen.dart';
 import '../commons/live_tracking_screen.dart';
-import '../commons/profile_screen.dart';
-import 'jobs/jobs_page.dart';
-import 'add_user_page.dart';
-import 'users_page.dart';
+import '../commons/profile/pages/profile_screen.dart';
+import 'jobs/pages/jobs_page.dart';
+import 'add_user/pages/add_user_page.dart';
+import 'users/pages/users_page.dart';
 import 'report_Screen.dart';
 
 class ManagerScreen extends StatefulWidget {
