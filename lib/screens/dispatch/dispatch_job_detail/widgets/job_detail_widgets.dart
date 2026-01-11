@@ -16,9 +16,9 @@ class StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: statusColor.withOpacity(0.1),
+        color: statusColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: statusColor.withOpacity(0.3), width: 1),
+        border: Border.all(color: statusColor.withValues(alpha: 0.3), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -69,7 +69,7 @@ class InfoCard extends StatelessWidget {
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -134,7 +134,7 @@ class JobReferenceCard extends StatelessWidget {
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           )
@@ -285,16 +285,16 @@ class RejectionReasonCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.05),
+        color: Colors.red.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.withOpacity(0.2)),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.red.withOpacity(0.1),
+              color: Colors.red.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6),
             ),
             child: const Icon(Icons.info_outline, size: 18, color: Colors.red),
@@ -443,9 +443,9 @@ class DocumentsCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.green.withOpacity(0.05),
+        color: Colors.green.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.green.withOpacity(0.2)),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -455,7 +455,7 @@ class DocumentsCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
+                  color: Colors.green.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Icon(
@@ -507,7 +507,7 @@ class DocumentsCard extends StatelessWidget {
                 referenceNo: referenceNo,
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );
@@ -605,22 +605,20 @@ class _DocumentInfoItemState extends State<DocumentInfoItem> {
         _downloadUrl = urlToDownload;
       }
 
-      if (urlToDownload != null) {
-        // Dosya adını oluştur
-        final fileName = '${widget.referenceNo}_${widget.index}';
+      // Dosya adını oluştur
+      final fileName = '${widget.referenceNo}_${widget.index}';
 
-        await StorageHelper.downloadFile(urlToDownload, fileName);
+      await StorageHelper.downloadFile(urlToDownload, fileName);
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Belge indirildi'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Belge indirildi'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
-    } catch (e) {
+        } catch (e) {
       if (mounted) {
         // İptal hatası mesajını gösterme
         if (!e.toString().contains('iptal')) {
@@ -736,7 +734,7 @@ class _DocumentInfoItemState extends State<DocumentInfoItem> {
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, Colors.black.withOpacity(0.3)],
+                            colors: [Colors.transparent, Colors.black.withValues(alpha: 0.3)],
                           ),
                         ),
                       ),
@@ -754,9 +752,9 @@ class _DocumentInfoItemState extends State<DocumentInfoItem> {
               height: 60,
               margin: const EdgeInsets.only(right: 12),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.blue.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
               ),
               child: Icon(
                 _downloadUrl?.toLowerCase().contains('.pdf') ?? false
@@ -816,7 +814,7 @@ class _DocumentInfoItemState extends State<DocumentInfoItem> {
                   icon: const Icon(Icons.fullscreen, size: 20),
                   tooltip: 'Tam Ekran',
                   style: IconButton.styleFrom(
-                    backgroundColor: Colors.grey.withOpacity(0.1),
+                    backgroundColor: Colors.grey.withValues(alpha: 0.1),
                   ),
                 ),
               if (urlExists)
@@ -831,7 +829,7 @@ class _DocumentInfoItemState extends State<DocumentInfoItem> {
                       : const Icon(Icons.download, size: 20),
                   tooltip: 'İndir',
                   style: IconButton.styleFrom(
-                    backgroundColor: Colors.blue.withOpacity(0.1),
+                    backgroundColor: Colors.blue.withValues(alpha: 0.1),
                   ),
                 ),
             ],

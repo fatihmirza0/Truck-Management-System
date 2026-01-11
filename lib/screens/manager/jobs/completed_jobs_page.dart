@@ -313,7 +313,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                     width: 44,
                     height: 5,
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.12),
+                      color: Colors.black.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(99),
                     ),
                   ),
@@ -361,7 +361,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                         border: Border.all(color: border),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.03),
+                            color: Colors.black.withValues(alpha: 0.03),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -433,7 +433,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                                         width: 36,
                                         height: 36,
                                         decoration: BoxDecoration(
-                                          color: accent.withOpacity(0.12),
+                                          color: accent.withValues(alpha: 0.12),
                                           borderRadius:
                                               BorderRadius.circular(10),
                                         ),
@@ -666,7 +666,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
             border: Border.all(color: primary ? accent : border),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.03),
+                color: Colors.black.withValues(alpha: 0.03),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -706,7 +706,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                   child: Icon(
                     Icons.close,
                     size: 18,
-                    color: primary ? Colors.white.withOpacity(0.9) : textMuted,
+                    color: primary ? Colors.white.withValues(alpha: 0.9) : textMuted,
                   ),
                 ),
               ],
@@ -790,7 +790,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: accent.withOpacity(0.2),
+                          color: accent.withValues(alpha: 0.2),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -842,7 +842,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                   border: Border.all(color: border),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withValues(alpha: 0.03),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -936,7 +936,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                             border: Border.all(color: border),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
+                                color: Colors.black.withValues(alpha: 0.03),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -985,7 +985,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                                           padding: const EdgeInsets.symmetric(
                                               horizontal: 10, vertical: 6),
                                           decoration: BoxDecoration(
-                                            color: accent.withOpacity(0.10),
+                                            color: accent.withValues(alpha: 0.10),
                                             borderRadius:
                                                 BorderRadius.circular(999),
                                           ),

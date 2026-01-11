@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -74,7 +73,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
       _isStreamActive = true; // 🔥 Stream başladı
 
       _driversSubscription = _service.liveDrivers().listen(
-            (drivers) {
+        (drivers) {
           if (!mounted || !_isStreamActive) return; // 🔥 Kontrol ekle
 
           _driversNotifier.value = drivers;
@@ -216,19 +215,20 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                       PolylineLayer(
                         polylines: allDrivers
                             .where((d) =>
-                        d.driverId == _selectedDriverId &&
-                            d.history.length > 1)
+                                d.driverId == _selectedDriverId &&
+                                d.history.length > 1)
                             .map((d) => Polyline(
-                          points: d.history,
-                          strokeWidth: 3.5,
-                          color: const Color(0xFF3B82F6),
-                          borderStrokeWidth: 1.5,
-                          borderColor: Colors.white,
-                          gradientColors: [
-                            const Color(0xFF3B82F6).withOpacity(0.3),
-                            const Color(0xFF3B82F6),
-                          ],
-                        ))
+                                  points: d.history,
+                                  strokeWidth: 3.5,
+                                  color: const Color(0xFF3B82F6),
+                                  borderStrokeWidth: 1.5,
+                                  borderColor: Colors.white,
+                                  gradientColors: [
+                                    const Color(0xFF3B82F6)
+                                        .withValues(alpha: 0.3),
+                                    const Color(0xFF3B82F6),
+                                  ],
+                                ))
                             .toList(),
                       ),
                     MarkerLayer(
@@ -251,7 +251,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
+                              color: Colors.black.withValues(alpha: 0.08),
                               blurRadius: 24,
                               offset: const Offset(0, 8),
                             ),
@@ -272,13 +272,13 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                             ),
                             suffixIcon: _searchQuery.isNotEmpty
                                 ? IconButton(
-                              icon: const Icon(
-                                Icons.clear_rounded,
-                                size: 20,
-                              ),
-                              onPressed: () =>
-                                  setState(() => _searchQuery = ''),
-                            )
+                                    icon: const Icon(
+                                      Icons.clear_rounded,
+                                      size: 20,
+                                    ),
+                                    onPressed: () =>
+                                        setState(() => _searchQuery = ''),
+                                  )
                                 : null,
                             border: InputBorder.none,
                             contentPadding: const EdgeInsets.symmetric(
@@ -295,7 +295,9 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                         children: [
                           _buildMobileStatChip(
                             'Müsait',
-                            allDrivers.where((d) => d.status == 'online').length,
+                            allDrivers
+                                .where((d) => d.status == 'online')
+                                .length,
                             const Color(0xFF10B981),
                             Icons.check_circle_rounded,
                           ),
@@ -309,7 +311,9 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                           const SizedBox(width: 8),
                           _buildMobileStatChip(
                             'Pasif',
-                            allDrivers.where((d) => d.status == 'offline').length,
+                            allDrivers
+                                .where((d) => d.status == 'offline')
+                                .length,
                             const Color(0xFFEF4444),
                             Icons.remove_circle_outline_rounded,
                           ),
@@ -344,10 +348,15 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                 if (filtered.isNotEmpty)
                   DraggableScrollableSheet(
                     initialChildSize: 0.25, // 🔥 Biraz daha büyük başlangıç
-                    minChildSize: 0.15,     // 🔥 Daha küçük minimum
-                    maxChildSize: 0.8,      // 🔥 Daha büyük maksimum
-                    snap: true,             // 🔥 YENİ: Snap noktaları
-                    snapSizes: const [0.15, 0.25, 0.5, 0.8], // 🔥 YENİ: Snap pozisyonları
+                    minChildSize: 0.15, // 🔥 Daha küçük minimum
+                    maxChildSize: 0.8, // 🔥 Daha büyük maksimum
+                    snap: true, // 🔥 YENİ: Snap noktaları
+                    snapSizes: const [
+                      0.15,
+                      0.25,
+                      0.5,
+                      0.8
+                    ], // 🔥 YENİ: Snap pozisyonları
                     builder: (context, scrollController) {
                       return Container(
                         decoration: BoxDecoration(
@@ -357,7 +366,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.12),
+                              color: Colors.black.withValues(alpha: 0.12),
                               blurRadius: 32,
                               offset: const Offset(0, -8),
                             ),
@@ -373,7 +382,8 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                               },
                               child: Container(
                                 width: double.infinity,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
                                 child: Center(
                                   child: Container(
                                     width: 48,
@@ -392,7 +402,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                               onTap: () => _showMobileFilters(),
                               child: Padding(
                                 padding:
-                                const EdgeInsets.symmetric(horizontal: 20),
+                                    const EdgeInsets.symmetric(horizontal: 20),
                                 child: Row(
                                   children: [
                                     const Text(
@@ -445,7 +455,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                               child: ListView.builder(
                                 controller: scrollController,
                                 padding:
-                                const EdgeInsets.symmetric(horizontal: 16),
+                                    const EdgeInsets.symmetric(horizontal: 16),
                                 itemCount: filtered.length,
                                 itemBuilder: (_, i) =>
                                     _buildMobileDriverCard(filtered[i]),
@@ -468,7 +478,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                           const CircularProgressIndicator(
                             strokeWidth: 3,
                             valueColor:
-                            AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+                                AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
                           ),
                           const SizedBox(height: 20),
                           Text(
@@ -490,6 +500,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
       ),
     );
   }
+
   Widget _buildDesktopLayout(bool isTablet) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -508,13 +519,13 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                     color: Colors.white,
                     border: Border(
                       bottom: BorderSide(
-                        color: const Color(0xFFE2E8F0).withOpacity(0.8),
+                        color: const Color(0xFFE2E8F0).withValues(alpha: 0.8),
                         width: 1,
                       ),
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
+                        color: Colors.black.withValues(alpha: 0.04),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -533,7 +544,8 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF1E3A5F).withOpacity(0.2),
+                              color: const Color(0xFF1E3A5F)
+                                  .withValues(alpha: 0.2),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
@@ -663,7 +675,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                         color: Colors.white,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
+                            color: Colors.black.withValues(alpha: 0.08),
                             blurRadius: 16,
                           ),
                         ],
@@ -676,8 +688,8 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                               color: const Color(0xFFFAFAFA),
                               border: Border(
                                 bottom: BorderSide(
-                                  color:
-                                      const Color(0xFFE2E8F0).withOpacity(0.6),
+                                  color: const Color(0xFFE2E8F0)
+                                      .withValues(alpha: 0.6),
                                 ),
                               ),
                             ),
@@ -761,8 +773,9 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                                 final filtered = _applyFilters(drivers);
 
                                 if (_isLoading) return _buildLoadingState();
-                                if (_errorMessage != null)
+                                if (_errorMessage != null) {
                                   return _buildErrorState();
+                                }
                                 if (filtered.isEmpty) return _buildEmptyState();
 
                                 return ListView.builder(
@@ -817,7 +830,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                                         borderColor: Colors.white,
                                         gradientColors: [
                                           const Color(0xFF3B82F6)
-                                              .withOpacity(0.3),
+                                              .withValues(alpha: 0.3),
                                           const Color(0xFF3B82F6),
                                         ],
                                       );
@@ -860,7 +873,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                           child: Material(
                             elevation: 8,
                             borderRadius: BorderRadius.circular(14),
-                            shadowColor: Colors.black.withOpacity(0.2),
+                            shadowColor: Colors.black.withValues(alpha: 0.2),
                             child: InkWell(
                               onTap: () => setState(
                                   () => _showSidePanel = !_showSidePanel),
@@ -904,7 +917,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
       child: Material(
         elevation: 8,
         borderRadius: BorderRadius.circular(16),
-        shadowColor: Colors.black.withOpacity(0.3),
+        shadowColor: Colors.black.withValues(alpha: 0.3),
         child: InkWell(
           onTap: onPressed,
           borderRadius: BorderRadius.circular(16),
@@ -934,7 +947,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
   }) {
     return Material(
       color: isActive
-          ? const Color(0xFF1E3A5F).withOpacity(0.1)
+          ? const Color(0xFF1E3A5F).withValues(alpha: 0.1)
           : Colors.transparent,
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
@@ -946,7 +959,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isActive
-                  ? const Color(0xFF1E3A5F).withOpacity(0.3)
+                  ? const Color(0xFF1E3A5F).withValues(alpha: 0.3)
                   : const Color(0xFFE2E8F0),
               width: 1,
             ),
@@ -977,10 +990,10 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: color.withOpacity(0.2),
+          color: color.withValues(alpha: 0.2),
           width: 1,
         ),
       ),
@@ -996,7 +1009,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: color.withOpacity(0.9),
+                  color: color.withValues(alpha: 0.9),
                   letterSpacing: 0.2,
                 ),
               ),
@@ -1027,7 +1040,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 12,
               offset: const Offset(0, 3),
             ),
@@ -1077,7 +1090,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
         boxShadow: selected
             ? [
                 BoxShadow(
-                  color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                  color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -1167,8 +1180,8 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color:
-                                  _getStatusColor(d.status).withOpacity(0.12),
+                              color: _getStatusColor(d.status)
+                                  .withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -1367,7 +1380,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(d.status).withOpacity(0.12),
+                    color: _getStatusColor(d.status).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -1397,7 +1410,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: const Color(0xFF1E3A5F).withOpacity(0.1),
+              color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: const Center(
@@ -1431,7 +1444,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFFEF4444).withOpacity(0.1),
+                color: const Color(0xFFEF4444).withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -1487,6 +1500,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
       ),
     );
   }
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -1602,7 +1616,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.12),
+                    color: Colors.black.withValues(alpha: 0.12),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -1628,7 +1642,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withOpacity(0.12),
+                        color: const Color(0xFF10B981).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(5),
                       ),
                       child: Text(
@@ -1654,7 +1668,7 @@ class _LiveTrackingPanelState extends State<LiveTrackingPanel>
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: _getStatusColor(d.status).withOpacity(0.4),
+                      color: _getStatusColor(d.status).withValues(alpha: 0.4),
                       blurRadius: 10,
                       spreadRadius: 2,
                     ),

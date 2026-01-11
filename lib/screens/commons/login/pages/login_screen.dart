@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lojistik/services/auth_service.dart';
+import 'package:lojistik/config/app_theme.dart';
+import 'package:lojistik/widgets/animated/floating_particles.dart';
 
 import '../widgets/login_desktop_panel.dart';
 import '../widgets/login_form_card.dart';
@@ -20,20 +22,8 @@ class _LoginScreenState extends State<LoginScreen>
   String? errorMessage;
   bool _isPasswordVisible = false;
 
-  late AnimationController _animationController;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat();
-  }
-
   @override
   void dispose() {
-    _animationController.dispose();
     emailController.dispose();
     passwordController.dispose();
     super.dispose();
@@ -100,51 +90,55 @@ class _LoginScreenState extends State<LoginScreen>
     final isDesktop = width >= 900;
 
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Colors.blueGrey.shade900,
-              Colors.blueGrey.shade700,
-              Colors.blueGrey.shade600
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      body: Stack(
+        children: [
+          // Gradient background
+          Container(
+            decoration: AppTheme.gradientBackground,
           ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(
-              horizontal: isDesktop ? 40 : 20,
-              vertical: isDesktop ? 40 : 20,
+
+          // Floating particles
+          const Positioned.fill(
+            child: FloatingParticles(
+              particleCount: 40,
+              color: Colors.white,
             ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 950),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (isDesktop) const LoginDesktopPanel(),
-                  LoginFormCard(
-                    emailController: emailController,
-                    passwordController: passwordController,
-                    isPasswordVisible: _isPasswordVisible,
-                    onTogglePassword: () {
-                      setState(() {
-                        _isPasswordVisible = !_isPasswordVisible;
-                      });
-                    },
-                    onLogin: login,
-                    isLoading: isLoading,
-                    errorMessage: errorMessage,
-                  ),
-                ],
+          ),
+
+          // Content
+          Center(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                horizontal: isDesktop ? 40 : 20,
+                vertical: isDesktop ? 40 : 20,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 950),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (isDesktop) const LoginDesktopPanel(withAnimation: true),
+                    LoginFormCard(
+                      emailController: emailController,
+                      passwordController: passwordController,
+                      isPasswordVisible: _isPasswordVisible,
+                      withAnimation: true,
+                      onTogglePassword: () {
+                        setState(() {
+                          _isPasswordVisible = !_isPasswordVisible;
+                        });
+                      },
+                      onLogin: login,
+                      isLoading: isLoading,
+                      errorMessage: errorMessage,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
-
-

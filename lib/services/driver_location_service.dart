@@ -93,17 +93,17 @@ class DriverLocationService {
 
     _updateTimer = Timer.periodic(
       const Duration(seconds: _updateInterval),
-          (_) => _updateToRTDB(),
+      (_) => _updateToRTDB(),
     );
 
     _permissionCheckTimer = Timer.periodic(
       const Duration(seconds: 10),
-          (_) => _checkLocationPermission(),
+      (_) => _checkLocationPermission(),
     );
 
     _historyCleanupTimer = Timer.periodic(
       const Duration(hours: _historyCleanupIntervalHours),
-          (_) => _cleanupOldHistory(),
+      (_) => _cleanupOldHistory(),
     );
 
     _listenJobStatus();
@@ -191,12 +191,8 @@ class DriverLocationService {
   }
 
   void _listenJobStatus() {
-    _jobSub = _firestore
-        .collection('users')
-        .doc(driverId)
-        .snapshots()
-        .listen(
-          (doc) {
+    _jobSub = _firestore.collection('users').doc(driverId).snapshots().listen(
+      (doc) {
         if (!_isTracking) return; // 🔥 Tracking yoksa işleme
 
         if (doc.exists) {
@@ -315,7 +311,6 @@ class DriverLocationService {
           _lastMoveTime != null &&
           now.difference(_lastMoveTime!).inSeconds > _idleTimeout &&
           !_isIdle) {
-
         _isIdle = true;
         await _setOffline();
         debugPrint("😴 Driver went idle, set offline");
@@ -494,11 +489,12 @@ class DriverLocationService {
       if (remainingCount > _historyMaxPoints) {
         final excessCount = remainingCount - _historyMaxPoints;
 
-        final notMarkedForDeletion = entries
-            .where((e) => !keysToDelete.contains(e.key))
-            .toList();
+        final notMarkedForDeletion =
+            entries.where((e) => !keysToDelete.contains(e.key)).toList();
 
-        for (int i = 0; i < excessCount && i < notMarkedForDeletion.length; i++) {
+        for (int i = 0;
+            i < excessCount && i < notMarkedForDeletion.length;
+            i++) {
           keysToDelete.add(notMarkedForDeletion[i].key);
         }
       }
@@ -517,10 +513,9 @@ class DriverLocationService {
       try {
         await historyRef.update(updates);
         final remainingPoints = entries.length - keysToDelete.length;
-        debugPrint(
-            "🧹 Cleaned ${keysToDelete.length} old history points. "
-                "Remaining: $remainingPoints (max: $_historyMaxPoints, "
-                "retention: ${_historyRetentionHours}h)");
+        debugPrint("🧹 Cleaned ${keysToDelete.length} old history points. "
+            "Remaining: $remainingPoints (max: $_historyMaxPoints, "
+            "retention: ${_historyRetentionHours}h)");
       } catch (e) {
         debugPrint("⚠️ Batch delete failed, trying individual deletes: $e");
 
@@ -534,9 +529,9 @@ class DriverLocationService {
             debugPrint("⚠️ Could not delete key $key: $e");
           }
         }
-        debugPrint("🧹 Deleted $deleted of ${keysToDelete.length} points individually");
+        debugPrint(
+            "🧹 Deleted $deleted of ${keysToDelete.length} points individually");
       }
-
     } catch (e) {
       debugPrint("❌ History cleanup error: $e");
     }

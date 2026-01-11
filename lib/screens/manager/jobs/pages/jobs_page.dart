@@ -228,7 +228,7 @@ class _JobsPageState extends State<JobsPage> {
                   border: Border.all(color: const Color(0xFFE2E8F0)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withValues(alpha: 0.03),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -552,7 +552,7 @@ class _JobsPageState extends State<JobsPage> {
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -566,7 +566,7 @@ class _JobsPageState extends State<JobsPage> {
             constraints: const BoxConstraints(minWidth: 1200),
             child: DataTable(
               headingRowColor:
-                  MaterialStateProperty.all(const Color(0xFFF8FAFC)),
+                  WidgetStateProperty.all(const Color(0xFFF8FAFC)),
               headingRowHeight: 56,
               dataRowHeight: 64,
               horizontalMargin: 24,
@@ -683,7 +683,7 @@ class _JobsPageState extends State<JobsPage> {
       IconData icon, Color color, VoidCallback onPressed) {
     return Container(
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: IconButton(
@@ -715,7 +715,7 @@ class _JobsPageState extends State<JobsPage> {
             border: Border.all(color: const Color(0xFFE2E8F0)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.03),
+                color: Colors.black.withValues(alpha: 0.03),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -923,5 +923,6 @@ class _JobsPageState extends State<JobsPage> {
     });
   }
 }
+
 
 

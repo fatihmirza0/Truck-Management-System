@@ -24,7 +24,7 @@ class UsersPageHeader extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF1E3A5F).withOpacity(0.3),
+                color: const Color(0xFF1E3A5F).withValues(alpha: 0.3),
                 blurRadius: 8,
                 offset: const Offset(0, 3),
               ),
@@ -67,5 +67,6 @@ class UsersPageHeader extends StatelessWidget {
     );
   }
 }
+
 
 

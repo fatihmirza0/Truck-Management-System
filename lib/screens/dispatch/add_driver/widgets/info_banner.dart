@@ -22,7 +22,7 @@ class InfoBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: accentLight,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: accent.withOpacity(0.2)),
+        border: Border.all(color: accent.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [

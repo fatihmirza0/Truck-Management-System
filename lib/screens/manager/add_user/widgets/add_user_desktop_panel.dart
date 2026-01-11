@@ -24,7 +24,7 @@ class AddUserDesktopPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -48,7 +48,7 @@ class AddUserDesktopPanel extends StatelessWidget {
             "Sisteme yeni sürücü veya dispatch ekleyin.",
             style: TextStyle(
               fontSize: 14,
-              color: Colors.white.withOpacity(.85),
+              color: Colors.white.withValues(alpha: .85),
             ),
           ),
           const Spacer(),
@@ -58,5 +58,6 @@ class AddUserDesktopPanel extends StatelessWidget {
     );
   }
 }
+
 
 

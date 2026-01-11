@@ -5,7 +5,8 @@ import 'package:flutter/services.dart'; // 🔥 YENİ
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'notification_Service.dart';
+import 'notification_service.dart';
+import '../config/app_config.dart';
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -181,9 +182,7 @@ class AuthService {
     final token = await user.getIdToken();
 
     final res = await http.post(
-      Uri.parse(
-        "https://us-central1-truck-dispatch-system.cloudfunctions.net/updateLastLoginHttp",
-      ),
+      Uri.parse(AppConfig.updateLastLoginUrl),
       headers: {
         "Authorization": "Bearer $token",
         "Content-Type": "application/json",

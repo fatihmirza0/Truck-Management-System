@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../services/firestore_Service.dart';
+import '../../../../services/firestore_service.dart';
 
 import '../widgets/add_user_header.dart';
 import '../widgets/role_selector.dart';
@@ -103,7 +103,7 @@ class _AddUserPageState extends State<AddUserPage> {
       decoration: _dec("E-posta"),
       keyboardType: TextInputType.emailAddress,
       validator: (v) =>
-      v != null && v.contains("@") ? null : "Geçerli e-posta girin",
+          v != null && v.contains("@") ? null : "Geçerli e-posta girin",
     );
   }
 
@@ -113,7 +113,7 @@ class _AddUserPageState extends State<AddUserPage> {
       decoration: _dec("Telefon"),
       keyboardType: TextInputType.phone,
       validator: (v) =>
-      v != null && v.length >= 10 ? null : "Telefon numarası geçersiz",
+          v != null && v.length >= 10 ? null : "Telefon numarası geçersiz",
     );
   }
 
@@ -131,7 +131,7 @@ class _AddUserPageState extends State<AddUserPage> {
       obscureText: true,
       decoration: _dec("Şifre"),
       validator: (v) =>
-      v != null && v.length >= 6 ? null : "Min 6 karakter olmalı",
+          v != null && v.length >= 6 ? null : "Min 6 karakter olmalı",
     );
   }
 
@@ -157,7 +157,7 @@ class _AddUserPageState extends State<AddUserPage> {
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
+                        color: Colors.black.withValues(alpha: 0.06),
                         blurRadius: 20,
                         offset: Offset(0, 10)),
                   ],
@@ -208,7 +208,7 @@ class _AddUserPageState extends State<AddUserPage> {
                     borderRadius: BorderRadius.circular(22),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
+                        color: Colors.black.withValues(alpha: 0.06),
                         blurRadius: 20,
                         offset: const Offset(0, 6),
                       ),
@@ -231,6 +231,7 @@ class _AddUserPageState extends State<AddUserPage> {
       body: isDesktop ? _desktop() : _mobile(),
     );
   }
+
   Widget _form({required bool desktop}) {
     return Form(
       key: _formKey,
@@ -284,4 +285,3 @@ class _AddUserPageState extends State<AddUserPage> {
     );
   }
 }
-

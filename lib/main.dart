@@ -8,6 +8,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:lojistik/services/auth_service.dart';
 import 'firebase_options.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'config/app_theme.dart';
 
 // Screens
 import 'services/notification_service.dart';
@@ -35,6 +36,7 @@ Future<void> _initServices() async {
       );
 
       await FirebaseAppCheck.instance.activate(
+        appleProvider: AppleProvider.debug,
         androidProvider: AndroidProvider.debug,
       );
     }
@@ -61,7 +63,7 @@ class MyApp extends StatelessWidget {
       ],
       title: 'Truck Management System',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.blueGrey),
+      theme: AppTheme.lightTheme,
       initialRoute: '/',
       onGenerateRoute: (settings) {
         switch (settings.name) {
@@ -112,7 +114,6 @@ class _SplashScreenState extends State<SplashScreen> {
     super.initState();
     _checkAutoLogin();
     HardwareKeyboard.instance.clearState();
-
   }
 
   Future<void> _checkAutoLogin() async {
@@ -129,6 +130,9 @@ class _SplashScreenState extends State<SplashScreen> {
     if (isLoggedIn) {
       // Otomatik giriş yap
       final userData = await AuthService.getSavedUserData();
+
+      if (!mounted) return;
+
       final role = userData['role'];
       final uid = userData['uid'] ?? '';
 
@@ -183,7 +187,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 20,
                       offset: const Offset(0, 10),
                     ),
@@ -224,7 +228,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 child: CircularProgressIndicator(
                   strokeWidth: 3,
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    Colors.white.withOpacity(0.8),
+                    Colors.white.withValues(alpha: 0.8),
                   ),
                 ),
               ),

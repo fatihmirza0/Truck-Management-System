@@ -1,7 +1,9 @@
 // 📁 lib/pages/create_job_page.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:lojistik/services/firestore_Service.dart';
+import 'package:lojistik/services/firestore_service.dart';
+import 'package:lojistik/config/app_theme.dart';
+import 'package:lojistik/widgets/animated/animated_widgets.dart';
 import 'package:lojistik/utils/route_utils.dart';
 import '../widgets/driver_selection_card.dart';
 import '../widgets/vehicle_selection_card.dart';
@@ -15,7 +17,8 @@ class CreateJobPage extends StatefulWidget {
   State<CreateJobPage> createState() => _CreateJobPageState();
 }
 
-class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateMixin {
+class _CreateJobPageState extends State<CreateJobPage>
+    with TickerProviderStateMixin {
   final _loadPortController = TextEditingController();
   final _unloadPortController = TextEditingController();
   final _cargoTypeController = TextEditingController();
@@ -42,15 +45,7 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
   bool get isDesktop => MediaQuery.of(context).size.width >= 900;
 
   // 🎨 Color Palette
-  static const Color primary = Color(0xFF1E3A5F);
-  static const Color accent = Color(0xFF3B82F6);
-  static const Color success = Color(0xFF10B981);
-  static const Color error = Color(0xFFEF4444);
-  static const Color bg = Color(0xFFF8FAFC);
-  static const Color cardBg = Color(0xFFFFFFFF);
-  static const Color border = Color(0xFFE2E8F0);
-  static const Color textPrimary = Color(0xFF0F172A);
-  static const Color textSecondary = Color(0xFF64748B);
+  // Renkler AppTheme'den kullanılacak
 
   @override
   void initState() {
@@ -94,10 +89,15 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
     final cargoDescription = _cargoDescriptionController.text.trim();
     final cargoWeightStr = _cargoWeightController.text.trim();
 
-    if (loadPort.isEmpty || unloadPort.isEmpty || cargoType.isEmpty ||
-        cargoDescription.isEmpty || cargoWeightStr.isEmpty ||
-        _selectedDriverUid == null || _selectedVehicleId == null) {
-      _showSnackBar("Lütfen tüm alanları doldurun ve şoför/araç seçin", isError: true);
+    if (loadPort.isEmpty ||
+        unloadPort.isEmpty ||
+        cargoType.isEmpty ||
+        cargoDescription.isEmpty ||
+        cargoWeightStr.isEmpty ||
+        _selectedDriverUid == null ||
+        _selectedVehicleId == null) {
+      _showSnackBar("Lütfen tüm alanları doldurun ve şoför/araç seçin",
+          isError: true);
       return;
     }
 
@@ -110,7 +110,8 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
     setState(() => _isCreatingJob = true);
 
     try {
-      final driverStatus = await FirestoreService.getDriverStatus(_selectedDriverUid!);
+      final driverStatus =
+          await FirestoreService.getDriverStatus(_selectedDriverUid!);
       if (driverStatus == 'busy') {
         _showSnackBar("Bu şoför zaten aktif bir görevde.", isError: true);
         setState(() => _isCreatingJob = false);
@@ -127,14 +128,18 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
       }
 
       double distanceKm = await RouteUtils.getRouteKm(
-        loadCoords['lat']!, loadCoords['lng']!,
-        unloadCoords['lat']!, unloadCoords['lng']!,
+        loadCoords['lat']!,
+        loadCoords['lng']!,
+        unloadCoords['lat']!,
+        unloadCoords['lng']!,
       );
 
       if (distanceKm == 0) {
         distanceKm = RouteUtils.haversineKm(
-          loadCoords['lat']!, loadCoords['lng']!,
-          unloadCoords['lat']!, unloadCoords['lng']!,
+          loadCoords['lat']!,
+          loadCoords['lng']!,
+          unloadCoords['lat']!,
+          unloadCoords['lng']!,
         );
       }
 
@@ -184,11 +189,15 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(message, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+              child: Text(message,
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w500)),
             ),
           ],
         ),
-        backgroundColor: isError ? error : success,
+        backgroundColor: isError
+            ? AppTheme.primaryColor.withValues(alpha: 0.9)
+            : const Color(0xFF10B981),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         margin: const EdgeInsets.all(16),
@@ -255,22 +264,25 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
   InputDecoration _inputDecoration(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
-      prefixIcon: Icon(icon, color: textSecondary, size: 18),
+      labelStyle: const TextStyle(
+          color: AppTheme.textSecondary,
+          fontSize: 13,
+          fontWeight: FontWeight.w500),
+      prefixIcon: Icon(icon, color: AppTheme.textSecondary, size: 18),
       filled: true,
       fillColor: Colors.white,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: border),
+        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: border),
+        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: accent, width: 1.5),
+        borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
       ),
     );
   }
@@ -278,7 +290,7 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: AppTheme.backgroundColor,
       body: Stack(
         children: [
           SingleChildScrollView(
@@ -332,7 +344,8 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
               searchController: _driverSearchController,
               searchQuery: _driverSearchQuery,
               selectedDriverUid: _selectedDriverUid,
-              onSearchChanged: (v) => setState(() => _driverSearchQuery = v.toLowerCase()),
+              onSearchChanged: (v) =>
+                  setState(() => _driverSearchQuery = v.toLowerCase()),
               onClose: _closeDriverPanel,
               onSelectDriver: _selectDriver,
             ),
@@ -344,7 +357,8 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
               searchQuery: _vehicleSearchQuery,
               selectedVehicleId: _selectedVehicleId,
               selectedDriverUid: _selectedDriverUid!,
-              onSearchChanged: (v) => setState(() => _vehicleSearchQuery = v.toLowerCase()),
+              onSearchChanged: (v) =>
+                  setState(() => _vehicleSearchQuery = v.toLowerCase()),
               onClose: _closeVehiclePanel,
               onSelectVehicle: _selectVehicle,
             ),
@@ -359,10 +373,11 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: primary.withOpacity(0.1),
+            color: AppTheme.primaryColor.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(Icons.add_task, color: primary, size: 24),
+          child: const Icon(Icons.add_task,
+              color: AppTheme.primaryColor, size: 24),
         ),
         const SizedBox(width: 16),
         const Column(
@@ -373,13 +388,13 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w800,
-                color: textPrimary,
+                color: AppTheme.textPrimary,
               ),
             ),
             SizedBox(height: 4),
             Text(
               "Şoför ve araç seçerek yeni bir görev atayın",
-              style: TextStyle(fontSize: 14, color: textSecondary),
+              style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -396,18 +411,20 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: textPrimary,
+            color: AppTheme.textPrimary,
           ),
         ),
         const SizedBox(height: 12),
         TextField(
           controller: _loadPortController,
-          decoration: _inputDecoration("Yükleme Noktası", Icons.upload_outlined),
+          decoration:
+              _inputDecoration("Yükleme Noktası", Icons.upload_outlined),
         ),
         const SizedBox(height: 12),
         TextField(
           controller: _unloadPortController,
-          decoration: _inputDecoration("Boşaltma Noktası", Icons.download_outlined),
+          decoration:
+              _inputDecoration("Boşaltma Noktası", Icons.download_outlined),
         ),
       ],
     );
@@ -422,7 +439,7 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: textPrimary,
+            color: AppTheme.textPrimary,
           ),
         ),
         const SizedBox(height: 12),
@@ -440,7 +457,9 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
         TextField(
           controller: _cargoWeightController,
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))
+          ],
           decoration: _inputDecoration("Ağırlık (kg)", Icons.scale_outlined),
         ),
       ],
@@ -448,34 +467,44 @@ class _CreateJobPageState extends State<CreateJobPage> with TickerProviderStateM
   }
 
   Widget _buildSubmitButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton(
-        onPressed: _isCreatingJob ? null : _createJob,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: accent,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: textSecondary,
-          elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-        child: _isCreatingJob
-            ? const SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-        )
-            : const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.check_circle_outline, size: 22),
-            SizedBox(width: 10),
-            Text(
-              "Görevi Oluştur",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-          ],
+    return SlideInWidget(
+      delay: const Duration(milliseconds: 200),
+      begin: const Offset(0, 0.5),
+      child: ScaleButton(
+        onTap: _isCreatingJob ? null : _createJob,
+        child: Container(
+          width: double.infinity,
+          height: 56,
+          decoration: BoxDecoration(
+            color:
+                _isCreatingJob ? AppTheme.textSecondary : AppTheme.primaryColor,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: AppTheme.softShadow,
+          ),
+          child: Center(
+            child: _isCreatingJob
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2.5),
+                  )
+                : const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle_outline,
+                          size: 22, color: Colors.white),
+                      SizedBox(width: 10),
+                      Text(
+                        "Görevi Oluştur",
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white),
+                      ),
+                    ],
+                  ),
+          ),
         ),
       ),
     );

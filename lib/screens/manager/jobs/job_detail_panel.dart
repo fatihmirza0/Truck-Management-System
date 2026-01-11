@@ -112,7 +112,7 @@ class _JobDetailPanelState extends State<JobDetailPanel> {
                   Icon(
                     Icons.description,
                     size: isMobile ? 16 : 20,
-                    color: Colors.white.withOpacity(.9),
+                    color: Colors.white.withValues(alpha: .9),
                   ),
                   const SizedBox(width: 10),
                   Text(
@@ -131,7 +131,7 @@ class _JobDetailPanelState extends State<JobDetailPanel> {
                     icon: Icon(
                       Icons.close,
                       size: isMobile ? 18 : 22,
-                      color: Colors.white.withOpacity(.9),
+                      color: Colors.white.withValues(alpha: .9),
                     ),
                   ),
                 ],
@@ -424,7 +424,7 @@ class _JobDetailPanelState extends State<JobDetailPanel> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -594,7 +594,7 @@ class _JobDetailPanelState extends State<JobDetailPanel> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
+              color: iconColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, size: 18, color: iconColor),

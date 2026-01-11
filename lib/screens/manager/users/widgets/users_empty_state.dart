@@ -26,7 +26,7 @@ class UsersEmptyState extends StatelessWidget {
                   end: Alignment.bottomRight,
                   colors: [
                     const Color(0xFFF8FAFC),
-                    const Color(0xFFE2E8F0).withOpacity(0.3),
+                    const Color(0xFFE2E8F0).withValues(alpha: 0.3),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(16),
@@ -66,5 +66,6 @@ class UsersEmptyState extends StatelessWidget {
     );
   }
 }
+
 
 

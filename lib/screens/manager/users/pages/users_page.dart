@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:lojistik/services/firestore_Service.dart';
+import 'package:lojistik/services/firestore_service.dart';
+import 'package:lojistik/config/app_theme.dart';
+import 'package:lojistik/widgets/animated/animated_widgets.dart';
 import '../../user_detail/pages/user_detail_page.dart';
 
 import '../widgets/users_page_header.dart';
@@ -14,7 +16,8 @@ class UsersPage extends StatefulWidget {
   State<UsersPage> createState() => _UsersPageState();
 }
 
-class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMixin {
+class _UsersPageState extends State<UsersPage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   late AnimationController _animController;
 
@@ -64,7 +67,7 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppTheme.backgroundColor,
       body: SafeArea(
         child: FadeTransition(
           opacity: _animController,
@@ -110,7 +113,7 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
         border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -144,20 +147,20 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
             decoration: BoxDecoration(
               gradient: selected
                   ? const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF1E3A5F), Color(0xFF2D4A6F)],
-              )
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF1E3A5F), Color(0xFF2D4A6F)],
+                    )
                   : null,
               borderRadius: BorderRadius.circular(8),
               boxShadow: selected
                   ? [
-                BoxShadow(
-                  color: const Color(0xFF1E3A5F).withOpacity(0.2),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ]
+                      BoxShadow(
+                        color: const Color(0xFF1E3A5F).withValues(alpha: 0.2),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
                   : null,
             ),
             child: Icon(
@@ -184,7 +187,7 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withValues(alpha: 0.04),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -205,9 +208,14 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
           final plate = (u['plateNumber'] ?? "").toString().toLowerCase();
 
           if (_role == "dispatch") {
-            return name.contains(search) || email.contains(search) || phone.contains(search);
+            return name.contains(search) ||
+                email.contains(search) ||
+                phone.contains(search);
           }
-          return name.contains(search) || email.contains(search) || plate.contains(search) || phone.contains(search);
+          return name.contains(search) ||
+              email.contains(search) ||
+              plate.contains(search) ||
+              phone.contains(search);
         }).toList();
 
         if (filtered.isEmpty) {
@@ -240,70 +248,63 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
         final uid = (u["uid"] ?? "").toString();
         final isDriver = (u['role'] ?? "") == 'driver';
 
-        return InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () => _navigateToDetail(uid, u),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.025),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(8),
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: AnimatedCard(
+            onTap: () => _navigateToDetail(uid, u),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: AppTheme.backgroundColor,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      isDriver
+                          ? Icons.local_shipping_outlined
+                          : Icons.support_agent_outlined,
+                      size: 16,
+                      color: AppTheme.primaryColor,
+                    ),
                   ),
-                  child: Icon(
-                    isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
-                    size: 16,
-                    color: const Color(0xFF1E3A5F),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        (u['name'] ?? "-").toString(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF111827),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          (u['name'] ?? "-").toString(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        isDriver
-                            ? "Araç Plakası: ${(u['plateNumber'] ?? "-")}"
-                            : (u['email'] ?? "-").toString(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          color: Color(0xFF6B7280),
+                        const SizedBox(height: 3),
+                        Text(
+                          isDriver
+                              ? "Araç Plakası: ${(u['plateNumber'] ?? "-")}"
+                              : (u['email'] ?? "-").toString(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            color: AppTheme.textSecondary,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const Icon(Icons.chevron_right, size: 18, color: Color(0xFF9CA3AF)),
-              ],
+                  const Icon(Icons.chevron_right,
+                      size: 18, color: Color(0xFF9CA3AF)),
+                ],
+              ),
             ),
           ),
         );
@@ -326,36 +327,25 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
         final uid = (u["uid"] ?? "").toString();
         final isDriver = (u['role'] ?? '') == 'driver';
 
-        return InkWell(
-          borderRadius: BorderRadius.circular(12),
+        return AnimatedCard(
           onTap: () => _navigateToDetail(uid, u),
-          child: Container(
+          child: Padding(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
             child: Row(
               children: [
                 Container(
                   width: 34,
                   height: 34,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
+                    color: AppTheme.backgroundColor,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
-                    isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
+                    isDriver
+                        ? Icons.local_shipping_outlined
+                        : Icons.support_agent_outlined,
                     size: 16,
-                    color: const Color(0xFF1E3A5F),
+                    color: AppTheme.primaryColor,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -371,17 +361,19 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF111827),
+                          color: AppTheme.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        isDriver ? ("Araç Plakası: ${u['plateNumber']}" ?? "-").toString() : (u['phone'] ?? "-").toString(),
+                        isDriver
+                            ? "Araç Plakası: ${u['plateNumber'] ?? "-"}"
+                            : (u['phone'] ?? "-").toString(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 11.5,
-                          color: Color(0xFF6B7280),
+                          color: AppTheme.textSecondary,
                         ),
                       ),
                     ],
@@ -410,8 +402,7 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
         final uid = (u["uid"] ?? "").toString();
         final isDriver = (u['role'] ?? '') == 'driver';
 
-        return InkWell(
-          borderRadius: BorderRadius.circular(10),
+        return ScaleButton(
           onTap: () => _navigateToDetail(uid, u),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -423,7 +414,9 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
             child: Row(
               children: [
                 Icon(
-                  isDriver ? Icons.local_shipping_outlined : Icons.support_agent_outlined,
+                  isDriver
+                      ? Icons.local_shipping_outlined
+                      : Icons.support_agent_outlined,
                   size: 14,
                   color: const Color(0xFF475569),
                 ),
@@ -436,16 +429,16 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF111827),
+                      color: AppTheme.textPrimary,
                     ),
                   ),
                 ),
                 if (isDriver)
                   Text(
-                    ("Araç Plakası: ${u['plateNumber']}" ?? "-").toString(),
+                    "Araç Plakası: ${u['plateNumber'] ?? "-"}",
                     style: const TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF6B7280),
+                      color: AppTheme.textSecondary,
                     ),
                   ),
               ],
@@ -465,5 +458,3 @@ class _UsersPageState extends State<UsersPage> with SingleTickerProviderStateMix
     );
   }
 }
-
-

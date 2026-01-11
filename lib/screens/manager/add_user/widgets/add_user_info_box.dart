@@ -9,7 +9,7 @@ class AddUserInfoBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(.08),
+        color: Colors.white.withValues(alpha: .08),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -20,7 +20,7 @@ class AddUserInfoBox extends StatelessWidget {
             child: Text(
               "Dispatch kullanıcıları iş ataması yapar; sürücüler yalnızca kendilerine atanmış işleri görür.",
               style: TextStyle(
-                color: Colors.white.withOpacity(.9),
+                color: Colors.white.withValues(alpha: .9),
                 fontSize: 13,
               ),
             ),
@@ -30,5 +30,6 @@ class AddUserInfoBox extends StatelessWidget {
     );
   }
 }
+
 
 

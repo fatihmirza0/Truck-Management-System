@@ -27,3 +27,4 @@ class DetailCard extends StatelessWidget {
 }
 
 
+

@@ -5,7 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/rendering.dart';
 
-import '../../../../services/auth_Service.dart';
+import '../../../../services/auth_service.dart';
 import '../widgets/profile_logout_dialog.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -344,7 +344,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: _getRoleColor().withOpacity(0.1),
+                    color: _getRoleColor().withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -370,7 +370,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: _getRoleColor().withOpacity(0.1),
+                    color: _getRoleColor().withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -452,7 +452,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              color: isActive ? const Color(0xFF1E3A5F).withOpacity(0.1) : null,
+              color: isActive ? const Color(0xFF1E3A5F).withValues(alpha: 0.1) : null,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -536,7 +536,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Container(
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
-                            color: _getRoleColor().withOpacity(0.1),
+                            color: _getRoleColor().withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(_getRoleIcon(),
@@ -558,7 +558,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
-                            color: _getRoleColor().withOpacity(0.1),
+                            color: _getRoleColor().withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -901,5 +901,6 @@ class _RenderSliverToConstrainedBox extends RenderProxySliver {
     );
   }
 }
+
 
 

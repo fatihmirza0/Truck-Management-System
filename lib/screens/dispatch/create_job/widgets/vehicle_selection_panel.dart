@@ -1,6 +1,7 @@
-// 📁 lib/pages/widgets/vehicle_selection_panel.dart
 import 'package:flutter/material.dart';
-import 'package:lojistik/services/firestore_Service.dart';
+import 'package:lojistik/services/firestore_service.dart';
+import 'package:lojistik/config/app_theme.dart';
+import 'package:lojistik/widgets/animated/animated_widgets.dart';
 
 class VehicleSelectionPanel extends StatelessWidget {
   final Animation<double> animation;
@@ -26,14 +27,7 @@ class VehicleSelectionPanel extends StatelessWidget {
     required this.onSelectVehicle,
   });
 
-  static const Color primary = Color(0xFF1E3A5F);
-  static const Color accent = Color(0xFF3B82F6);
-  static const Color success = Color(0xFF10B981);
-  static const Color bg = Color(0xFFF8FAFC);
-  static const Color cardBg = Color(0xFFFFFFFF);
-  static const Color border = Color(0xFFE2E8F0);
-  static const Color textPrimary = Color(0xFF0F172A);
-  static const Color textSecondary = Color(0xFF64748B);
+  // Renkler AppTheme'den kullanılacak
 
   @override
   Widget build(BuildContext context) {
@@ -54,28 +48,24 @@ class VehicleSelectionPanel extends StatelessWidget {
             animation: animation,
             builder: (context, child) {
               return Transform.translate(
-                offset: Offset(0, (1 - animation.value) * (isDesktop ? 50 : 500)),
+                offset:
+                    Offset(0, (1 - animation.value) * (isDesktop ? 50 : 500)),
                 child: Opacity(opacity: animation.value, child: child),
               );
             },
             child: Container(
               width: isDesktop ? 600 : double.infinity,
-              height: isDesktop ? 550 : MediaQuery.of(context).size.height * 0.7,
+              height:
+                  isDesktop ? 550 : MediaQuery.of(context).size.height * 0.7,
               decoration: BoxDecoration(
-                color: bg,
+                color: AppTheme.backgroundColor,
                 borderRadius: isDesktop
                     ? BorderRadius.circular(16)
                     : const BorderRadius.only(
-                  topLeft: Radius.circular(24),
-                  topRight: Radius.circular(24),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 30,
-                    offset: const Offset(0, 10),
-                  )
-                ],
+                        topLeft: Radius.circular(24),
+                        topRight: Radius.circular(24),
+                      ),
+                boxShadow: AppTheme.softShadow,
               ),
               child: Column(
                 children: [
@@ -94,12 +84,12 @@ class VehicleSelectionPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: cardBg,
+        color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(isDesktop ? 16 : 24),
           topRight: Radius.circular(isDesktop ? 16 : 24),
         ),
-        border: const Border(bottom: BorderSide(color: border)),
+        border: const Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
       ),
       child: Column(
         children: [
@@ -110,7 +100,7 @@ class VehicleSelectionPanel extends StatelessWidget {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color: border,
+                  color: const Color(0xFFE2E8F0),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -120,10 +110,11 @@ class VehicleSelectionPanel extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: bg,
+                  color: AppTheme.backgroundColor,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.local_shipping, color: primary, size: 20),
+                child: const Icon(Icons.local_shipping,
+                    color: AppTheme.primaryColor, size: 20),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -132,14 +123,14 @@ class VehicleSelectionPanel extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
-                    color: textPrimary,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
               ),
               IconButton(
                 onPressed: onClose,
                 icon: const Icon(Icons.close, size: 22),
-                color: textSecondary,
+                color: AppTheme.textSecondary,
               ),
             ],
           ),
@@ -150,10 +141,12 @@ class VehicleSelectionPanel extends StatelessWidget {
             decoration: InputDecoration(
               hintText: "Plaka veya tip ara...",
               hintStyle: const TextStyle(fontSize: 13),
-              prefixIcon: const Icon(Icons.search, color: textSecondary, size: 20),
+              prefixIcon: const Icon(Icons.search,
+                  color: AppTheme.textSecondary, size: 20),
               filled: true,
-              fillColor: bg,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              fillColor: AppTheme.backgroundColor,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide.none,
@@ -170,7 +163,20 @@ class VehicleSelectionPanel extends StatelessWidget {
       future: FirestoreService.fetchVehiclesByDriver(selectedDriverUid),
       builder: (context, snap) {
         if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: ListView.builder(
+              itemCount: 5,
+              itemBuilder: (_, __) => const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: ShimmerLoading(
+                  width: double.infinity,
+                  height: 70,
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                ),
+              ),
+            ),
+          );
         }
 
         final vehicles = snap.data!.where((v) {
@@ -184,11 +190,11 @@ class VehicleSelectionPanel extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.search_off, size: 48, color: textSecondary),
+                Icon(Icons.search_off, size: 48, color: AppTheme.textSecondary),
                 SizedBox(height: 12),
                 Text(
                   "Bu şoföre atanmış araç bulunamadı",
-                  style: TextStyle(fontSize: 15, color: textSecondary),
+                  style: TextStyle(fontSize: 15, color: AppTheme.textSecondary),
                 ),
               ],
             ),
@@ -202,66 +208,67 @@ class VehicleSelectionPanel extends StatelessWidget {
             final vehicle = vehicles[i];
             final isSelected = vehicle['vehicleId'] == selectedVehicleId;
 
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(
-                color: isSelected ? accent.withOpacity(0.05) : cardBg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isSelected ? accent : border,
-                  width: isSelected ? 1.5 : 1,
-                ),
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => onSelectVehicle(vehicle),
-                  borderRadius: BorderRadius.circular(10),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: accent.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            Icons.local_shipping_outlined,
-                            color: accent,
-                            size: 22,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                vehicle['plate'],
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: textPrimary,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                vehicle['type'],
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (isSelected)
-                          const Icon(Icons.check_circle, color: success, size: 20),
-                      ],
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: AnimatedCard(
+                onTap: () => onSelectVehicle(vehicle),
+                color: isSelected
+                    ? AppTheme.primaryColor.withValues(alpha: 0.05)
+                    : AppTheme.surfaceColor,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isSelected
+                          ? AppTheme.primaryColor
+                          : const Color(0xFFE2E8F0),
+                      width: isSelected ? 1.5 : 1,
                     ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.local_shipping_outlined,
+                          color: AppTheme.primaryColor,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              vehicle['plate'],
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              vehicle['type'],
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (isSelected)
+                        const Icon(Icons.check_circle,
+                            color: AppTheme.successColor, size: 20),
+                    ],
                   ),
                 ),
               ),

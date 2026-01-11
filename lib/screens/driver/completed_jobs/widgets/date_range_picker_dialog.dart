@@ -40,7 +40,7 @@ class DateRangePickerDialog {
                         calendarType: CalendarDatePicker2Type.range,
                         selectedDayHighlightColor: const Color(0xFF1E3A5F),
                         selectedRangeHighlightColor:
-                            const Color(0xFF1E3A5F).withOpacity(0.25),
+                            const Color(0xFF1E3A5F).withValues(alpha: 0.25),
                         dayTextStyle: const TextStyle(color: Color(0xFF0F172A)),
                         weekdayLabelTextStyle:
                             const TextStyle(fontWeight: FontWeight.w600),
@@ -102,5 +102,6 @@ class DateRangePickerDialog {
     return result;
   }
 }
+
 
 

@@ -83,7 +83,7 @@ class _FullScreenGalleryViewerState
                 padding: const EdgeInsets.symmetric(
                     horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(.6),
+                  color: Colors.black.withValues(alpha: .6),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -115,7 +115,7 @@ class _FullScreenGalleryViewerState
 
   Widget _iconBtn(IconData icon, VoidCallback onTap) {
     return Material(
-      color: Colors.black.withOpacity(.5),
+      color: Colors.black.withValues(alpha: .5),
       shape: const CircleBorder(),
       child: IconButton(
         icon: Icon(icon, color: Colors.white),

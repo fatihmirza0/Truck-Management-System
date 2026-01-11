@@ -34,7 +34,7 @@ class UsersRoleTabs extends StatelessWidget {
             boxShadow: selected
                 ? [
                     BoxShadow(
-                      color: const Color(0xFF1E3A5F).withOpacity(0.2),
+                      color: const Color(0xFF1E3A5F).withValues(alpha: 0.2),
                       blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),
@@ -75,7 +75,7 @@ class UsersRoleTabs extends StatelessWidget {
         border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -92,5 +92,6 @@ class UsersRoleTabs extends StatelessWidget {
     );
   }
 }
+
 
 

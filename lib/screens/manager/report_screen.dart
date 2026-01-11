@@ -7,7 +7,9 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:lojistik/services/firestore_Service.dart';
+import 'package:lojistik/services/firestore_service.dart';
+import 'package:lojistik/config/app_theme.dart';
+import 'package:lojistik/widgets/animated/animated_widgets.dart';
 import 'package:lojistik/utils/report_exporter.dart';
 
 class ReportScreen extends StatefulWidget {
@@ -58,7 +60,7 @@ class _ReportScreenState extends State<ReportScreen> {
   bool get isDesktop => MediaQuery.of(context).size.width > 900;
   bool get isTablet =>
       MediaQuery.of(context).size.width > 600 &&
-          MediaQuery.of(context).size.width <= 900;
+      MediaQuery.of(context).size.width <= 900;
 
   @override
   void initState() {
@@ -126,7 +128,9 @@ class _ReportScreenState extends State<ReportScreen> {
     driverVehicles.clear();
     dispatchJobCount.clear();
 
-    for (int i = 0; i < 12; i++) monthlyChart[i] = 0;
+    for (int i = 0; i < 12; i++) {
+      monthlyChart[i] = 0;
+    }
     availableYears.clear();
     availableYears.add(selectedYear);
 
@@ -202,7 +206,7 @@ class _ReportScreenState extends State<ReportScreen> {
 
     if (driverKm.isNotEmpty) {
       final topEntry =
-      driverKm.entries.reduce((a, b) => a.value > b.value ? a : b);
+          driverKm.entries.reduce((a, b) => a.value > b.value ? a : b);
       topKmDriver = topEntry.key;
       topKm = topEntry.value;
     }
@@ -221,17 +225,17 @@ class _ReportScreenState extends State<ReportScreen> {
   Widget build(BuildContext context) {
     if (loading) {
       return const Scaffold(
-        backgroundColor: Color(0xFFF8FAFC),
+        backgroundColor: AppTheme.backgroundColor,
         body: Center(
           child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation(Color(0xFF1E3A5F)),
+            valueColor: AlwaysStoppedAnimation(AppTheme.primaryColor),
           ),
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppTheme.backgroundColor,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: EdgeInsets.all(isDesktop ? 32 : 20),
@@ -290,11 +294,11 @@ class _ReportScreenState extends State<ReportScreen> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E3A5F),
+            color: AppTheme.primaryColor,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF1E3A5F).withOpacity(0.2),
+                color: AppTheme.primaryColor.withValues(alpha: 0.2),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -316,7 +320,7 @@ class _ReportScreenState extends State<ReportScreen> {
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF1E3A5F),
+                  color: AppTheme.primaryColor,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -367,7 +371,7 @@ class _ReportScreenState extends State<ReportScreen> {
                 borderRadius: BorderRadius.circular(10),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF1E3A5F).withOpacity(0.2),
+                    color: const Color(0xFF1E3A5F).withValues(alpha: 0.2),
                     blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),
@@ -461,8 +465,7 @@ class _ReportScreenState extends State<ReportScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.calendar_today,
-              size: 16, color: Color(0xFF64748B)),
+          const Icon(Icons.calendar_today, size: 16, color: Color(0xFF64748B)),
           const SizedBox(width: 8),
           DropdownButton<int>(
             value: availableYears.contains(selectedYear) ? selectedYear : null,
@@ -471,23 +474,23 @@ class _ReportScreenState extends State<ReportScreen> {
             icon: const Icon(Icons.arrow_drop_down, size: 20),
             items: availableYears.isEmpty
                 ? [
-              DropdownMenuItem(
-                value: selectedYear,
-                child: Text(selectedYear.toString()),
-              )
-            ]
+                    DropdownMenuItem(
+                      value: selectedYear,
+                      child: Text(selectedYear.toString()),
+                    )
+                  ]
                 : availableYears.map((year) {
-              return DropdownMenuItem(
-                value: year,
-                child: Text(
-                  year.toString(),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              );
-            }).toList(),
+                    return DropdownMenuItem(
+                      value: year,
+                      child: Text(
+                        year.toString(),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    );
+                  }).toList(),
             onChanged: (val) {
               if (val == null) return;
               setState(() {
@@ -545,34 +548,30 @@ class _ReportScreenState extends State<ReportScreen> {
     required Color color,
     required VoidCallback onPressed,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
+    return ScaleButton(
+      onTap: onPressed,
+      child: Container(
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 18, color: color),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: color,
-                  ),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: color,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -671,62 +670,52 @@ class _ReportScreenState extends State<ReportScreen> {
     double titleSize = isDesktop ? 12 : 10;
     double valueSize = isDesktop ? 20 : 16;
 
-    return Container(
-      padding: EdgeInsets.all(padding),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+    return AnimatedCard(
+      child: Padding(
+        padding: EdgeInsets.all(padding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: iconSize, color: color),
             ),
-            child: Icon(icon, size: iconSize, color: color),
-          ),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: titleSize,
-                    color: const Color(0xFF64748B),
-                    fontWeight: FontWeight.w500,
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: titleSize,
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: valueSize,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF0F172A),
+                  const SizedBox(height: 4),
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: valueSize,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -758,8 +747,18 @@ class _ReportScreenState extends State<ReportScreen> {
                   showTitles: true,
                   getTitlesWidget: (value, meta) {
                     const months = [
-                      "Oca", "Şub", "Mar", "Nis", "May", "Haz",
-                      "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"
+                      "Oca",
+                      "Şub",
+                      "Mar",
+                      "Nis",
+                      "May",
+                      "Haz",
+                      "Tem",
+                      "Ağu",
+                      "Eyl",
+                      "Eki",
+                      "Kas",
+                      "Ara"
                     ];
                     return Padding(
                       padding: const EdgeInsets.only(top: 8),
@@ -803,7 +802,7 @@ class _ReportScreenState extends State<ReportScreen> {
                   BarChartRodData(
                     toY: monthlyChart[i].toDouble(),
                     width: isDesktop ? 24 : 16,
-                    color: const Color(0xFF1E3A5F),
+                    color: AppTheme.primaryColor,
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(4),
                     ),
@@ -856,7 +855,7 @@ class _ReportScreenState extends State<ReportScreen> {
                           style: TextStyle(
                             fontSize: isDesktop ? 14 : 13,
                             fontWeight: FontWeight.w600,
-                            color: const Color(0xFF0F172A),
+                            color: AppTheme.textPrimary,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -906,64 +905,68 @@ class _ReportScreenState extends State<ReportScreen> {
     final topItems = sorted.take(isDesktop ? 5 : 3).toList();
 
     return _buildSection(
-        title: "Dispatch Performansı",
-        icon: Icons.support_agent_outlined,
-        child: Container(
+      title: "Dispatch Performansı",
+      icon: Icons.support_agent_outlined,
+      child: Container(
         padding: EdgeInsets.all(isDesktop ? 24 : 16),
-    decoration: _buildBoxDecoration(),
-    child: Column(
-    children: topItems.map((e) {
-    final name = _dispatchName(e.key);
-    final percentage = e.value / sorted.first.value;
+        decoration: _buildBoxDecoration(),
+        child: Column(
+          children: topItems.map((e) {
+            final name = _dispatchName(e.key);
+            final percentage = e.value / sorted.first.value;
 
-    return Padding(
-    padding: const EdgeInsets.only(bottom: 16),
-    child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: Text(
-            name,
-            style: TextStyle(
-              fontSize: isDesktop ? 14 : 13,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF0F172A),
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        Text(
-          "${e.value} iş",
-          style: TextStyle(
-            fontSize: isDesktop ? 14 : 13,
-            fontWeight: FontWeight.w600,
-            color: const Color(0xFFF59E0B),
-          ),
-        ),
-      ],
-    ),
-      const SizedBox(height: 8),
-      ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: LinearProgressIndicator(
-          value: percentage,
-          minHeight: 8,
-          color: const Color(0xFFF59E0B),
-          backgroundColor: const Color(0xFFE2E8F0),
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          name,
+                          style: TextStyle(
+                            fontSize: isDesktop ? 14 : 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        "${e.value} iş",
+                        style: TextStyle(
+                          fontSize: isDesktop ? 14 : 13,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFFF59E0B),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: percentage,
+                      minHeight: 8,
+                      color: const Color(0xFFF59E0B),
+                      backgroundColor: const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
         ),
       ),
-    ],
-    ),
     );
-    }).toList(),
-    ),
-        ),
-    );}
+  }
+
   Widget _buildDriverTable() {
-    final driverData = <String, Map<String, dynamic>>{};for (final driverId in driverJobCount.keys) {
+    final driverData = <String, Map<String, dynamic>>{};
+    for (final driverId in driverJobCount.keys) {
       final jobs = driverJobCount[driverId] ?? 0;
       final km = driverKm[driverId] ?? 0;
       final hours = driverHours[driverId] ?? 0;
@@ -1031,7 +1034,9 @@ class _ReportScreenState extends State<ReportScreen> {
           ),
         ),
       ),
-    );}
+    );
+  }
+
   DataColumn _buildDataColumn(String label, IconData icon) {
     return DataColumn(
       label: Row(
@@ -1044,7 +1049,7 @@ class _ReportScreenState extends State<ReportScreen> {
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF475569),
+              color: AppTheme.textSecondary,
               letterSpacing: 0.3,
             ),
           ),
@@ -1052,6 +1057,7 @@ class _ReportScreenState extends State<ReportScreen> {
       ),
     );
   }
+
   DataCell _buildDataTableCell(String text) {
     return DataCell(
       Text(
@@ -1059,11 +1065,12 @@ class _ReportScreenState extends State<ReportScreen> {
         style: const TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w400,
-          color: Color(0xFF475569),
+          color: AppTheme.textPrimary,
         ),
       ),
     );
   }
+
   Widget _buildSection({
     required String title,
     required IconData icon,
@@ -1081,7 +1088,7 @@ class _ReportScreenState extends State<ReportScreen> {
               style: TextStyle(
                 fontSize: isDesktop ? 18 : 16,
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFF1E3A5F),
+                color: AppTheme.primaryColor,
               ),
             ),
           ],
@@ -1091,6 +1098,7 @@ class _ReportScreenState extends State<ReportScreen> {
       ],
     );
   }
+
   Widget _buildEmptyState(String message) {
     return Container(
       padding: EdgeInsets.all(isDesktop ? 48 : 32),
@@ -1116,20 +1124,16 @@ class _ReportScreenState extends State<ReportScreen> {
       ),
     );
   }
+
   BoxDecoration _buildBoxDecoration() {
     return BoxDecoration(
-      color: Colors.white,
+      color: AppTheme.surfaceColor,
       borderRadius: BorderRadius.circular(12),
       border: Border.all(color: const Color(0xFFE2E8F0)),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.03),
-          blurRadius: 8,
-          offset: const Offset(0, 2),
-        ),
-      ],
+      boxShadow: AppTheme.softShadow,
     );
   }
+
   String _driverName(String uid) => driverIndex[uid]?["name"] ?? "Bilinmiyor";
   String _dispatchName(String uid) =>
       dispatchIndex[uid]?["name"] ?? "Bilinmiyor";
@@ -1140,7 +1144,8 @@ class _ReportScreenState extends State<ReportScreen> {
       final km = driverKm[driverId] ?? 0;
       final hours = driverHours[driverId] ?? 0;
       final avgKm = jobs > 0 ? km / jobs : 0;
-      final avgHours = jobs > 0 ? hours / jobs : 0;String plate = "-";
+      final avgHours = jobs > 0 ? hours / jobs : 0;
+      String plate = "-";
       final vehicleSet = driverVehicles[driverId];
       if (vehicleSet != null && vehicleSet.isNotEmpty) {
         final firstVehicleId = vehicleSet.first;
@@ -1196,7 +1201,9 @@ class _ReportScreenState extends State<ReportScreen> {
           ),
         ),
       );
-    }}
+    }
+  }
+
   Future<void> _exportExcel() async {
     final drivers = driverJobCount.entries.map((e) {
       final driverId = e.key;
@@ -1204,7 +1211,8 @@ class _ReportScreenState extends State<ReportScreen> {
       final km = driverKm[driverId] ?? 0;
       final hours = driverHours[driverId] ?? 0;
       final avgKm = jobs > 0 ? km / jobs : 0;
-      final avgHours = jobs > 0 ? hours / jobs : 0;String plate = "-";
+      final avgHours = jobs > 0 ? hours / jobs : 0;
+      String plate = "-";
       final vehicleSet = driverVehicles[driverId];
       if (vehicleSet != null && vehicleSet.isNotEmpty) {
         final firstVehicleId = vehicleSet.first;
@@ -1252,5 +1260,6 @@ class _ReportScreenState extends State<ReportScreen> {
           ),
         ),
       );
-    }}
+    }
+  }
 }

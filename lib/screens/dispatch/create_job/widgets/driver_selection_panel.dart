@@ -1,6 +1,7 @@
-// 📁 lib/pages/widgets/driver_selection_panel.dart
 import 'package:flutter/material.dart';
-import 'package:lojistik/services/firestore_Service.dart';
+import 'package:lojistik/services/firestore_service.dart';
+import 'package:lojistik/config/app_theme.dart';
+import 'package:lojistik/widgets/animated/animated_widgets.dart';
 
 class DriverSelectionPanel extends StatelessWidget {
   final Animation<double> animation;
@@ -24,15 +25,7 @@ class DriverSelectionPanel extends StatelessWidget {
     required this.onSelectDriver,
   });
 
-  static const Color primary = Color(0xFF1E3A5F);
-  static const Color accent = Color(0xFF3B82F6);
-  static const Color success = Color(0xFF10B981);
-  static const Color error = Color(0xFFEF4444);
-  static const Color bg = Color(0xFFF8FAFC);
-  static const Color cardBg = Color(0xFFFFFFFF);
-  static const Color border = Color(0xFFE2E8F0);
-  static const Color textPrimary = Color(0xFF0F172A);
-  static const Color textSecondary = Color(0xFF64748B);
+  // Renkler AppTheme'den kullanılacak
 
   @override
   Widget build(BuildContext context) {
@@ -53,28 +46,24 @@ class DriverSelectionPanel extends StatelessWidget {
             animation: animation,
             builder: (context, child) {
               return Transform.translate(
-                offset: Offset(0, (1 - animation.value) * (isDesktop ? 50 : 500)),
+                offset:
+                    Offset(0, (1 - animation.value) * (isDesktop ? 50 : 500)),
                 child: Opacity(opacity: animation.value, child: child),
               );
             },
             child: Container(
               width: isDesktop ? 600 : double.infinity,
-              height: isDesktop ? 550 : MediaQuery.of(context).size.height * 0.7,
+              height:
+                  isDesktop ? 550 : MediaQuery.of(context).size.height * 0.7,
               decoration: BoxDecoration(
-                color: bg,
+                color: AppTheme.backgroundColor,
                 borderRadius: isDesktop
                     ? BorderRadius.circular(16)
                     : const BorderRadius.only(
-                  topLeft: Radius.circular(24),
-                  topRight: Radius.circular(24),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 30,
-                    offset: const Offset(0, 10),
-                  )
-                ],
+                        topLeft: Radius.circular(24),
+                        topRight: Radius.circular(24),
+                      ),
+                boxShadow: AppTheme.softShadow,
               ),
               child: Column(
                 children: [
@@ -93,12 +82,12 @@ class DriverSelectionPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: cardBg,
+        color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(isDesktop ? 16 : 24),
           topRight: Radius.circular(isDesktop ? 16 : 24),
         ),
-        border: const Border(bottom: BorderSide(color: border)),
+        border: const Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
       ),
       child: Column(
         children: [
@@ -109,7 +98,7 @@ class DriverSelectionPanel extends StatelessWidget {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color: border,
+                  color: const Color(0xFFE2E8F0),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -119,10 +108,11 @@ class DriverSelectionPanel extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: bg,
+                  color: AppTheme.backgroundColor,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.person_search, color: primary, size: 20),
+                child: const Icon(Icons.person_search,
+                    color: AppTheme.primaryColor, size: 20),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -131,14 +121,14 @@ class DriverSelectionPanel extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
-                    color: textPrimary,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
               ),
               IconButton(
                 onPressed: onClose,
                 icon: const Icon(Icons.close, size: 22),
-                color: textSecondary,
+                color: AppTheme.textSecondary,
               ),
             ],
           ),
@@ -149,10 +139,12 @@ class DriverSelectionPanel extends StatelessWidget {
             decoration: InputDecoration(
               hintText: "İsim, e-posta veya plaka ara...",
               hintStyle: const TextStyle(fontSize: 13),
-              prefixIcon: const Icon(Icons.search, color: textSecondary, size: 20),
+              prefixIcon: const Icon(Icons.search,
+                  color: AppTheme.textSecondary, size: 20),
               filled: true,
-              fillColor: bg,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              fillColor: AppTheme.backgroundColor,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide.none,
@@ -169,7 +161,20 @@ class DriverSelectionPanel extends StatelessWidget {
       future: FirestoreService.fetchDrivers(),
       builder: (context, snap) {
         if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: ListView.builder(
+              itemCount: 5,
+              itemBuilder: (_, __) => const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: ShimmerLoading(
+                  width: double.infinity,
+                  height: 80,
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                ),
+              ),
+            ),
+          );
         }
 
         final drivers = snap.data!.where((d) {
@@ -185,11 +190,11 @@ class DriverSelectionPanel extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.search_off, size: 48, color: textSecondary),
+                Icon(Icons.search_off, size: 48, color: AppTheme.textSecondary),
                 SizedBox(height: 12),
                 Text(
                   "Şoför bulunamadı",
-                  style: TextStyle(fontSize: 15, color: textSecondary),
+                  style: TextStyle(fontSize: 15, color: AppTheme.textSecondary),
                 ),
               ],
             ),
@@ -204,108 +209,115 @@ class DriverSelectionPanel extends StatelessWidget {
             final isSelected = driver['uid'] == selectedDriverUid;
             final isBusy = (driver['jobStatus'] ?? 'available') == 'busy';
 
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: AnimatedCard(
+                onTap: isBusy ? null : () => onSelectDriver(driver),
                 color: isSelected
-                    ? accent.withOpacity(0.05)
-                    : (isBusy ? error.withOpacity(0.03) : cardBg),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isSelected
-                      ? accent
-                      : (isBusy ? error.withOpacity(0.3) : border),
-                  width: isSelected ? 1.5 : 1,
-                ),
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: isBusy ? null : () => onSelectDriver(driver),
-                  borderRadius: BorderRadius.circular(10),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: isBusy
-                                ? error.withOpacity(0.1)
-                                : accent.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            isBusy ? Icons.work_outline : Icons.person_outlined,
-                            color: isBusy ? error : accent,
-                            size: 22,
-                          ),
+                    ? AppTheme.primaryColor.withValues(alpha: 0.05)
+                    : (isBusy
+                        ? AppTheme.errorColor.withValues(alpha: 0.03)
+                        : AppTheme.surfaceColor),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isSelected
+                          ? AppTheme.primaryColor
+                          : (isBusy
+                              ? AppTheme.errorColor.withValues(alpha: 0.3)
+                              : const Color(0xFFE2E8F0)),
+                      width: isSelected ? 1.5 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: isBusy
+                              ? AppTheme.errorColor.withValues(alpha: 0.1)
+                              : AppTheme.primaryColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      driver['name'],
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: isBusy ? textSecondary : textPrimary,
-                                      ),
+                        child: Icon(
+                          isBusy ? Icons.work_outline : Icons.person_outlined,
+                          color: isBusy
+                              ? AppTheme.errorColor
+                              : AppTheme.primaryColor,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    driver['name'],
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: isBusy
+                                          ? AppTheme.textSecondary
+                                          : AppTheme.textPrimary,
                                     ),
                                   ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isBusy ? error : success,
-                                      borderRadius: BorderRadius.circular(5),
-                                    ),
-                                    child: Text(
-                                      isBusy ? "MEŞGUL" : "MÜSAİT",
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                        letterSpacing: .3,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                driver['email'],
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: textSecondary,
                                 ),
-                              ),
-                              if (driver['activePlate'] != null) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  "🚛 ${driver['activePlate']}",
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: accent,
-                                    fontWeight: FontWeight.w600,
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isBusy
+                                        ? AppTheme.errorColor
+                                        : AppTheme.successColor,
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: Text(
+                                    isBusy ? "MEŞGUL" : "MÜSAİT",
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                      letterSpacing: .3,
+                                    ),
                                   ),
                                 ),
                               ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              driver['email'],
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                            if (driver['activePlate'] != null) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                "🚛 ${driver['activePlate']}",
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppTheme.primaryColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ],
-                          ),
+                          ],
                         ),
-                        if (isSelected)
-                          const Icon(Icons.check_circle, color: success, size: 20),
-                      ],
-                    ),
+                      ),
+                      if (isSelected)
+                        const Icon(Icons.check_circle,
+                            color: AppTheme.successColor, size: 20),
+                    ],
                   ),
                 ),
               ),

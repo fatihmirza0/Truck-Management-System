@@ -10,6 +10,7 @@ class LoginFormCard extends StatelessWidget {
   final VoidCallback onLogin;
   final bool isLoading;
   final String? errorMessage;
+  final bool withAnimation;
 
   const LoginFormCard({
     super.key,
@@ -20,6 +21,7 @@ class LoginFormCard extends StatelessWidget {
     required this.onLogin,
     required this.isLoading,
     this.errorMessage,
+    this.withAnimation = false,
   });
 
   @override
@@ -101,7 +103,8 @@ class LoginFormCard extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                      Icon(Icons.error_outline,
+                          color: Colors.red.shade700, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -136,7 +139,8 @@ class LoginFormCard extends StatelessWidget {
                           width: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
                       : const Text(
@@ -155,5 +159,3 @@ class LoginFormCard extends StatelessWidget {
     );
   }
 }
-
-

@@ -50,3 +50,4 @@ class DetailInfoRow extends StatelessWidget {
 }
 
 
+

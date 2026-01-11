@@ -6,17 +6,20 @@ import 'package:lojistik/screens/manager/jobs/completed_jobs_page.dart';
 import '../commons/login/pages/login_screen.dart';
 import '../commons/live_tracking_screen.dart';
 import '../commons/profile/pages/profile_screen.dart';
+import '../../config/app_theme.dart';
+import '../../widgets/animated/animated_widgets.dart';
+import '../../utils/page_transitions.dart';
 import 'jobs/pages/jobs_page.dart';
 import 'add_user/pages/add_user_page.dart';
 import 'users/pages/users_page.dart';
-import 'report_Screen.dart';
+import 'report_screen.dart';
 
 class ManagerScreen extends StatefulWidget {
   const ManagerScreen({super.key});
 
-  static const Color accent = Color(0xFF1E3A5F);
-  static const Color bg = Color(0xFFF8FAFC);
-  static const Color sidebar = Color(0xFF0F172A);
+  static const Color accent = AppTheme.primaryColor;
+  static const Color bg = AppTheme.backgroundColor;
+  static const Color sidebar = AppTheme.sidebarColor;
 
   @override
   State<ManagerScreen> createState() => _ManagerScreenState();
@@ -82,7 +85,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const LoginScreen()),
-              (_) => false,
+          (_) => false,
         );
       });
       return const Scaffold(
@@ -240,7 +243,8 @@ class _ManagerScreenState extends State<ManagerScreen> {
             const SizedBox(height: 32),
             // Menu Items
             _mobileDrawerItem("Canlı Takip", Icons.map_outlined, 0),
-            _mobileDrawerItem("İş Yönetimi", Icons.dashboard_customize_outlined, 1),
+            _mobileDrawerItem(
+                "İş Yönetimi", Icons.dashboard_customize_outlined, 1),
             _mobileDrawerItem("Tamamlanan İşler", Icons.task_alt_outlined, 2),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -262,10 +266,10 @@ class _ManagerScreenState extends State<ManagerScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.1),
+                      color: Colors.white.withValues(alpha: 0.1),
                     ),
                   ),
                   child: Row(
@@ -328,7 +332,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
   Widget _mobileDrawerItem(String text, IconData icon, int idx) {
     final selected = _index == idx;
 
-    return InkWell(
+    return ScaleButton(
       onTap: () {
         setState(() => _index = idx);
         Navigator.pop(context); // Drawer'ı kapat
@@ -338,7 +342,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: selected
-              ? ManagerScreen.accent.withOpacity(0.15)
+              ? ManagerScreen.accent.withValues(alpha: 0.15)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
@@ -346,7 +350,9 @@ class _ManagerScreenState extends State<ManagerScreen> {
           children: [
             Icon(
               icon,
-              color: selected ? ManagerScreen.accent : Colors.white.withOpacity(0.7),
+              color: selected
+                  ? ManagerScreen.accent
+                  : Colors.white.withValues(alpha: 0.7),
               size: 22,
             ),
             const SizedBox(width: 16),
@@ -363,7 +369,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
               Container(
                 width: 6,
                 height: 6,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: ManagerScreen.accent,
                   shape: BoxShape.circle,
                 ),
@@ -412,7 +418,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
                   const SizedBox(height: 16),
                   Align(
                     alignment:
-                    _sidebarOpen ? Alignment.centerRight : Alignment.center,
+                        _sidebarOpen ? Alignment.centerRight : Alignment.center,
                     child: IconButton(
                       icon: Icon(
                         _sidebarOpen ? Icons.chevron_left : Icons.chevron_right,
@@ -426,7 +432,8 @@ class _ManagerScreenState extends State<ManagerScreen> {
                   _sidebarHeader(),
                   const SizedBox(height: 24),
                   _menuItem("Canlı Takip", CupertinoIcons.map, 0),
-                  _menuItem("İş Yönetimi", Icons.dashboard_customize_outlined, 1),
+                  _menuItem(
+                      "İş Yönetimi", Icons.dashboard_customize_outlined, 1),
                   _menuItem("Tamamlanan İşler", Icons.task_alt_outlined, 2),
                   _menuItem("Personel Ekle", Icons.person_add_outlined, 3),
                   _menuItem("Kullanıcılar", Icons.people_alt_outlined, 4),
@@ -454,32 +461,32 @@ class _ManagerScreenState extends State<ManagerScreen> {
           mainAxisSize: MainAxisSize.min,
           children: showText
               ? [
-            _squareIcon(Icons.local_shipping_outlined),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  "Yönetim Paneli",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
+                  _squareIcon(Icons.local_shipping_outlined),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        "Yönetim Paneli",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        "Truck Management System",
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                Text(
-                  "Truck Management System",
-                  style: TextStyle(
-                    color: Color(0xFF64748B),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ]
+                ]
               : [
-            _squareIcon(Icons.local_shipping_outlined),
-          ],
+                  _squareIcon(Icons.local_shipping_outlined),
+                ],
         ),
       ),
     );
@@ -488,50 +495,50 @@ class _ManagerScreenState extends State<ManagerScreen> {
   Widget _menuItem(String text, IconData icon, int idx) {
     final selected = _index == idx;
 
-    return InkWell(
+    return AnimatedCard(
+      elevation: 0,
+      hoverElevation: selected ? 2 : 4,
+      color: selected
+          ? ManagerScreen.accent.withValues(alpha: 0.15)
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
       onTap: () => setState(() => _index = idx),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: selected
-              ? ManagerScreen.accent.withOpacity(0.15)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-        ),
         child: Row(
           mainAxisAlignment:
-          showText ? MainAxisAlignment.start : MainAxisAlignment.center,
+              showText ? MainAxisAlignment.start : MainAxisAlignment.center,
           children: showText
               ? [
-            Icon(
-              icon,
-              color: selected
-                  ? ManagerScreen.accent
-                  : Colors.white.withOpacity(0.6),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                text,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: selected ? Colors.white : Colors.white70,
-                  fontWeight:
-                  selected ? FontWeight.w600 : FontWeight.w400,
-                ),
-              ),
-            ),
-          ]
+                  Icon(
+                    icon,
+                    color: selected
+                        ? ManagerScreen.accent
+                        : Colors.white.withValues(alpha: 0.6),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: selected ? Colors.white : Colors.white70,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                ]
               : [
-            Icon(
-              icon,
-              color: selected
-                  ? ManagerScreen.accent
-                  : Colors.white.withOpacity(0.6),
-            ),
-          ],
+                  Icon(
+                    icon,
+                    color: selected
+                        ? ManagerScreen.accent
+                        : Colors.white.withValues(alpha: 0.6),
+                  ),
+                ],
         ),
       ),
     );
@@ -576,45 +583,45 @@ class _ManagerScreenState extends State<ManagerScreen> {
       child: Container(
         padding: EdgeInsets.all(showText ? 12 : 10),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           mainAxisAlignment:
-          showText ? MainAxisAlignment.start : MainAxisAlignment.center,
+              showText ? MainAxisAlignment.start : MainAxisAlignment.center,
           children: showText
               ? [
-            _squareIcon(Icons.person),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 150,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    userName ?? "Kullanıcı",
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                  _squareIcon(Icons.person),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 150,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          userName ?? "Kullanıcı",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const Text(
+                          "Profilimi Görüntüle",
+                          style: TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const Text(
-                    "Profilimi Görüntüle",
-                    style: TextStyle(
-                      color: Color(0xFF94A3B8),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ]
+                ]
               : [
-            _squareIcon(Icons.person),
-          ],
+                  _squareIcon(Icons.person),
+                ],
         ),
       ),
     );
@@ -639,7 +646,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
   void _openProfile() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+      SlidePageRoute(page: const ProfileScreen()),
     );
   }
 }
