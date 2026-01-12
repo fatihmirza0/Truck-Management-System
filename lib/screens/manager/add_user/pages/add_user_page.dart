@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import '../../../../services/firestore_service.dart';
+import '../../../../config/app_theme.dart';
+import '../../../../widgets/animated/animated_widgets.dart';
 
 import '../widgets/add_user_header.dart';
 import '../widgets/role_selector.dart';
 import '../widgets/add_user_submit_button.dart';
-import '../widgets/add_user_desktop_panel.dart';
+import '../widgets/add_user_info_box.dart';
 
 class AddUserPage extends StatefulWidget {
   const AddUserPage({super.key});
-
-  static const Color primary = Color(0xFF1E3A5F);
-  static const Color bg = Color(0xFFF8FAFC);
 
   @override
   State<AddUserPage> createState() => _AddUserPageState();
@@ -45,13 +44,15 @@ class _AddUserPageState extends State<AddUserPage> {
         plate: _role == "driver" ? _plate.text : null,
       );
 
-      _clear();
-      _snack("Kullanıcı başarıyla eklendi", true);
+      if (mounted) {
+        _clear();
+        _snack("Kullanıcı başarıyla eklendi", true);
+      }
     } catch (e) {
-      _snack("Hata: $e");
+      if (mounted) _snack("Hata: $e");
     }
 
-    setState(() => _loading = false);
+    if (mounted) setState(() => _loading = false);
   }
 
   void _clear() {
@@ -65,34 +66,41 @@ class _AddUserPageState extends State<AddUserPage> {
   void _snack(String msg, [bool success = false]) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg),
-        backgroundColor: success ? Colors.green : Colors.red,
+        content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+        backgroundColor: success ? AppTheme.successColor : AppTheme.errorColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(20),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
 
-  InputDecoration _dec(String label) {
+  InputDecoration _dec(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
-      filled: true,
-      fillColor: Colors.white,
-      labelStyle: const TextStyle(color: Color(0xFF64748B)),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey.shade300),
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      prefixIcon: Icon(icon, size: 18, color: AppTheme.textSecondary),
+      hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+      labelStyle: const TextStyle(
+        color: AppTheme.textSecondary,
+        fontWeight: FontWeight.w500,
+        fontSize: 13,
       ),
-      focusedBorder: const OutlineInputBorder(
-        borderRadius: BorderRadius.all(Radius.circular(12)),
-        borderSide: BorderSide(color: AddUserPage.primary, width: 2),
+      floatingLabelStyle: const TextStyle(
+        color: AppTheme.primaryColor,
+        fontWeight: FontWeight.w600,
+        fontSize: 12,
       ),
     );
   }
 
-  Widget _field(TextEditingController c, String label) {
+  Widget _field(TextEditingController c, String label, IconData icon) {
     return TextFormField(
       controller: c,
-      decoration: _dec(label),
+      style: const TextStyle(fontSize: 13.5),
+      decoration: _dec(label, icon),
       validator: (v) => v == null || v.isEmpty ? "Bu alan zorunlu" : null,
     );
   }
@@ -100,7 +108,8 @@ class _AddUserPageState extends State<AddUserPage> {
   Widget _emailField() {
     return TextFormField(
       controller: _email,
-      decoration: _dec("E-posta"),
+      style: const TextStyle(fontSize: 13.5),
+      decoration: _dec("E-posta", Icons.email_outlined),
       keyboardType: TextInputType.emailAddress,
       validator: (v) =>
           v != null && v.contains("@") ? null : "Geçerli e-posta girin",
@@ -110,17 +119,19 @@ class _AddUserPageState extends State<AddUserPage> {
   Widget _phoneField() {
     return TextFormField(
       controller: _phone,
-      decoration: _dec("Telefon"),
+      style: const TextStyle(fontSize: 13.5),
+      decoration: _dec("Telefon", Icons.phone_outlined),
       keyboardType: TextInputType.phone,
       validator: (v) =>
-          v != null && v.length >= 10 ? null : "Telefon numarası geçersiz",
+          v != null && v.length >= 10 ? null : "En az 10 karakter olmalı",
     );
   }
 
   Widget _plateField() {
     return TextFormField(
       controller: _plate,
-      decoration: _dec("Plaka"),
+      style: const TextStyle(fontSize: 13.5),
+      decoration: _dec("Araç Plakası", Icons.badge_outlined),
       validator: (v) => v == null || v.isEmpty ? "Plaka zorunlu" : null,
     );
   }
@@ -128,107 +139,57 @@ class _AddUserPageState extends State<AddUserPage> {
   Widget _passwordField() {
     return TextFormField(
       controller: _pass,
+      style: const TextStyle(fontSize: 13.5),
       obscureText: true,
-      decoration: _dec("Şifre"),
+      decoration: _dec("Şifre", Icons.lock_outline_rounded),
       validator: (v) =>
           v != null && v.length >= 6 ? null : "Min 6 karakter olmalı",
-    );
-  }
-
-  Widget _desktop() {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 900),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 4,
-              child: AddUserDesktopPanel(
-                child: Container(),
-              ),
-            ),
-            const SizedBox(width: 28),
-            Expanded(
-              flex: 5,
-              child: Container(
-                padding: const EdgeInsets.all(28),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.06),
-                        blurRadius: 20,
-                        offset: Offset(0, 10)),
-                  ],
-                ),
-                child: SingleChildScrollView(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text("Yeni Kullanıcı Oluştur",
-                            style: TextStyle(
-                                fontSize: 20,
-                                color: Color(0xFF0F172A),
-                                fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        Text(
-                          "Kullanıcı bilgilerini doldurun.",
-                          style: TextStyle(
-                              fontSize: 13, color: Colors.grey.shade600),
-                        ),
-                        const SizedBox(height: 20),
-                        _form(desktop: true),
-                      ]),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _mobile() {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(22),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 500),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const AddUserHeader(),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(22),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(22),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.06),
-                        blurRadius: 20,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: _form(desktop: false),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AddUserPage.bg,
-      body: isDesktop ? _desktop() : _mobile(),
+      backgroundColor: AppTheme.backgroundColor,
+      body: SafeArea(
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+              horizontal: isDesktop ? 40 : 20,
+              vertical: isDesktop ? 32 : 24,
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: isDesktop ? 750 : 500),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SlideInWidget(
+                    child: AddUserHeader(isDesktop: isDesktop),
+                  ),
+                  const SizedBox(height: 24),
+                  const SlideInWidget(
+                    delay: Duration(milliseconds: 100),
+                    child: AddUserInfoBox(),
+                  ),
+                  const SizedBox(height: 24),
+                  SlideInWidget(
+                    delay: const Duration(milliseconds: 200),
+                    child: AnimatedCard(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Padding(
+                        padding: EdgeInsets.all(isDesktop ? 32 : 24),
+                        child: _form(desktop: isDesktop),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 100), // Extra space at the bottom
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -238,47 +199,50 @@ class _AddUserPageState extends State<AddUserPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (desktop)
-            Row(
-              children: [
-                Expanded(child: _field(_name, "Ad Soyad")),
-                const SizedBox(width: 16),
-                Expanded(child: _emailField()),
-              ],
-            )
-          else ...[
-            _field(_name, "Ad Soyad"),
-            const SizedBox(height: 16),
-            _emailField(),
-          ],
-          const SizedBox(height: 18),
+          _field(_name, "Ad Soyad", Icons.person_outline_rounded),
+          const SizedBox(height: 20),
+          _emailField(),
+          const SizedBox(height: 20),
           if (desktop)
             Row(
               children: [
                 Expanded(child: _phoneField()),
-                const SizedBox(width: 16),
-                if (_role == "driver") Expanded(child: _plateField()),
+                if (_role == "driver") ...[
+                  const SizedBox(width: 16),
+                  Expanded(child: _plateField()),
+                ],
               ],
             )
           else ...[
             _phoneField(),
             if (_role == "driver") ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               _plateField(),
             ],
           ],
-          const SizedBox(height: 18),
+          const SizedBox(height: 20),
           _passwordField(),
           const SizedBox(height: 28),
+          Text(
+            "Kullanıcı Rolü",
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.textPrimary.withValues(alpha: 0.8),
+            ),
+          ),
+          const SizedBox(height: 12),
           RoleSelector(
             selectedRole: _role,
             onRoleChanged: (role) => setState(() => _role = role),
           ),
-          const SizedBox(height: 28),
-          AddUserSubmitButton(
-            loading: _loading,
-            onPressed: _addUser,
-            isDesktop: desktop,
+          const SizedBox(height: 36),
+          Center(
+            child: AddUserSubmitButton(
+              loading: _loading,
+              onPressed: _addUser,
+              isDesktop: desktop,
+            ),
           ),
         ],
       ),

@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:lojistik/screens/manager/jobs/completed_jobs_page.dart';
+import 'completed_jobs/pages/completed_jobs_page.dart';
 
 import '../commons/login/pages/login_screen.dart';
 import '../commons/live_tracking_screen.dart';

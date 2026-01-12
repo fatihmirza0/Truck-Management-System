@@ -2,50 +2,59 @@
 import 'package:flutter/material.dart';
 
 class JobsPageHeader extends StatelessWidget {
-  const JobsPageHeader({super.key});
+  final bool isDesktop;
+
+  const JobsPageHeader({
+    super.key,
+    this.isDesktop = true,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E3A5F),
-            borderRadius: BorderRadius.circular(12),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF1E3A5F), Color(0xFF2D4A6F)],
+            ),
+            borderRadius: BorderRadius.circular(10),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF1E3A5F).withValues(alpha: 0.2),
+                color: const Color(0xFF1E3A5F).withValues(alpha: 0.3),
                 blurRadius: 8,
-                offset: const Offset(0, 2),
+                offset: const Offset(0, 3),
               ),
             ],
           ),
           child: const Icon(
-            Icons.local_shipping_outlined,
+            Icons.local_shipping_rounded,
             color: Colors.white,
-            size: 28,
+            size: 18,
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 "İş Yönetimi",
                 style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1E3A5F),
+                  fontSize: isDesktop ? 20 : 17,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF1E3A5F),
                   letterSpacing: -0.5,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 1),
               Text(
-                "Tüm nakliye operasyonlarını takip edin",
+                "Tüm nakliye operasyonlarını ve sevkiyatları takip edin",
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: isDesktop ? 12 : 11,
                   color: Colors.grey[600],
                   fontWeight: FontWeight.w400,
                 ),
@@ -57,6 +66,3 @@ class JobsPageHeader extends StatelessWidget {
     );
   }
 }
-
-
-

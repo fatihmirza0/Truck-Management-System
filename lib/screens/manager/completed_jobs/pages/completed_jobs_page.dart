@@ -1,14 +1,19 @@
 import 'dart:io';
 
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
 
-import 'job_detail_panel.dart';
+import '../../../dispatch/dispatch_job_detail/pages/dispatch_job_detail_page.dart';
+import '../widgets/completed_jobs_header.dart';
+import '../widgets/completed_jobs_filters.dart';
+import '../widgets/completed_jobs_list_view.dart';
 
 class CompletedJobsPage extends StatefulWidget {
   const CompletedJobsPage({super.key});
@@ -19,7 +24,7 @@ class CompletedJobsPage extends StatefulWidget {
 
 class _CompletedJobsPageState extends State<CompletedJobsPage> {
   // --------------------------------------------------
-  // UI TOKENS (JobsPage ile aynı dil)
+  // UI TOKENS
   // --------------------------------------------------
   static const Color accent = Color(0xFF1E3A5F);
   static const Color bg = Color(0xFFF8FAFC);
@@ -33,7 +38,6 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   List<DateTime?> _rangeDates = [];
 
-
   DateTime? _startDate;
   DateTime? _endDate;
   String? _selectedDriverId;
@@ -41,13 +45,8 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   Map<String, Map<String, dynamic>> userCache = {};
   Map<String, Map<String, dynamic>> vehicleCache = {};
 
-  Map<String, dynamic>? _selectedJob;
-  String? _selectedJobId;
-
   bool exportingPdf = false;
   bool exportingExcel = false;
-
-  bool get isDesktop => MediaQuery.of(context).size.width > 900;
 
   // --------------------------------------------------
   // INIT
@@ -169,7 +168,6 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // HEADER
                   Row(
                     children: [
                       const Icon(Icons.date_range, color: accent),
@@ -190,8 +188,6 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-
-                  // CALENDAR
                   CalendarDatePicker2(
                     config: CalendarDatePicker2Config(
                       calendarType: CalendarDatePicker2Type.range,
@@ -221,10 +217,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                       _rangeDates = dates;
                     },
                   ),
-
                   const SizedBox(height: 12),
-
-                  // ACTIONS
                   Row(
                     children: [
                       ElevatedButton(
@@ -233,12 +226,12 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                           Navigator.pop(context);
                           _clearDate();
                         },
-                        child: const Text("Temizle",style: TextStyle(color: Color(0xFF1E3A5F)),),
+                        child: const Text("Temizle", style: TextStyle(color: Colors.white)),
                       ),
                       const Spacer(),
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Color(0xFF1E3A5F),
+                          backgroundColor: accent,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
@@ -248,12 +241,12 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                             setState(() {
                               _startDate = _rangeDates.first;
                               _endDate =
-                              _rangeDates.length > 1 ? _rangeDates.last : _rangeDates.first;
+                                  _rangeDates.length > 1 ? _rangeDates.last : _rangeDates.first;
                             });
                           }
                           Navigator.pop(context);
                         },
-                        child: const Text("Uygula",style: TextStyle(color: Colors.white),),
+                        child: const Text("Uygula", style: TextStyle(color: Colors.white)),
                       ),
                     ],
                   )
@@ -278,7 +271,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   }
 
   // --------------------------------------------------
-  // DRIVER SELECTOR (50 şoför + için doğru UX)
+  // DRIVER SELECTOR
   // --------------------------------------------------
   List<MapEntry<String, Map<String, dynamic>>> _drivers() {
     final list =
@@ -487,21 +480,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   }
 
   // --------------------------------------------------
-  // DETAIL OPEN (tek tık fix)
-  // --------------------------------------------------
-  void _openDetail(Map<String, dynamic> job, String id) {
-    setState(() {
-      _selectedJob = job;
-      _selectedJobId = id;
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scaffoldKey.currentState?.openEndDrawer();
-    });
-  }
-
-  // --------------------------------------------------
-  // EXPORT BUTTON ACTIONS (UI düzenli + boş veri korumalı)
+  // EXPORT
   // --------------------------------------------------
   Future<void> _runPdfExport() async {
     if (exportingPdf) return;
@@ -545,9 +524,6 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
     }
   }
 
-  // --------------------------------------------------
-  // EXPORT - EXCEL
-  // --------------------------------------------------
   Future<void> _exportExcel(List<QueryDocumentSnapshot> jobs) async {
     final workbook = xlsio.Workbook();
     final sheet = workbook.worksheets[0];
@@ -590,170 +566,141 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
     final bytes = workbook.saveAsStream();
     workbook.dispose();
 
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File("${dir.path}/completed_jobs.xlsx");
+    // Dinamik dosya ismi
+    String fileName = "tamamlanan_isler";
+    if (_startDate != null) {
+      fileName += "_${formatDateShort(_startDate!)}-${formatDateShort(_endDate ?? _startDate!)}";
+    }
+
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: "Excel Raporunu Kaydet",
+      fileName: "$fileName.xlsx",
+      type: FileType.custom,
+      allowedExtensions: ["xlsx"],
+    );
+
+    if (path == null) return; // Kullanıcı iptal etti
+
+    final file = File(path);
     await file.writeAsBytes(bytes, flush: true);
-
     await OpenFilex.open(file.path);
   }
 
-  // --------------------------------------------------
-  // EXPORT - PDF
-  // --------------------------------------------------
   Future<void> _exportPdf(List<QueryDocumentSnapshot> jobs) async {
-    final pdf = pw.Document();
+    try {
+      final pdf = pw.Document();
 
-    pdf.addPage(
-      pw.MultiPage(
-        build: (_) => [
-          pw.Text(
-            "Tamamlanan İşler",
-            style: pw.TextStyle(
-              fontSize: 18,
-              fontWeight: pw.FontWeight.bold,
+      // Fontları yükle (Türkçe karakter desteği için)
+      final fontData = await rootBundle.load("assets/fonts/Roboto-Regular.ttf");
+      final fontBoldData = await rootBundle.load("assets/fonts/Roboto-Bold.ttf");
+      final ttfBase = pw.Font.ttf(fontData);
+      final ttfBold = pw.Font.ttf(fontBoldData);
+
+      // Filtre bilgisini oluştur
+      String filterInfo = "Tüm Kayıtlar";
+      if (_startDate != null) {
+        filterInfo =
+            "Tarih: ${formatDateShort(_startDate!)} - ${formatDateShort(_endDate ?? _startDate!)}";
+      }
+      if (_selectedDriverId != null) {
+        final name = userName(_selectedDriverId);
+        if (_startDate != null) {
+          filterInfo += "  |  Şoför: $name";
+        } else {
+          filterInfo = "Şoför: $name";
+        }
+      }
+
+      pdf.addPage(
+        pw.MultiPage(
+          theme: pw.ThemeData.withFont(
+            base: ttfBase,
+            bold: ttfBold,
+          ),
+          pageFormat: const PdfPageFormat(
+            21.0 * PdfPageFormat.cm,
+            29.7 * PdfPageFormat.cm,
+            marginAll: 2.0 * PdfPageFormat.cm,
+          ),
+          header: (context) => pw.Header(
+            level: 0,
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text("Tamamlanan İş Raporu",
+                    style: pw.TextStyle(
+                        fontSize: 22, fontWeight: pw.FontWeight.bold)),
+                pw.Text(formatDateShort(DateTime.now()),
+                    style: const pw.TextStyle(fontSize: 12)),
+              ],
             ),
           ),
-          pw.SizedBox(height: 14),
-          pw.Table.fromTextArray(
-            headers: ["Ref", "Şoför", "Plaka", "Yük", "Kg", "Tarih"],
-            data: jobs.map((doc) {
-              final j = doc.data() as Map<String, dynamic>;
-              final cargo = j["cargo"] as Map<String, dynamic>?;
-              final completedAt = j["timestamps"]?["completedAt"] as Timestamp?;
-
-              return [
-                (j["referenceNo"] ?? "-").toString(),
-                userName(j["driverId"]),
-                vehiclePlate(j["vehicleId"]),
-                (cargo?["type"] ?? "-").toString(),
-                (cargo?["weightKg"] ?? 0).toString(),
-                completedAt == null ? "-" : formatTimestamp(completedAt),
-              ];
-            }).toList(),
+          footer: (context) => pw.Container(
+            alignment: pw.Alignment.centerRight,
+            margin: const pw.EdgeInsets.only(top: 1.0 * PdfPageFormat.cm),
+            child: pw.Text(
+              "Sayfa ${context.pageNumber} / ${context.pagesCount}",
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+            ),
           ),
-        ],
-      ),
-    );
+          build: (context) => [
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 8, bottom: 20),
+              child: pw.Text(filterInfo,
+                  style: pw.TextStyle(
+                    fontSize: 12,
+                    color: PdfColors.grey700,
+                  )),
+            ),
+            pw.Table.fromTextArray(
+              headerStyle:
+                  pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+              cellStyle: const pw.TextStyle(fontSize: 10),
+              headers: ["Ref No", "Şoför", "Plaka", "Yük Tipi", "Kilo", "Tarih"],
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              data: jobs.map((doc) {
+                final j = doc.data() as Map<String, dynamic>;
+                final cargo = j["cargo"] as Map<String, dynamic>?;
+                final completedAt = completedAtFromJob(j);
 
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File("${dir.path}/completed_jobs.pdf");
-    await file.writeAsBytes(await pdf.save());
-
-    await OpenFilex.open(file.path);
-  }
-
-  // --------------------------------------------------
-  // UI PIECES
-  // --------------------------------------------------
-  Widget _pill({
-    required IconData icon,
-    required String text,
-    required VoidCallback onTap,
-    VoidCallback? onClear,
-    bool loading = false,
-    bool primary = false,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: loading ? null : onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: primary ? accent : Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: primary ? accent : border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (loading) ...[
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                const SizedBox(width: 8),
-              ] else ...[
-                Icon(
-                  icon,
-                  size: 18,
-                  color: primary ? Colors.white : textMuted,
-                ),
-                const SizedBox(width: 8),
-              ],
-              Text(
-                text,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w600,
-                  color: primary ? Colors.white : textDark,
-                ),
-              ),
-              if (onClear != null && !loading) ...[
-                const SizedBox(width: 8),
-                InkWell(
-                  onTap: onClear,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Icon(
-                    Icons.close,
-                    size: 18,
-                    color: primary ? Colors.white.withValues(alpha: 0.9) : textMuted,
-                  ),
-                ),
-              ],
-            ],
-          ),
+                return [
+                  (j["referenceNo"] ?? "-").toString(),
+                  userName(j["driverId"]),
+                  vehiclePlate(j["vehicleId"]),
+                  (cargo?["type"] ?? "-").toString(),
+                  (cargo?["weightKg"] ?? 0).toString(),
+                  completedAt == null ? "-" : formatDateShort(completedAt),
+                ];
+              }).toList(),
+            ),
+          ],
         ),
-      ),
-    );
-  }
+      );
 
-  Widget _emptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(
-              Icons.inbox_outlined,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            "Kayıt Bulunamadı",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Colors.grey[700],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            "Seçtiğiniz filtrelerle eşleşen tamamlanan iş yok",
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[500],
-            ),
-          ),
-        ],
-      ),
-    );
+      final bytes = await pdf.save();
+      
+      // Dinamik dosya ismi
+      String fileName = "tamamlanan_isler_raporu";
+      if (_startDate != null) {
+        fileName += "_${formatDateShort(_startDate!)}-${formatDateShort(_endDate ?? _startDate!)}";
+      }
+
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: "PDF Raporunu Kaydet",
+        fileName: "$fileName.pdf",
+        type: FileType.custom,
+        allowedExtensions: ["pdf"],
+      );
+
+      if (path == null) return; // Kullanıcı iptal etti
+
+      final file = File(path);
+      await file.writeAsBytes(bytes, flush: true);
+      await OpenFilex.open(file.path);
+    } catch (e) {
+      debugPrint("PDF Export Error: $e");
+      _toast("PDF export hatası oluştu.");
+    }
   }
 
   // --------------------------------------------------
@@ -764,320 +711,62 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: bg,
-      endDrawer: _selectedJob == null
-          ? null
-          : JobDetailPanel(
-              job: _selectedJob!,
-              jobId: _selectedJobId!,
-              userName: userName,
-              vehiclePlate: vehiclePlate,
-              onApprove: () {},
-              onReject: (_) {},
-            ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // HEADER (JobsPage stili)
-              Row(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth > 900;
+            final horizontalPadding = isWide ? 40.0 : 20.0;
+
+            return Padding(
+              padding: EdgeInsets.symmetric(
+                  horizontal: horizontalPadding, vertical: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: accent,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: accent.withValues(alpha: 0.2),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.done_all_outlined,
-                      color: Colors.white,
-                      size: 28,
-                    ),
+                  const CompletedJobsHeader(accentColor: accent),
+                  const SizedBox(height: 12),
+                  CompletedJobsFilters(
+                    startDate: _startDate,
+                    endDate: _endDate,
+                    selectedDriverName:
+                        _selectedDriverId == null ? null : userName(_selectedDriverId),
+                    exportingPdf: exportingPdf,
+                    exportingExcel: exportingExcel,
+                    onPickDateRange: _pickDateRange,
+                    onClearDate: _clearDate,
+                    onOpenDriverSelector: _openDriverSelector,
+                    onClearDriver: _clearDriver,
+                    onRunPdfExport: _runPdfExport,
+                    onRunExcelExport: _runExcelExport,
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(height: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Tamamlanan İşler",
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w600,
-                            color: accent,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "Filtreleyin, dışa aktarın ve detayları inceleyin",
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w400,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              // FILTER BAR (kurumsal + temiz)
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: border),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    // SOL TARAF – FİLTRELER
-                    Expanded(
-                      child: Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          _pill(
-                            icon: Icons.date_range,
-                            text: _startDate == null
-                                ? "Tarih"
-                                : "${formatDateShort(_startDate!)} → ${formatDateShort(_endDate ?? _startDate!)}",
-                            onTap: _pickDateRange,
-                            onClear: _startDate == null ? null : _clearDate,
-                          ),
-                          _pill(
-                            icon: Icons.person_outline,
-                            text: _selectedDriverId == null
-                                ? "Şoför"
-                                : userName(_selectedDriverId),
-                            onTap: _openDriverSelector,
-                            onClear: _selectedDriverId == null ? null : _clearDriver,
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // SAĞ TARAF – EXPORT BUTONLARI
-                    Wrap(
-                      spacing: 12,
-                      children: [
-                        _pill(
-                          icon: Icons.picture_as_pdf,
-                          text: exportingPdf ? "PDF hazırlanıyor..." : "PDF",
-                          onTap: _runPdfExport,
-                          loading: exportingPdf,
-                          primary: true,
-                        ),
-                        _pill(
-                          icon: Icons.table_chart,
-                          text: exportingExcel ? "Excel hazırlanıyor..." : "Excel",
-                          onTap: _runExcelExport,
-                          loading: exportingExcel,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // LIST
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: _stream(),
-                  builder: (context, snap) {
-                    if (!snap.hasData) {
-                      return const Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation(accent),
-                        ),
-                      );
-                    }
-
-                    final filtered = _applyFilters(snap.data!.docs);
-
-                    if (filtered.isEmpty) return _emptyState();
-
-                    return ListView.separated(
-                      padding: const EdgeInsets.only(bottom: 32),
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (context, i) {
-                        final d = filtered[i];
-                        final j = d.data() as Map<String, dynamic>;
-                        final cargo = j["cargo"] as Map<String, dynamic>?;
-                        final route = j["route"] as Map<String, dynamic>?;
-                        final completedAt = completedAtFromJob(j);
-
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: border),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.03),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              onTap: () => _openDetail(j, d.id),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFF1F5F9),
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                          ),
-                                          child: const Icon(
-                                            Icons.tag,
-                                            size: 20,
-                                            color: accent,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Text(
-                                            (j["referenceNo"] ?? "-")
-                                                .toString(),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w700,
-                                              color: textDark,
-                                            ),
-                                          ),
-                                        ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 10, vertical: 6),
-                                          decoration: BoxDecoration(
-                                            color: accent.withValues(alpha: 0.10),
-                                            borderRadius:
-                                                BorderRadius.circular(999),
-                                          ),
-                                          child: Text(
-                                            completedAt == null
-                                                ? "-"
-                                                : formatDateShort(completedAt),
-                                            style: const TextStyle(
-                                              fontSize: 12.5,
-                                              fontWeight: FontWeight.w700,
-                                              color: accent,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    _infoRow(
-                                      Icons.person_outline,
-                                      "Şoför",
-                                      userName(j["driverId"]),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    _infoRow(
-                                      Icons.car_rental_outlined,
-                                      "Plaka",
-                                      vehiclePlate(j["vehicleId"]),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    _infoRow(
-                                      Icons.inventory_2_outlined,
-                                      "Yük",
-                                      "${cargo?["type"] ?? "-"} • ${(cargo?["weightKg"] ?? 0)} kg",
-                                    ),
-                                    const SizedBox(height: 8),
-                                    _infoRow(
-                                      Icons.route_outlined,
-                                      "Güzergah",
-                                      "${route?["loadPort"] ?? "-"} → ${route?["unloadPort"] ?? "-"}",
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Row(
-                                      children: const [
-                                        Spacer(),
-                                        Icon(Icons.chevron_right,
-                                            color: textMuted),
-                                      ],
-                                    )
-                                  ],
-                                ),
-                              ),
+                    child: CompletedJobsListView(
+                      stream: _stream(),
+                      applyFilters: _applyFilters,
+                      userName: userName,
+                      formatDateShort: formatDateShort,
+                      onJobTap: (job, id) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => DispatchJobDetailPage(
+                              jobId: id,
+                              data: job,
+                              driverName: userName(job["driverId"]),
+                              vehiclePlate: vehiclePlate(job["vehicleId"]),
                             ),
                           ),
                         );
                       },
-                    );
-                  },
-                ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
-    );
-  }
-
-  Widget _infoRow(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: textMuted),
-        const SizedBox(width: 8),
-        Text(
-          "$label: ",
-          style: const TextStyle(
-            fontSize: 13,
-            color: textMuted,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(
-              fontSize: 13,
-              color: Color(0xFF475569),
-              fontWeight: FontWeight.w500,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
     );
   }
 }

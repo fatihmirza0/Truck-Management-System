@@ -1,52 +1,62 @@
-// 📁 lib/screens/manager/add_user/widgets/add_user_header.dart
 import 'package:flutter/material.dart';
+import '../../../../config/app_theme.dart';
 
 class AddUserHeader extends StatelessWidget {
-  const AddUserHeader({super.key});
+  final bool isDesktop;
+
+  const AddUserHeader({
+    super.key,
+    required this.isDesktop,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E3A5F),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppTheme.primaryColor, Color(0xFF2D4A6F)],
+            ),
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF1E3A5F).withValues(alpha: 0.2),
+                color: AppTheme.primaryColor.withValues(alpha: 0.3),
                 blurRadius: 8,
-                offset: const Offset(0, 2),
+                offset: const Offset(0, 3),
               ),
             ],
           ),
           child: const Icon(
-            Icons.person_add_outlined,
+            Icons.person_add_rounded,
             color: Colors.white,
-            size: 28,
+            size: 20,
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                "Kullanıcı Ekle",
+              Text(
+                "Personel Kaydı",
                 style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1E3A5F),
+                  fontSize: isDesktop ? 18 : 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.primaryColor,
                   letterSpacing: -0.5,
+                  height: 1.2,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
-                "Yeni şoför veya dispatch kullanıcısı ekleyin",
+                "Yeni şoför veya dispatch personeli ekleyin",
                 style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
+                  fontSize: isDesktop ? 12 : 11,
+                  color: AppTheme.textSecondary,
                   fontWeight: FontWeight.w400,
                 ),
               ),
