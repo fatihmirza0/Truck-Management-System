@@ -23,6 +23,11 @@ class CompletedJobsListView extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snap) {
+        if (snap.hasError) {
+          // Permission denied or other errors -> Show empty state (or error state)
+          return _emptyState();
+        }
+
         if (!snap.hasData) {
           return const Center(
             child: CircularProgressIndicator(

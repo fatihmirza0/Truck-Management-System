@@ -10,6 +10,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
 
+import 'package:lojistik/services/firestore_service.dart';
 import '../../../dispatch/dispatch_job_detail/pages/dispatch_job_detail_page.dart';
 import '../widgets/completed_jobs_header.dart';
 import '../widgets/completed_jobs_filters.dart';
@@ -41,6 +42,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   DateTime? _startDate;
   DateTime? _endDate;
   String? _selectedDriverId;
+  String? _companyId;
 
   Map<String, Map<String, dynamic>> userCache = {};
   Map<String, Map<String, dynamic>> vehicleCache = {};
@@ -61,21 +63,36 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
     userCache.clear();
     vehicleCache.clear();
 
-    final users = await FirebaseFirestore.instance
-        .collection("users")
-        .where("softDeleted", isEqualTo: false)
-        .get();
+    try {
+      final cid = await FirestoreService.getCompanyId();
+      if (mounted) {
+        setState(() {
+          _companyId = cid;
+        });
+      }
 
-    final vehicles = await FirebaseFirestore.instance
-        .collection("vehicles")
-        .where("isActive", isEqualTo: true)
-        .get();
+      if (cid == null) return;
 
-    for (var u in users.docs) {
-      userCache[u.id] = u.data();
-    }
-    for (var v in vehicles.docs) {
-      vehicleCache[v.id] = v.data();
+      final users = await FirebaseFirestore.instance
+          .collection("users")
+          .where("companyId", isEqualTo: cid) // 🔥 SAAS
+          .where("softDeleted", isEqualTo: false)
+          .get();
+
+      final vehicles = await FirebaseFirestore.instance
+          .collection("vehicles")
+          .where("companyId", isEqualTo: cid) // 🔥 SAAS
+          .where("isActive", isEqualTo: true)
+          .get();
+
+      for (var u in users.docs) {
+        userCache[u.id] = u.data();
+      }
+      for (var v in vehicles.docs) {
+        vehicleCache[v.id] = v.data();
+      }
+    } catch (e) {
+      debugPrint("Cache load error: $e");
     }
 
     if (mounted) setState(() {});
@@ -110,8 +127,11 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   // FIRESTORE
   // --------------------------------------------------
   Stream<QuerySnapshot> _stream() {
+    if (_companyId == null) return const Stream.empty();
+
     return FirebaseFirestore.instance
         .collection("jobs")
+        .where("companyId", isEqualTo: _companyId) // 🔥 SAAS
         .where("softDeleted", isEqualTo: false)
         .where("status", isEqualTo: "completed")
         .orderBy("timestamps.completedAt", descending: true)

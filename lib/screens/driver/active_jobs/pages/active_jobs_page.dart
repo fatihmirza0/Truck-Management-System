@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:lojistik/widgets/empty_state.dart';
 
+import 'package:lojistik/services/firestore_service.dart';
 import '../widgets/active_jobs_header.dart';
 import '../widgets/active_job_card.dart';
 
@@ -17,10 +18,30 @@ class ActiveJobsPage extends StatefulWidget {
 class _ActiveJobsPageState extends State<ActiveJobsPage> {
   static const Color primary = Color(0xFF1E3A5F);
   static const Color bg = Color(0xFFF8FAFC);
+  
+  String? _companyId;
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadCompanyId();
+  }
+  
+  Future<void> _loadCompanyId() async {
+    final cid = await FirestoreService.getCompanyId();
+    if (mounted) {
+      setState(() {
+        _companyId = cid;
+      });
+    }
+  }
 
   Stream<QuerySnapshot> _getActiveJobs() {
+    if (_companyId == null) return const Stream.empty();
+    
     return FirebaseFirestore.instance
         .collection('jobs')
+        .where('companyId', isEqualTo: _companyId) // 🔥 SAAS
         .where('status', isEqualTo: 'approved') // Sadece onaylanmış işler
         .where('driverId', isEqualTo: widget.uid)
         .where('softDeleted', isEqualTo: false)

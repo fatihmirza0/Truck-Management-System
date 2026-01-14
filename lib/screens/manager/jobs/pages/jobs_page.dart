@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'package:lojistik/services/firestore_service.dart';
 import 'package:lojistik/screens/manager/jobs/job_service.dart';
 import 'package:lojistik/screens/manager/jobs/widgets/jobs_page_header.dart';
 import 'package:lojistik/screens/manager/jobs/widgets/jobs_search_bar.dart';
@@ -22,6 +23,7 @@ class _JobsPageState extends State<JobsPage> {
 
   String _status = "pending";
   String _searchQuery = "";
+  String? _companyId;
 
   // Cache maps
   Map<String, Map<String, dynamic>> userCache = {};
@@ -54,27 +56,42 @@ class _JobsPageState extends State<JobsPage> {
     userCache.clear();
     vehicleCache.clear();
 
-    // Load users
-    final users = await FirebaseFirestore.instance
-        .collection("users")
-        .where("softDeleted", isEqualTo: false)
-        .get();
+    try {
+      final cid = await FirestoreService.getCompanyId();
+      if (mounted) {
+        setState(() {
+          _companyId = cid;
+        });
+      }
+      
+      if (cid == null) return;
 
-    for (var doc in users.docs) {
-      userCache[doc.id] = doc.data();
+      // Load users
+      final users = await FirebaseFirestore.instance
+          .collection("users")
+          .where("companyId", isEqualTo: cid) // 🔥 SAAS
+          .where("softDeleted", isEqualTo: false)
+          .get();
+
+      for (var doc in users.docs) {
+        userCache[doc.id] = doc.data();
+      }
+
+      // Load vehicles
+      final vehicles = await FirebaseFirestore.instance
+          .collection("vehicles")
+          .where("companyId", isEqualTo: cid) // 🔥 SAAS
+          .where("isActive", isEqualTo: true)
+          .get();
+
+      for (var doc in vehicles.docs) {
+        vehicleCache[doc.id] = doc.data();
+      }
+    } catch (e) {
+      debugPrint("Cache load error: $e");
     }
 
-    // Load vehicles
-    final vehicles = await FirebaseFirestore.instance
-        .collection("vehicles")
-        .where("isActive", isEqualTo: true)
-        .get();
-
-    for (var doc in vehicles.docs) {
-      vehicleCache[doc.id] = doc.data();
-    }
-
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   String userName(String? uid) {
@@ -88,8 +105,11 @@ class _JobsPageState extends State<JobsPage> {
   }
 
   Stream<QuerySnapshot> _jobsStream() {
+    if (_companyId == null) return const Stream.empty();
+    
     return FirebaseFirestore.instance
         .collection("jobs")
+        .where("companyId", isEqualTo: _companyId) // 🔥 SAAS
         .where("softDeleted", isEqualTo: false)
         .where("status", isEqualTo: _status)
         .orderBy("timestamps.createdAt", descending: true)
@@ -204,6 +224,10 @@ class _JobsPageState extends State<JobsPage> {
                 child: StreamBuilder<QuerySnapshot>(
                   stream: _jobsStream(),
                   builder: (context, snap) {
+                    if (snap.hasError) {
+                      return _buildEmptyState();
+                    }
+
                     if (!snap.hasData) {
                       return const Center(
                         child: CircularProgressIndicator(

@@ -1,13 +1,13 @@
-const {onRequest} = require("firebase-functions/v2/https");
-const {onCall} = require("firebase-functions/v2/https");
-const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
-const {setGlobalOptions} = require("firebase-functions/v2");
+const { onRequest } = require("firebase-functions/v2/https");
+const { onCall } = require("firebase-functions/v2/https");
+const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
+const { setGlobalOptions } = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const cors = require("cors")({ origin: true });
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onValueUpdated } = require("firebase-functions/v2/database");
 
-setGlobalOptions({maxInstances: 10});
+setGlobalOptions({ maxInstances: 10 });
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -38,6 +38,38 @@ function requireRole(user, roles) {
 }
 
 /* =========================================================
+   MULTI-TENANT SECURITY MIDDLEWARE
+========================================================= */
+async function ensureSameCompany(callerId, targetUserId) {
+  const caller = await getUser(callerId);
+  const target = await getUser(targetUserId);
+
+  if (!caller.companyId) throw new Error("Caller has no companyId");
+  if (!target.companyId) throw new Error("Target has no companyId");
+  if (caller.companyId !== target.companyId) {
+    throw new Error("Cross-company access denied");
+  }
+
+  return { caller, target };
+}
+
+async function ensureJobBelongsToCompany(callerId, jobId) {
+  const caller = await getUser(callerId);
+  const jobSnap = await db.collection("jobs").doc(jobId).get();
+
+  if (!jobSnap.exists) throw new Error("Job not found");
+  const job = jobSnap.data();
+
+  if (!caller.companyId) throw new Error("Caller has no companyId");
+  if (!job.companyId) throw new Error("Job has no companyId");
+  if (caller.companyId !== job.companyId) {
+    throw new Error("Cross-company job access denied");
+  }
+
+  return { caller, job };
+}
+
+/* =========================================================
    CREATE DRIVER
 ========================================================= */
 exports.createDriverHttp = onRequest((req, res) => {
@@ -47,11 +79,30 @@ exports.createDriverHttp = onRequest((req, res) => {
 
       const decoded = await verifyAuth(req);
       const caller = await getUser(decoded.uid);
-      requireRole(caller, ["dispatch", "admin"]);
+      requireRole(caller, ["dispatch", "admin", "manager"]); // 🔥 Added manager
 
       const { name, email, password, phone, plate } = req.body;
       if (!name || !email || !password || !phone || !plate) {
         throw new Error("Missing fields");
+      }
+
+      // 🔥 SAAS FIX: Driver receives same companyId as the Manager/Dispatch interacting
+      const companyId = caller.companyId;
+      if (!companyId) throw new Error("Caller has no companyId");
+
+      // 🛑 LIMIT CHECK: Vehicle Count
+      const companyDoc = await db.collection("companies").doc(companyId).get();
+      const companyData = companyDoc.data();
+      const vehicleLimit = companyData.limits?.vehicleCount || 10; // Default 10
+
+      const currentVehicles = await db.collection("vehicles")
+        .where("companyId", "==", companyId)
+        .where("isActive", "==", true)
+        .count()
+        .get();
+
+      if (currentVehicles.data().count >= vehicleLimit) {
+        throw new Error(`Vehicle limit reached (${vehicleLimit}). Upgrade plan.`);
       }
 
       const userRecord = await admin.auth().createUser({
@@ -67,6 +118,7 @@ exports.createDriverHttp = onRequest((req, res) => {
         email,
         phone,
         role: "driver",
+        companyId, // ✅ Multi-tenancy
         isActive: true,
         softDeleted: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -78,6 +130,7 @@ exports.createDriverHttp = onRequest((req, res) => {
       batch.set(db.collection("vehicles").doc(), {
         plate: plate.toUpperCase(),
         assignedDriverId: userRecord.uid,
+        companyId, // ✅ Multi-tenancy
         ownership: "driver",
         type: "truck",
         isActive: true,
@@ -95,7 +148,8 @@ exports.createDriverHttp = onRequest((req, res) => {
 
 /* =========================================================
    CREATE USER (ADMIN / MANAGER)
-========================================================= */
+   Modified for SaaS: Assigns caller's companyId to new user/vehicle
+ ========================================================= */
 exports.createUserHttp = onRequest((req, res) => {
   cors(req, res, async () => {
     try {
@@ -108,6 +162,40 @@ exports.createUserHttp = onRequest((req, res) => {
       const { name, email, password, phone, role, plate } = req.body;
       if (!name || !email || !password || !phone || !role) {
         throw new Error("Missing fields");
+      }
+
+      // 🔥 SAAS FIX
+      const companyId = caller.companyId;
+      if (!companyId) throw new Error("Caller has no companyId");
+
+      // 🛑 LIMIT CHECK: Manager/Dispatch Count
+      const companyDoc = await db.collection("companies").doc(companyId).get();
+      const companyData = companyDoc.data();
+
+      if (role === 'manager') {
+        const limit = companyData.limits?.managerCount || 1; // Default 1
+        const current = await db.collection("users")
+          .where("companyId", "==", companyId)
+          .where("role", "==", "manager")
+          .where("softDeleted", "==", false)
+          .count().get();
+
+        if (current.data().count >= limit) {
+          throw new Error(`Manager limit reached (${limit}). Upgrade plan.`);
+        }
+      }
+
+      if (role === 'dispatch') {
+        const limit = companyData.limits?.dispatchCount || 3; // Default 3
+        const current = await db.collection("users")
+          .where("companyId", "==", companyId)
+          .where("role", "==", "dispatch")
+          .where("softDeleted", "==", false)
+          .count().get();
+
+        if (current.data().count >= limit) {
+          throw new Error(`Dispatch limit reached (${limit}). Upgrade plan.`);
+        }
       }
 
       const userRecord = await admin.auth().createUser({
@@ -123,6 +211,7 @@ exports.createUserHttp = onRequest((req, res) => {
         email,
         phone,
         role,
+        companyId, // ✅
         isActive: true,
         softDeleted: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -133,6 +222,7 @@ exports.createUserHttp = onRequest((req, res) => {
         batch.set(db.collection("vehicles").doc(), {
           plate: plate.toUpperCase(),
           assignedDriverId: userRecord.uid,
+          companyId, // ✅
           ownership: "driver",
           type: "truck",
           isActive: true,
@@ -171,6 +261,9 @@ exports.updateUserHttp = onRequest((req, res) => {
         throw new Error("Missing fields");
       }
 
+      // 🔒 SECURITY: Ensure same company
+      await ensureSameCompany(decoded.uid, uid);
+
       const batch = db.batch();
 
       batch.update(db.collection("users").doc(uid), {
@@ -187,6 +280,9 @@ exports.updateUserHttp = onRequest((req, res) => {
           .limit(1)
           .get();
 
+        // Ensure companyId is consistent
+        const companyId = caller.companyId;
+
         if (!vehicleSnap.empty) {
           batch.update(vehicleSnap.docs[0].ref, {
             plate: plate.toUpperCase(),
@@ -195,6 +291,7 @@ exports.updateUserHttp = onRequest((req, res) => {
           batch.set(db.collection("vehicles").doc(), {
             plate: plate.toUpperCase(),
             assignedDriverId: uid,
+            companyId, // ✅
             ownership: "driver",
             type: "truck",
             isActive: true,
@@ -227,6 +324,9 @@ exports.softDeleteUserHttp = onRequest((req, res) => {
       const { userId } = req.body;
       if (!userId) throw new Error("userId required");
 
+      // 🔒 SECURITY: Ensure same company
+      await ensureSameCompany(decoded.uid, userId);
+
       await db.collection("users").doc(userId).update({
         softDeleted: true,
         isActive: false,
@@ -248,17 +348,14 @@ exports.jobAction = onRequest((req, res) => {
       if (req.method !== "POST") return res.status(405).end();
 
       const decoded = await verifyAuth(req);
-      const caller = await getUser(decoded.uid);
-      requireRole(caller, ["admin", "manager", "dispatch", "driver"]);
-
       const { jobId, action, reason } = req.body;
       if (!jobId || !action) throw new Error("jobId & action required");
 
-      const jobRef = db.collection("jobs").doc(jobId);
-      const jobSnap = await jobRef.get();
-      if (!jobSnap.exists) throw new Error("Job not found");
+      // 🔒 SECURITY: Ensure job belongs to caller's company
+      const { caller, job } = await ensureJobBelongsToCompany(decoded.uid, jobId);
+      requireRole(caller, ["admin", "manager", "dispatch", "driver"]);
 
-      const job = jobSnap.data();
+      const jobRef = db.collection("jobs").doc(jobId);
       const now = admin.firestore.FieldValue.serverTimestamp();
       const batch = db.batch();
 
@@ -383,8 +480,14 @@ exports.jobAction = onRequest((req, res) => {
 ========================================================= */
 exports.syncActivePlateFromVehicles = onRequest(async (req, res) => {
   try {
+    // 🔒 SECURITY: Require auth and filter by companyId
+    const decoded = await verifyAuth(req);
+    const caller = await getUser(decoded.uid);
+    requireRole(caller, ["admin", "manager"]);
+
     const vehiclesSnap = await db
       .collection("vehicles")
+      .where("companyId", "==", caller.companyId)  // 🔒 Filter by company
       .where("assignedDriverId", "!=", null)
       .get();
 
@@ -432,26 +535,188 @@ exports.syncActivePlateFromVehicles = onRequest(async (req, res) => {
    FCM NOTIFICATIONS - JOB CREATED
 ========================================================= */
 exports.notifyManagersOnJobCreated = onDocumentCreated(
-    "jobs/{jobId}",
-    async (event) => {
-      const snap = event.data;
-      if (!snap) {
-        console.log("❌ Snap data yok");
+  "jobs/{jobId}",
+  async (event) => {
+    const snap = event.data;
+    if (!snap) {
+      console.log("❌ Snap data yok");
+      return;
+    }
+
+    const job = snap.data();
+    const jobId = event.params.jobId;
+
+    console.log("🚀 Yeni job oluşturuldu:", jobId);
+
+    try {
+      const managersSnapshot = await db
+        .collection("users")
+        .where("role", "==", "manager")
+        .get();
+
+      console.log(`👥 ${managersSnapshot.size} manager bulundu`);
+
+      const tokens = [];
+      managersSnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.fcmToken) {
+          tokens.push(data.fcmToken);
+        }
+      });
+
+      console.log(`📱 ${tokens.length} aktif manager token bulundu`);
+
+      if (tokens.length === 0) {
+        console.log("⚠️ Bildirim gönderilebilecek manager yok");
         return;
       }
 
-      const job = snap.data();
-      const jobId = event.params.jobId;
+      const promises = tokens.map((token) => {
+        return admin.messaging().send({
+          notification: {
+            title: "🚛 Yeni İş Ataması",
+            body: `${job.driverName || "Bir sürücü"} için yeni iş oluşturuldu`,
+          },
+          data: {
+            jobId: jobId,
+            type: "new_job",
+            click_action: "FLUTTER_NOTIFICATION_CLICK",
+          },
+          token: token,
+        }).catch(async (error) => {
+          console.error(`❌ Token hatası (${token.substring(0, 20)}...):`, error.code);
 
-      console.log("🚀 Yeni job oluşturuldu:", jobId);
+          if (error.code === "messaging/invalid-registration-token" ||
+            error.code === "messaging/registration-token-not-registered") {
+            const userSnapshot = await db
+              .collection("users")
+              .where("fcmToken", "==", token)
+              .get();
 
-      try {
-        const managersSnapshot = await db
+            const deletePromises = userSnapshot.docs.map((doc) =>
+              doc.ref.update({ fcmToken: admin.firestore.FieldValue.delete() }),
+            );
+
+            await Promise.all(deletePromises);
+          }
+          return null;
+        });
+      });
+
+      const results = await Promise.all(promises);
+      const successCount = results.filter((r) => r !== null).length;
+
+      console.log(`✅ ${successCount}/${tokens.length} manager bildirimi gönderildi`);
+    } catch (error) {
+      console.error("❌ Bildirim gönderme hatası:", error);
+    }
+  },
+);
+
+/* =========================================================
+   FCM NOTIFICATIONS - JOB STATUS UPDATES
+========================================================= */
+exports.notifyOnJobStatusChange = onDocumentUpdated(
+  "jobs/{jobId}",
+  async (event) => {
+    const beforeSnap = event.data.before;
+    const afterSnap = event.data.after;
+
+    if (!beforeSnap || !afterSnap) {
+      return;
+    }
+
+    const before = beforeSnap.data();
+    const after = afterSnap.data();
+    const jobId = event.params.jobId;
+
+    try {
+      // ========================================
+      // 1️⃣ JOB APPROVED → DISPATCH + DRIVER'A BİLDİRİM
+      // ========================================
+      if (before.status !== "approved" && after.status === "approved") {
+        console.log("✅ Job onaylandı:", jobId);
+
+        // A) DISPATCH'E BİLDİRİM
+        if (after.createdBy) {
+          const dispatchDoc = await db
             .collection("users")
-            .where("role", "==", "manager")
+            .doc(after.createdBy)
             .get();
 
-        console.log(`👥 ${managersSnapshot.size} manager bulundu`);
+          if (dispatchDoc.exists) {
+            const dispatchData = dispatchDoc.data();
+            if (dispatchData.fcmToken) {
+              await admin.messaging().send({
+                notification: {
+                  title: "✅ İş Onaylandı!",
+                  body: `Oluşturduğunuz iş onaylandı: ${after.driverName || "Sürücü"} - ${after.title || "İş detayı"}`,
+                },
+                data: {
+                  jobId: jobId,
+                  type: "job_approved",
+                  click_action: "FLUTTER_NOTIFICATION_CLICK",
+                },
+                token: dispatchData.fcmToken,
+              }).catch((error) => {
+                console.error("❌ Dispatch bildirim hatası:", error.code);
+                return null;
+              });
+
+              console.log("✅ Dispatch'e onay bildirimi gönderildi");
+            }
+          }
+        }
+
+        // B) DRIVER'A BİLDİRİM
+        if (after.driverId) {
+          const driverDoc = await db
+            .collection("users")
+            .doc(after.driverId)
+            .get();
+
+          if (driverDoc.exists) {
+            const driverData = driverDoc.data();
+            if (driverData.fcmToken) {
+              await admin.messaging().send({
+                notification: {
+                  title: "🚛 Yeni İş Ataması!",
+                  body: `Size yeni bir iş atandı: ${after.title || "Detayları görmek için tıklayın"}`,
+                },
+                data: {
+                  jobId: jobId,
+                  type: "new_job_assigned",
+                  click_action: "FLUTTER_NOTIFICATION_CLICK",
+                },
+                token: driverData.fcmToken,
+              }).catch(async (error) => {
+                console.error("❌ Driver bildirim hatası:", error.code);
+
+                if (error.code === "messaging/invalid-registration-token" ||
+                  error.code === "messaging/registration-token-not-registered") {
+                  await driverDoc.ref.update({
+                    fcmToken: admin.firestore.FieldValue.delete(),
+                  });
+                }
+              });
+
+              console.log("✅ Driver'a iş ataması bildirimi gönderildi");
+            }
+          }
+        }
+      }
+
+      // ========================================
+      // 2️⃣ JOB COMPLETED → MANAGER + DISPATCH'E BİLDİRİM
+      // ========================================
+      if (before.status !== "completed" && after.status === "completed") {
+        console.log("✅ Job tamamlandı:", jobId);
+
+        // A) MANAGER'LARA BİLDİRİM
+        const managersSnapshot = await db
+          .collection("users")
+          .where("role", "==", "manager")
+          .get();
 
         const tokens = [];
         managersSnapshot.forEach((doc) => {
@@ -461,226 +726,64 @@ exports.notifyManagersOnJobCreated = onDocumentCreated(
           }
         });
 
-        console.log(`📱 ${tokens.length} aktif manager token bulundu`);
-
-        if (tokens.length === 0) {
-          console.log("⚠️ Bildirim gönderilebilecek manager yok");
-          return;
-        }
-
-        const promises = tokens.map((token) => {
-          return admin.messaging().send({
-            notification: {
-              title: "🚛 Yeni İş Ataması",
-              body: `${job.driverName || "Bir sürücü"} için yeni iş oluşturuldu`,
-            },
-            data: {
-              jobId: jobId,
-              type: "new_job",
-              click_action: "FLUTTER_NOTIFICATION_CLICK",
-            },
-            token: token,
-          }).catch(async (error) => {
-            console.error(`❌ Token hatası (${token.substring(0, 20)}...):`, error.code);
-
-            if (error.code === "messaging/invalid-registration-token" ||
-                error.code === "messaging/registration-token-not-registered") {
-              const userSnapshot = await db
-                  .collection("users")
-                  .where("fcmToken", "==", token)
-                  .get();
-
-              const deletePromises = userSnapshot.docs.map((doc) =>
-                doc.ref.update({fcmToken: admin.firestore.FieldValue.delete()}),
-              );
-
-              await Promise.all(deletePromises);
-            }
-            return null;
-          });
-        });
-
-        const results = await Promise.all(promises);
-        const successCount = results.filter((r) => r !== null).length;
-
-        console.log(`✅ ${successCount}/${tokens.length} manager bildirimi gönderildi`);
-      } catch (error) {
-        console.error("❌ Bildirim gönderme hatası:", error);
-      }
-    },
-);
-
-/* =========================================================
-   FCM NOTIFICATIONS - JOB STATUS UPDATES
-========================================================= */
-exports.notifyOnJobStatusChange = onDocumentUpdated(
-    "jobs/{jobId}",
-    async (event) => {
-      const beforeSnap = event.data.before;
-      const afterSnap = event.data.after;
-
-      if (!beforeSnap || !afterSnap) {
-        return;
-      }
-
-      const before = beforeSnap.data();
-      const after = afterSnap.data();
-      const jobId = event.params.jobId;
-
-      try {
-        // ========================================
-        // 1️⃣ JOB APPROVED → DISPATCH + DRIVER'A BİLDİRİM
-        // ========================================
-        if (before.status !== "approved" && after.status === "approved") {
-          console.log("✅ Job onaylandı:", jobId);
-
-          // A) DISPATCH'E BİLDİRİM
-          if (after.createdBy) {
-            const dispatchDoc = await db
-                .collection("users")
-                .doc(after.createdBy)
-                .get();
-
-            if (dispatchDoc.exists) {
-              const dispatchData = dispatchDoc.data();
-              if (dispatchData.fcmToken) {
-                await admin.messaging().send({
-                  notification: {
-                    title: "✅ İş Onaylandı!",
-                    body: `Oluşturduğunuz iş onaylandı: ${after.driverName || "Sürücü"} - ${after.title || "İş detayı"}`,
-                  },
-                  data: {
-                    jobId: jobId,
-                    type: "job_approved",
-                    click_action: "FLUTTER_NOTIFICATION_CLICK",
-                  },
-                  token: dispatchData.fcmToken,
-                }).catch((error) => {
-                  console.error("❌ Dispatch bildirim hatası:", error.code);
-                  return null;
-                });
-
-                console.log("✅ Dispatch'e onay bildirimi gönderildi");
-              }
-            }
-          }
-
-          // B) DRIVER'A BİLDİRİM
-          if (after.driverId) {
-            const driverDoc = await db
-                .collection("users")
-                .doc(after.driverId)
-                .get();
-
-            if (driverDoc.exists) {
-              const driverData = driverDoc.data();
-              if (driverData.fcmToken) {
-                await admin.messaging().send({
-                  notification: {
-                    title: "🚛 Yeni İş Ataması!",
-                    body: `Size yeni bir iş atandı: ${after.title || "Detayları görmek için tıklayın"}`,
-                  },
-                  data: {
-                    jobId: jobId,
-                    type: "new_job_assigned",
-                    click_action: "FLUTTER_NOTIFICATION_CLICK",
-                  },
-                  token: driverData.fcmToken,
-                }).catch(async (error) => {
-                  console.error("❌ Driver bildirim hatası:", error.code);
-
-                  if (error.code === "messaging/invalid-registration-token" ||
-                      error.code === "messaging/registration-token-not-registered") {
-                    await driverDoc.ref.update({
-                      fcmToken: admin.firestore.FieldValue.delete(),
-                    });
-                  }
-                });
-
-                console.log("✅ Driver'a iş ataması bildirimi gönderildi");
-              }
-            }
-          }
-        }
-
-        // ========================================
-        // 2️⃣ JOB COMPLETED → MANAGER + DISPATCH'E BİLDİRİM
-        // ========================================
-        if (before.status !== "completed" && after.status === "completed") {
-          console.log("✅ Job tamamlandı:", jobId);
-
-          // A) MANAGER'LARA BİLDİRİM
-          const managersSnapshot = await db
-              .collection("users")
-              .where("role", "==", "manager")
-              .get();
-
-          const tokens = [];
-          managersSnapshot.forEach((doc) => {
-            const data = doc.data();
-            if (data.fcmToken) {
-              tokens.push(data.fcmToken);
-            }
+        if (tokens.length > 0) {
+          const promises = tokens.map((token) => {
+            return admin.messaging().send({
+              notification: {
+                title: "✅ İş Tamamlandı",
+                body: `${after.driverName || "Bir sürücü"} işi tamamladı`,
+              },
+              data: {
+                jobId: jobId,
+                type: "job_completed",
+                click_action: "FLUTTER_NOTIFICATION_CLICK",
+              },
+              token: token,
+            }).catch((error) => {
+              console.error("❌ Manager bildirim hatası:", error.code);
+              return null;
+            });
           });
 
-          if (tokens.length > 0) {
-            const promises = tokens.map((token) => {
-              return admin.messaging().send({
+          await Promise.all(promises);
+          console.log("✅ Manager'lara tamamlanma bildirimleri gönderildi");
+        }
+
+        // B) DISPATCH'E BİLDİRİM
+        if (after.createdBy) {
+          const dispatchDoc = await db
+            .collection("users")
+            .doc(after.createdBy)
+            .get();
+
+          if (dispatchDoc.exists) {
+            const dispatchData = dispatchDoc.data();
+            if (dispatchData.fcmToken) {
+              await admin.messaging().send({
                 notification: {
-                  title: "✅ İş Tamamlandı",
-                  body: `${after.driverName || "Bir sürücü"} işi tamamladı`,
+                  title: "🎉 İş Tamamlandı!",
+                  body: `Atadığınız iş tamamlandı: ${after.driverName || "Sürücü"} - ${after.title || "İş detayı"}`,
                 },
                 data: {
                   jobId: jobId,
-                  type: "job_completed",
+                  type: "job_completed_dispatch",
                   click_action: "FLUTTER_NOTIFICATION_CLICK",
                 },
-                token: token,
+                token: dispatchData.fcmToken,
               }).catch((error) => {
-                console.error("❌ Manager bildirim hatası:", error.code);
+                console.error("❌ Dispatch tamamlanma bildirimi hatası:", error.code);
                 return null;
               });
-            });
 
-            await Promise.all(promises);
-            console.log("✅ Manager'lara tamamlanma bildirimleri gönderildi");
-          }
-
-          // B) DISPATCH'E BİLDİRİM
-          if (after.createdBy) {
-            const dispatchDoc = await db
-                .collection("users")
-                .doc(after.createdBy)
-                .get();
-
-            if (dispatchDoc.exists) {
-              const dispatchData = dispatchDoc.data();
-              if (dispatchData.fcmToken) {
-                await admin.messaging().send({
-                  notification: {
-                    title: "🎉 İş Tamamlandı!",
-                    body: `Atadığınız iş tamamlandı: ${after.driverName || "Sürücü"} - ${after.title || "İş detayı"}`,
-                  },
-                  data: {
-                    jobId: jobId,
-                    type: "job_completed_dispatch",
-                    click_action: "FLUTTER_NOTIFICATION_CLICK",
-                  },
-                  token: dispatchData.fcmToken,
-                }).catch((error) => {
-                  console.error("❌ Dispatch tamamlanma bildirimi hatası:", error.code);
-                  return null;
-                });
-
-                console.log("✅ Dispatch'e tamamlanma bildirimi gönderildi");
-              }
+              console.log("✅ Dispatch'e tamamlanma bildirimi gönderildi");
             }
           }
         }
-      } catch (error) {
-        console.error("❌ Status change bildirim hatası:", error);
       }
-    },
+    } catch (error) {
+      console.error("❌ Status change bildirim hatası:", error);
+    }
+  },
 );
 
 exports.updateLastLoginHttp = onRequest((req, res) => {
@@ -755,10 +858,36 @@ exports.getLiveDriverLocations = onRequest(async (req, res) => {
       rtdb.ref("history").get(),
     ]);
 
-    const locations = locationsSnap.exists() ? locationsSnap.val() : {};
-    const history = historySnap.exists() ? historySnap.val() : {};
+    const allLocations = locationsSnap.exists() ? locationsSnap.val() : {};
+    const allHistory = historySnap.exists() ? historySnap.val() : {};
 
-    console.log(`✅ Live drivers: ${Object.keys(locations).length}`);
+    // 🔒 SECURITY: Filter by companyId
+    const locations = {};
+    const history = {};
+
+    for (const [driverId, data] of Object.entries(allLocations)) {
+      try {
+        const driverSnap = await db.collection("users").doc(driverId).get();
+        if (driverSnap.exists && driverSnap.data().companyId === user.companyId) {
+          locations[driverId] = data;
+        }
+      } catch (err) {
+        console.warn(`Failed to check driver ${driverId}:`, err);
+      }
+    }
+
+    for (const [driverId, data] of Object.entries(allHistory)) {
+      try {
+        const driverSnap = await db.collection("users").doc(driverId).get();
+        if (driverSnap.exists && driverSnap.data().companyId === user.companyId) {
+          history[driverId] = data;
+        }
+      } catch (err) {
+        console.warn(`Failed to check driver ${driverId}:`, err);
+      }
+    }
+
+    console.log(`✅ Live drivers (filtered): ${Object.keys(locations).length}`);
 
     return res.status(200).json({
       success: true,
@@ -938,3 +1067,140 @@ exports.checkDriverOffline = onSchedule(
     }
   }
 );
+
+/* =========================================================
+   DEVELOPER PANEL EXPORTS
+   ========================================================= */
+// index.js dosyasında, DEVELOPER PANEL EXPORTS kısmına
+
+const devPanel = require("./developer_panel");
+exports.verifyDeveloperKey = devPanel.verifyDeveloperKey;
+exports.createCompanyHttp = devPanel.createCompanyHttp;
+exports.getSystemLogsHttp = devPanel.getSystemLogsHttp;  // ✅ Bu satırı ekleyin
+exports.getCompaniesHttp = devPanel.getCompaniesHttp;
+exports.getCompanyUsersHttp = devPanel.getCompanyUsersHttp;
+exports.updateUserPermissionsHttp = devPanel.updateUserPermissionsHttp;
+exports.getDashboardStatsHttp = devPanel.getDashboardStatsHttp;
+exports.getCompanyFullDetailsHttp = devPanel.getCompanyFullDetailsHttp;
+exports.updateCompanyPlanHttp = devPanel.updateCompanyPlanHttp;
+// Token & Session Management
+exports.developerLogin = devPanel.developerLogin;
+exports.developerLogout = devPanel.developerLogout;
+exports.cleanExpiredSessions = devPanel.cleanExpiredSessions;
+
+/* =========================================================
+   CREATE JOB (HTTP)
+   - Dispatches job creation to backend
+   - Handles driver status update atomically
+   - Enforces SaaS security
+ ========================================================= */
+exports.createJobHttp = onRequest((req, res) => {
+  cors(req, res, async () => {
+    try {
+      if (req.method !== "POST") return res.status(405).end();
+
+      const decoded = await verifyAuth(req);
+      const caller = await getUser(decoded.uid);
+      requireRole(caller, ["admin", "manager", "dispatch"]);
+
+      const {
+        driverId,
+        vehicleId,
+        loadPort,
+        unloadPort,
+        cargoType,
+        cargoDescription,
+        cargoWeightKg,
+        distanceKm
+      } = req.body;
+
+      if (!driverId || !vehicleId || !loadPort || !unloadPort) {
+        throw new Error("Missing required fields");
+      }
+
+      // 🔒 SECURITY: Ensure caller has companyId
+      const companyId = caller.companyId;
+      if (!companyId) throw new Error("Caller has no companyId");
+
+      // 🔒 SECURITY: Verify driver belongs to same company
+      const driverSnap = await db.collection("users").doc(driverId).get();
+      if (!driverSnap.exists) throw new Error("Driver not found");
+      const driverData = driverSnap.data();
+
+      if (driverData.companyId !== companyId) {
+        throw new Error("Driver belongs to different company");
+      }
+
+      // 🔒 SECURITY: Verify vehicle belongs to same company
+      const vehicleSnap = await db.collection("vehicles").doc(vehicleId).get();
+      if (!vehicleSnap.exists) throw new Error("Vehicle not found");
+      const vehicleData = vehicleSnap.data();
+
+      if (vehicleData.companyId !== companyId) {
+        throw new Error("Vehicle belongs to different company");
+      }
+
+      // Check if driver is available
+      if (driverData.jobStatus === 'busy') {
+        throw new Error("Driver is currently busy");
+      }
+
+      const timestamp = Date.now();
+      const referenceNo = `JOB-${timestamp}`;
+
+      const batch = db.batch();
+      const jobRef = db.collection("jobs").doc();
+
+      // 1. Create Job
+      batch.set(jobRef, {
+        referenceNo,
+        companyId, // ✅ SAAS
+        driverId,
+        vehicleId,
+        createdBy: decoded.uid,
+        status: "pending", // Initially pending (or approved/assigned based on logic)
+        rejectionReason: null,
+        route: {
+          loadPort: loadPort.trim(),
+          unloadPort: unloadPort.trim(),
+        },
+        cargo: {
+          type: cargoType?.trim() || "",
+          description: cargoDescription?.trim() || "",
+          weightKg: Number(cargoWeightKg) || 0,
+        },
+        distanceKm: Number(distanceKm) || 0,
+        timestamps: {
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          reviewedAt: null,
+        },
+        softDeleted: false,
+        driverName: driverData.name || "Unknown", // Snapshot for list performance
+        vehiclePlate: vehicleData.plate || "Unknown", // Snapshot for list performance
+      });
+
+      // 2. Add Log
+      const logRef = jobRef.collection("logs").doc();
+      batch.set(logRef, {
+        action: "created",
+        performedBy: decoded.uid,
+        performedAt: admin.firestore.FieldValue.serverTimestamp(),
+        note: null,
+      });
+
+      // 3. Update Driver Status to BUSY
+      batch.update(db.collection("users").doc(driverId), {
+        jobStatus: "busy",
+        currentJobId: jobRef.id
+      });
+
+      await batch.commit();
+
+      res.json({ success: true, jobId: jobRef.id });
+
+    } catch (e) {
+      console.error("❌ createJobHttp error:", e);
+      res.status(400).json({ error: e.message });
+    }
+  });
+});

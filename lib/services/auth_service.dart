@@ -21,6 +21,8 @@ class AuthService {
   static const String _keyUserId = 'userId';
   static const String _keyUserEmail = 'userEmail';
   static const String _keyUserName = 'userName';
+  static const String _keyCompanyId = 'companyId'; // 🔥 SAAS
+  static const String _keyPermissions = 'permissions'; // 🔥 Granular Perms
 
   /// Kullanıcı giriş yaptı mı kontrol et
   static Future<bool> isLoggedIn() async {
@@ -37,6 +39,8 @@ class AuthService {
     required String email,
     required String name,
     required String role,
+    required String companyId, // 🔥 SAAS
+    List<String>? permissions, // 🔥 Granular Perms
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyIsLoggedIn, true);
@@ -44,6 +48,11 @@ class AuthService {
     await prefs.setString(_keyUserEmail, email);
     await prefs.setString(_keyUserName, name);
     await prefs.setString(_keyUserRole, role);
+    await prefs.setString(_keyCompanyId, companyId);
+    
+    if (permissions != null) {
+      await prefs.setStringList(_keyPermissions, permissions);
+    }
   }
 
   /// Kayıtlı kullanıcı rolünü al
@@ -60,7 +69,21 @@ class AuthService {
       'email': prefs.getString(_keyUserEmail),
       'name': prefs.getString(_keyUserName),
       'role': prefs.getString(_keyUserRole),
+      'companyId': prefs.getString(_keyCompanyId),
     };
+  }
+  
+  /// Helper to check permission
+  static Future<bool> hasPermission(String perm) async {
+    final prefs = await SharedPreferences.getInstance();
+    final perms = prefs.getStringList(_keyPermissions) ?? [];
+    return perms.contains(perm);
+  }
+
+  /// Get current company ID directly
+  static Future<String?> getCompanyId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyCompanyId);
   }
 
   /// Login işlemi
@@ -103,13 +126,16 @@ class AuthService {
       await saveUserData(
         uid: user.uid,
         email: user.email ?? email,
-        name: userData['name'] ?? 'User',
-        role: userData['role'] ?? 'user',
+        name: userData['name'] ?? '',
+        role: userData['role'] ?? 'driver',
+        companyId: userData['companyId'] ?? '', // 🔥 SAAS
+        permissions: List<String>.from(userData['permissions'] ?? []), // 🔥 Perms
       );
 
       return {
         'success': true,
         'role': userData['role'],
+        'companyId': userData['companyId'],
         'uid': user.uid,
       };
     } on FirebaseAuthException catch (e) {

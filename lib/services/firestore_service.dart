@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 // import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'auth_service.dart';
 
 class FirestoreService {
   static final _firestore = FirebaseFirestore.instance;
@@ -69,6 +70,12 @@ class FirestoreService {
       print('Get current user data error: $e');
       return null;
     }
+  }
+
+  // 🔥 SAAS HELPER
+  static Future<String?> getCompanyId() async {
+    final userData = await getCurrentUserData();
+    return userData?['companyId'];
   }
 
   // ============================================
@@ -210,8 +217,12 @@ class FirestoreService {
   /// Fetch all active drivers
   static Future<List<Map<String, dynamic>>> fetchDrivers() async {
     try {
+      final companyId = await getCompanyId();
+      if (companyId == null) return [];
+
       final snap = await _firestore
           .collection('users')
+          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
           .where('role', isEqualTo: 'driver')
           .where('softDeleted', isEqualTo: false)
           .where('isActive', isEqualTo: true)
@@ -237,8 +248,12 @@ class FirestoreService {
   /// Fetch all users (for reports)
   static Future<List<DocumentSnapshot>> fetchAllUsers() async {
     try {
+      final companyId = await getCompanyId();
+      if (companyId == null) return [];
+
       final snap = await _firestore
           .collection("users")
+          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
           .where("softDeleted", isEqualTo: false,)
           .get();
       return snap.docs;
@@ -251,8 +266,13 @@ class FirestoreService {
   /// Stream users with vehicle info
   static Stream<List<Map<String, dynamic>>> streamUsersWithVehicle(
       String role) async* {
+    
+    final companyId = await getCompanyId();
+    if (companyId == null) yield* Stream.empty();
+    
     final usersStream = _firestore
         .collection("users")
+        .where('companyId', isEqualTo: companyId) // 🔥 SAAS
         .where("role", isEqualTo: role)
         .where("softDeleted", isEqualTo: false)
         .snapshots();
@@ -323,8 +343,12 @@ class FirestoreService {
   /// Fetch all active vehicles
   static Future<List<Map<String, dynamic>>> fetchVehicles() async {
     try {
+      final companyId = await getCompanyId();
+      if (companyId == null) return [];
+
       final snap = await _firestore
           .collection('vehicles')
+          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
           .where('isActive', isEqualTo: true)
           .get();
 
@@ -349,8 +373,12 @@ class FirestoreService {
   static Future<List<Map<String, dynamic>>> fetchVehiclesByDriver(
       String driverId) async {
     try {
+      final companyId = await getCompanyId();
+      if (companyId == null) return [];
+
       final snap = await _firestore
           .collection('vehicles')
+          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
           .where('assignedDriverId', isEqualTo: driverId)
           .where('isActive', isEqualTo: true)
           .get();
@@ -377,9 +405,13 @@ class FirestoreService {
     required String ownership,
     String? assignedDriverId,
   }) async {
+    final companyId = await getCompanyId(); // 🔥 SAAS
+    if (companyId == null) throw Exception('Company ID bulunamadı');
+
     try {
       final vehicleRef = await _firestore.collection('vehicles').add({
         'plate': plate.trim().toUpperCase(),
+        'companyId': companyId, // 🔥 SAAS
         'type': type,
         'ownership': ownership,
         'assignedDriverId': assignedDriverId,
@@ -436,7 +468,7 @@ class FirestoreService {
   // JOB OPERATIONS
   // ============================================
 
-  /// Create a new job
+  /// Create a new job (HTTP)
   static Future<String> createJob({
     required String driverId,
     required String vehicleId,
@@ -445,56 +477,30 @@ class FirestoreService {
     required String cargoType,
     required String cargoDescription,
     required double cargoWeightKg,
-    required double distanceKm, // 🆕 BUNU EKLE
-
+    required double distanceKm,
   }) async {
-    try {
-      final currentUid = currentUserUid;
-      if (currentUid == null) {
-        throw Exception('Kullanıcı oturumu bulunamadı');
-      }
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final referenceNo = 'JOB-$timestamp';
+    final res = await http.post(
+      Uri.parse("$_baseUrl/createJobHttp"),
+      headers: await _headers(),
+      body: jsonEncode({
+        "driverId": driverId,
+        "vehicleId": vehicleId,
+        "loadPort": loadPort,
+        "unloadPort": unloadPort,
+        "cargoType": cargoType,
+        "cargoDescription": cargoDescription,
+        "cargoWeightKg": cargoWeightKg,
+        "distanceKm": distanceKm,
+      }),
+    );
 
-      // Create job document
-      final jobRef = await _firestore.collection('jobs').add({
-        'referenceNo': referenceNo,
-        'driverId': driverId,
-        'vehicleId': vehicleId,
-        'createdBy': currentUid,
-        'status': statusPending,
-        'rejectionReason': null,
-        'route': {
-          'loadPort': loadPort.trim(),
-          'unloadPort': unloadPort.trim(),
-        },
-        'cargo': {
-          'type': cargoType.trim(),
-          'description': cargoDescription.trim(),
-          'weightKg': cargoWeightKg,
-        },
-        'distanceKm': distanceKm, // 🆕
-        'timestamps': {
-          'createdAt': FieldValue.serverTimestamp(),
-          'reviewedAt': null,
-        },
-        'softDeleted': false,
-
-      });
-
-      // Add creation log
-      await jobRef.collection('logs').add({
-        'action': 'created',
-        'performedBy': currentUid,
-        'performedAt': FieldValue.serverTimestamp(),
-        'note': null,
-      });
-
-      return jobRef.id;
-    } catch (e) {
-      print('Create job error: $e');
-      rethrow;
+    if (res.statusCode != 200) {
+      final body = jsonDecode(res.body);
+      throw Exception(body['error'] ?? "Job creation failed");
     }
+
+    final data = jsonDecode(res.body);
+    return data['jobId'];
   }
 
   /// Update job status to approved
@@ -610,8 +616,12 @@ class FirestoreService {
 
   /// Fetch all jobs (for reports)
   static Future<List<DocumentSnapshot>> fetchAllJobs() async {
+    final companyId = await getCompanyId();
+    if (companyId == null) return [];
+
     final snap = await FirebaseFirestore.instance
         .collection("jobs")
+        .where('companyId', isEqualTo: companyId) // 🔥 SAAS
         .where("softDeleted", isEqualTo: false)
         .get();
 
@@ -634,17 +644,31 @@ class FirestoreService {
   }
 
   /// Stream jobs by status
-  static Stream<QuerySnapshot> getJobsByStatus(String status) {
+  static Stream<QuerySnapshot> getJobsByStatus(String status) async* {
+    final companyId = await getCompanyId();
+    if (companyId == null) yield* Stream.empty();
+
     try {
-      return _firestore
+      final role = await AuthService.getSavedUserRole(); // 🔥 Check Role
+      final uid = currentUserUid; // Need UID for filter
+
+      var query = _firestore
           .collection('jobs')
+          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
           .where('softDeleted', isEqualTo: false)
-          .where('status', isEqualTo: status)
+          .where('status', isEqualTo: status);
+
+      // 🔥 Restricted Access for Dispatch
+      if (role == 'dispatch' && uid != null) {
+        query = query.where('createdBy', isEqualTo: uid);
+      }
+
+      yield* query
           .orderBy('timestamps.createdAt', descending: true)
           .snapshots();
     } catch (e) {
       print('Get jobs by status error: $e');
-      return const Stream.empty();
+      yield* Stream.empty();
     }
   }
 
@@ -652,10 +676,14 @@ class FirestoreService {
   static Stream<QuerySnapshot<Map<String, dynamic>>> getDispatchJobsStream({
     required String userId,
     required String status,
-  }) {
+  }) async* {
+    final companyId = await getCompanyId();
+    if (companyId == null) yield* Stream.empty();
+
     try {
-      return _firestore
+      yield* _firestore
           .collection("jobs")
+          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
           .where("createdBy", isEqualTo: userId)
           .where("status", isEqualTo: status)
           .where("softDeleted", isEqualTo: false)
@@ -663,15 +691,19 @@ class FirestoreService {
           .snapshots();
     } catch (e) {
       print('Get dispatch jobs stream error: $e');
-      return const Stream.empty();
+      yield* Stream.empty();
     }
   }
 
   /// Alternative method for compatibility
-  static Stream<QuerySnapshot> getDispatchJobs(String userId, String status) {
+  static Stream<QuerySnapshot> getDispatchJobs(String userId, String status) async* {
+    final companyId = await getCompanyId();
+    if (companyId == null) yield* Stream.empty();
+
     try {
-      return _firestore
+      yield* _firestore
           .collection('jobs')
+          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
           .where('createdBy', isEqualTo: userId)
           .where('status', isEqualTo: status)
           .where('softDeleted', isEqualTo: false)
@@ -679,15 +711,19 @@ class FirestoreService {
           .snapshots();
     } catch (e) {
       print('Get dispatch jobs error: $e');
-      return const Stream.empty();
+      yield* Stream.empty();
     }
   }
 
   /// Stream jobs by driver
-  static Stream<QuerySnapshot> getDriverJobs(String driverId, String status) {
+  static Stream<QuerySnapshot> getDriverJobs(String driverId, String status) async* {
+    final companyId = await getCompanyId();
+    if (companyId == null) yield* Stream.empty();
+
     try {
-      return _firestore
+      yield* _firestore
           .collection('jobs')
+          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
           .where('driverId', isEqualTo: driverId)
           .where('status', isEqualTo: status)
           .where('softDeleted', isEqualTo: false)
@@ -695,7 +731,7 @@ class FirestoreService {
           .snapshots();
     } catch (e) {
       print('Get driver jobs error: $e');
-      return const Stream.empty();
+      yield* Stream.empty();
     }
   }
 
@@ -706,8 +742,12 @@ class FirestoreService {
   /// Build user cache map (returns name by uid)
   static Future<Map<String, String>> fetchDriverCache() async {
     try {
+      final companyId = await getCompanyId();
+      if (companyId == null) return {};
+
       final users = await _firestore
           .collection('users')
+          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
           .where('role', isEqualTo: 'driver')
           .where('softDeleted', isEqualTo: false)
           .where('isActive', isEqualTo: true)
@@ -728,8 +768,12 @@ class FirestoreService {
   /// Build vehicle cache map (returns plate by vehicleId)
   static Future<Map<String, String>> fetchVehicleCache() async {
     try {
+      final companyId = await getCompanyId();
+      if (companyId == null) return {};
+
       final vehicles = await _firestore
           .collection('vehicles')
+          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
           .where('isActive', isEqualTo: true)
           .get();
 
@@ -748,8 +792,12 @@ class FirestoreService {
   /// Fetch user and plate cache (legacy method for compatibility)
   static Future<Map<String, Map<String, String>>> fetchUserCache() async {
     try {
+      final companyId = await getCompanyId();
+      if (companyId == null) return {"users": {}, "plates": {}};
+
       final usersSnap = await _firestore
           .collection("users")
+          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
           .where("softDeleted", isEqualTo: false)
           .get();
 
@@ -762,6 +810,7 @@ class FirestoreService {
 
       final vehicleSnap = await _firestore
           .collection("vehicles")
+          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
           .where('isActive', isEqualTo: true)
           .get();
 

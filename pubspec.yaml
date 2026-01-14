@@ -47,6 +47,8 @@ dependencies:
   latlong2: ^0.9.1
   flutter_background_service: ^5.1.0
   dio: ^5.9.0
+  animate_do: ^4.2.0
+  flutter_secure_storage: ^9.2.2
 
   # Windows için desktop SDK
 #  firebase_core_desktop:

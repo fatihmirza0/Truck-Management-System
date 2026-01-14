@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lojistik/services/auth_service.dart';
 import 'package:lojistik/config/app_theme.dart';
 import 'package:lojistik/widgets/animated/floating_particles.dart';
+import 'package:lojistik/screens/developer/developer_login_page.dart';
 
 import '../widgets/login_desktop_panel.dart';
 import '../widgets/login_form_card.dart';
@@ -112,28 +113,52 @@ class _LoginScreenState extends State<LoginScreen>
                 horizontal: isDesktop ? 40 : 20,
                 vertical: isDesktop ? 40 : 20,
               ),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 950),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (isDesktop) const LoginDesktopPanel(withAnimation: true),
-                    LoginFormCard(
-                      emailController: emailController,
-                      passwordController: passwordController,
-                      isPasswordVisible: _isPasswordVisible,
-                      withAnimation: true,
-                      onTogglePassword: () {
-                        setState(() {
-                          _isPasswordVisible = !_isPasswordVisible;
-                        });
-                      },
-                      onLogin: login,
-                      isLoading: isLoading,
-                      errorMessage: errorMessage,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 950),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (isDesktop) const LoginDesktopPanel(withAnimation: true),
+                        LoginFormCard(
+                          emailController: emailController,
+                          passwordController: passwordController,
+                          isPasswordVisible: _isPasswordVisible,
+                          withAnimation: true,
+                          onTogglePassword: () {
+                            setState(() {
+                              _isPasswordVisible = !_isPasswordVisible;
+                            });
+                          },
+                          onLogin: login,
+                          isLoading: isLoading,
+                          errorMessage: errorMessage,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 20),
+                  // Developer Access Link
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const DeveloperLoginPage(),
+                        ),
+                      );
+                    },
+                    child: Text(
+                      "Geliştirici Girişi",
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.3),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

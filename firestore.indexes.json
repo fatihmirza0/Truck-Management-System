@@ -1,0 +1,111 @@
+{
+    "indexes": [
+        {
+            "collectionGroup": "jobs",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "companyId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "softDeleted",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "timestamps.createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "jobs",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "companyId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "softDeleted",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "timestamps.completedAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "jobs",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "companyId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "driverId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "softDeleted",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "jobs",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "companyId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdBy",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "softDeleted",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "timestamps.createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "jobs",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "companyId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "timestamps.createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        }
+    ],
+    "fieldOverrides": []
+}
