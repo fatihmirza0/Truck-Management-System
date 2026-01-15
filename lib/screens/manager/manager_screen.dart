@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'completed_jobs/pages/completed_jobs_page.dart';
+import 'home/manager_home_page.dart';
+import 'logs/manager_logs_page.dart';
 
 import '../commons/login/pages/login_screen.dart';
 import '../commons/live_tracking_screen.dart';
@@ -34,47 +36,57 @@ class _ManagerScreenState extends State<ManagerScreen> {
 
   String? userName;
 
-  final List<Widget> _pages = const [
-    LiveTrackingPanel(),
-    JobsPage(),
-    CompletedJobsPage(),
-    AddUserPage(),
-    UsersPage(),
-    ReportScreen(),
-  ];
+  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+    userName = FirebaseAuth.instance.currentUser?.email;
+    _pages = [
+      ManagerHomePage(onNavigate: (i) => setState(() => _index = i)),
+      const LiveTrackingPanel(),
+      const JobsPage(),
+      const CompletedJobsPage(),
+      const AddUserPage(),
+      const UsersPage(),
+      const ReportScreen(),
+      const ManagerLogsPage(),
+    ];
+  }
 
   final List<String> _titles = [
+    "Ana Sayfa",
     "Canlı Takip",
     "İş Yönetimi",
     "Tamamlanan İşler",
     "Personel Ekle",
     "Kullanıcılar",
     "Raporlar",
+    "Denetim Kayıtları",
   ];
 
   final List<String> _subTitles = [
+    "Genel Bakış & Hedefler",
     "Rota Konum",
     "Görevler",
     "Filtre & Export",
     "Yeni Kullanıcı",
     "Kullanıcı Listesi",
     "İş Raporları",
+    "Logs & Audit",
   ];
 
   final List<IconData> _icons = [
+    Icons.dashboard_outlined,
     Icons.map_outlined,
     Icons.dashboard_customize_outlined,
     Icons.task_alt_outlined,
     Icons.person_add_outlined,
     Icons.people_alt_outlined,
     Icons.bar_chart_outlined,
+    Icons.history_toggle_off_rounded,
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    userName = FirebaseAuth.instance.currentUser?.email;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -169,16 +181,16 @@ class _ManagerScreenState extends State<ManagerScreen> {
         backgroundColor: Colors.white,
         items: const [
           BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_outlined),
+            label: "Ana Sayfa",
+          ),
+          BottomNavigationBarItem(
             icon: Icon(Icons.map_outlined),
             label: "Canlı Takip",
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.dashboard_customize_outlined),
             label: "İşler",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.task_alt_outlined),
-            label: "Tamamlanan",
           ),
         ],
       ),
@@ -242,17 +254,19 @@ class _ManagerScreenState extends State<ManagerScreen> {
             ),
             const SizedBox(height: 32),
             // Menu Items
-            _mobileDrawerItem("Canlı Takip", Icons.map_outlined, 0),
+            _mobileDrawerItem("Ana Sayfa", Icons.dashboard_outlined, 0),
+            _mobileDrawerItem("Canlı Takip", Icons.map_outlined, 1),
             _mobileDrawerItem(
-                "İş Yönetimi", Icons.dashboard_customize_outlined, 1),
-            _mobileDrawerItem("Tamamlanan İşler", Icons.task_alt_outlined, 2),
+                "İş Yönetimi", Icons.dashboard_customize_outlined, 2),
+            _mobileDrawerItem("Tamamlanan İşler", Icons.task_alt_outlined, 3),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Divider(color: Color(0xFF334155), thickness: 1),
             ),
-            _mobileDrawerItem("Personel Ekle", Icons.person_add_outlined, 3),
-            _mobileDrawerItem("Kullanıcılar", Icons.people_alt_outlined, 4),
-            _mobileDrawerItem("Raporlar", Icons.bar_chart_outlined, 5),
+            _mobileDrawerItem("Personel Ekle", Icons.person_add_outlined, 4),
+            _mobileDrawerItem("Kullanıcılar", Icons.people_alt_outlined, 5),
+            _mobileDrawerItem("Raporlar", Icons.bar_chart_outlined, 6),
+            _mobileDrawerItem("Denetim Kayıtları", Icons.history_toggle_off_rounded, 7),
             const Spacer(),
             // Profile
             Padding(
@@ -431,13 +445,15 @@ class _ManagerScreenState extends State<ManagerScreen> {
                   const SizedBox(height: 12),
                   _sidebarHeader(),
                   const SizedBox(height: 24),
-                  _menuItem("Canlı Takip", CupertinoIcons.map, 0),
+                  _menuItem("Ana Sayfa", Icons.dashboard_outlined, 0),
+                  _menuItem("Canlı Takip", CupertinoIcons.map, 1),
                   _menuItem(
-                      "İş Yönetimi", Icons.dashboard_customize_outlined, 1),
-                  _menuItem("Tamamlanan İşler", Icons.task_alt_outlined, 2),
-                  _menuItem("Personel Ekle", Icons.person_add_outlined, 3),
-                  _menuItem("Kullanıcılar", Icons.people_alt_outlined, 4),
-                  _menuItem("Raporlar", Icons.bar_chart_outlined, 5),
+                      "İş Yönetimi", Icons.dashboard_customize_outlined, 2),
+                  _menuItem("Tamamlanan İşler", Icons.task_alt_outlined, 3),
+                  _menuItem("Personel Ekle", Icons.person_add_outlined, 4),
+                  _menuItem("Kullanıcılar", Icons.people_alt_outlined, 5),
+                  _menuItem("Raporlar", Icons.bar_chart_outlined, 6),
+                  _menuItem("Denetim Kayıtları", Icons.history_toggle_off_rounded, 7),
                   const Spacer(),
                   Padding(
                     padding: const EdgeInsets.all(8),

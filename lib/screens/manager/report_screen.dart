@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:lojistik/services/firestore_service.dart';
 import 'package:lojistik/config/app_theme.dart';
@@ -70,8 +71,15 @@ class _ReportScreenState extends State<ReportScreen> {
 
   Future<void> _load() async {
     try {
+      final currentUser = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(FirebaseAuth.instance.currentUser?.uid)
+          .get();
+      final companyId = currentUser.data()?['companyId'];
+
       final vehicles = await FirebaseFirestore.instance
           .collection("vehicles")
+          .where("companyId", isEqualTo: companyId) // 🔥 SAAS
           .where("isActive", isEqualTo: true)
           .get();
 

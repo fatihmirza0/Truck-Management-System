@@ -298,6 +298,7 @@ class FirestoreService {
           try {
             final vehicleSnap = await _firestore
                 .collection("vehicles")
+                .where("companyId", isEqualTo: companyId) // 🔥 SAAS
                 .where("assignedDriverId", whereIn: chunk)
                 .get();
 

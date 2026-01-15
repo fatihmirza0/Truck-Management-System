@@ -1204,3 +1204,194 @@ exports.createJobHttp = onRequest((req, res) => {
     }
   });
 });
+
+/* =========================================================
+   MANAGER PANEL ENHANCEMENTS
+   - getManagerDashboardData
+   - getManagerLogs
+   - updateCompanyGoals
+========================================================= */
+
+/**
+ * Returns dashboard statistics, goals, and recent jobs for managers.
+ * Strictly scoped to the caller's company.
+ */
+exports.getManagerDashboardData = onRequest((req, res) => {
+  cors(req, res, async () => {
+    try {
+      const decoded = await verifyAuth(req);
+      const user = await getUser(decoded.uid);
+      requireRole(user, ["manager", "admin"]);
+
+      const companyId = user.companyId;
+      if (!companyId) throw new Error("No company linked to user");
+
+      // Calculate "Today" and "Month" starts
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+
+      // Parallel fetching for performance
+      const [
+        companySnap,
+        vehiclesCount,
+        jobsCountToday,
+        activeJobsCount,
+        recentJobsSnap,
+        totalDriversCount,
+        activeDriversCount,
+        jobsCountMonth,
+        pendingJobsCount,
+        approvedJobsCount,
+        completedJobsTotal
+      ] = await Promise.all([
+        db.collection("companies").doc(companyId).get(),
+        db.collection("vehicles").where("companyId", "==", companyId).where("isActive", "==", true).count().get(),
+        db.collection("jobs").where("companyId", "==", companyId).where("timestamps.completedAt", ">=", admin.firestore.Timestamp.fromDate(today)).count().get(),
+        db.collection("jobs").where("companyId", "==", companyId).where("status", "in", ["pending", "approved", "started"]).count().get(),
+        db.collection("jobs").where("companyId", "==", companyId).orderBy("timestamps.createdAt", "desc").limit(10).get(),
+        db.collection("users").where("companyId", "==", companyId).where("role", "==", "driver").count().get(),
+        db.collection("users").where("companyId", "==", companyId).where("role", "==", "driver").where("isActive", "==", true).count().get(),
+        db.collection("jobs").where("companyId", "==", companyId).where("timestamps.completedAt", ">=", admin.firestore.Timestamp.fromDate(monthStart)).count().get(),
+        db.collection("jobs").where("companyId", "==", companyId).where("status", "==", "pending").count().get(),
+        db.collection("jobs").where("companyId", "==", companyId).where("status", "==", "approved").count().get(),
+        db.collection("jobs").where("companyId", "==", companyId).where("status", "==", "completed").count().get()
+      ]);
+
+      const companyData = companySnap.data();
+      const recentJobs = recentJobsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      res.json({
+        success: true,
+        stats: {
+          totalVehicles: vehiclesCount.data().count,
+          completedJobsToday: jobsCountToday.data().count,
+          completedJobsMonth: jobsCountMonth.data().count,
+          activeJobs: activeJobsCount.data().count,
+          totalDrivers: totalDriversCount.data().count,
+          activeDrivers: activeDriversCount.data().count,
+          distribution: {
+            pending: pendingJobsCount.data().count,
+            approved: approvedJobsCount.data().count,
+            completed: completedJobsTotal.data().count
+          }
+        },
+        goals: companyData.goals || { monthlyJobTarget: 0, monthlyRevenueTarget: 0 },
+        recentJobs: recentJobs
+      });
+
+    } catch (e) {
+      console.error("getManagerDashboardData error:", e);
+      res.status(400).json({ error: e.message });
+    }
+  });
+});
+
+/**
+ * Returns an audit trail of activities within the manager's company.
+ * Includes: Job creations, logins, status changes.
+ */
+exports.getManagerLogs = onRequest((req, res) => {
+  cors(req, res, async () => {
+    try {
+      const decoded = await verifyAuth(req);
+      const user = await getUser(decoded.uid);
+      requireRole(user, ["manager", "admin"]);
+
+      const companyId = user.companyId;
+      if (!companyId) throw new Error("No company linked to user");
+
+      // Aggregate from multiple sources within the company
+      const [jobsSnap, usersSnap] = await Promise.all([
+        db.collection("jobs")
+          .where("companyId", "==", companyId)
+          .orderBy("timestamps.createdAt", "desc")
+          .limit(30)
+          .get(),
+        db.collection("users")
+          .where("companyId", "==", companyId)
+          .orderBy("lastLoginAt", "desc")
+          .limit(20)
+          .get()
+      ]);
+
+      const logs = [];
+
+      // 1. Job Creation Logs
+      jobsSnap.forEach(doc => {
+        const data = doc.data();
+        logs.push({
+          type: 'JOB_ACTIVITY',
+          message: `İş oluşturuldu: ${data.referenceNo}`,
+          description: `${data.createdByEmail || 'Bir kullanıcı'} tarafından oluşturuldu.`,
+          timestamp: data.timestamps?.createdAt?.toDate(),
+          status: data.status,
+          id: doc.id
+        });
+      });
+
+      // 2. Login Logs
+      usersSnap.forEach(doc => {
+        const data = doc.data();
+        if (data.lastLoginAt) {
+          logs.push({
+            type: 'LOGIN_ACTIVITY',
+            message: `Giriş yapıldı: ${data.name}`,
+            description: `${data.email} uygulamaya giriş yaptı.`,
+            timestamp: data.lastLoginAt.toDate(),
+            id: doc.id
+          });
+        }
+      });
+
+      // Sort combined logs by timestamp
+      logs.sort((a, b) => b.timestamp - a.timestamp);
+
+      res.json({
+        success: true,
+        logs: logs.slice(0, 50)
+      });
+
+    } catch (e) {
+      console.error("getManagerLogs error:", e);
+      res.status(400).json({ error: e.message });
+    }
+  });
+});
+
+/**
+ * Updates company goals (targets).
+ */
+exports.updateCompanyGoals = onRequest((req, res) => {
+  cors(req, res, async () => {
+    try {
+      if (req.method !== "POST") return res.status(405).end();
+
+      const decoded = await verifyAuth(req);
+      const user = await getUser(decoded.uid);
+      requireRole(user, ["manager", "admin"]);
+
+      const companyId = user.companyId;
+      if (!companyId) throw new Error("No company linked to user");
+
+      const { monthlyJobTarget, monthlyRevenueTarget } = req.body;
+
+      await db.collection("companies").doc(companyId).update({
+        goals: {
+          monthlyJobTarget: parseInt(monthlyJobTarget) || 0,
+          monthlyRevenueTarget: parseInt(monthlyRevenueTarget) || 0,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }
+      });
+
+      res.json({ success: true });
+
+    } catch (e) {
+      console.error("updateCompanyGoals error:", e);
+      res.status(400).json({ error: e.message });
+    }
+  });
+});

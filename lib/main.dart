@@ -17,9 +17,12 @@ import 'screens/manager/manager_screen.dart';
 import 'screens/dispatch/dispatch_main_screen.dart';
 import 'screens/driver/driver_screen.dart';
 
+import 'package:intl/date_symbol_data_local.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await initializeDateFormatting('tr');
   await _initServices();
 
   runApp(const MyApp());

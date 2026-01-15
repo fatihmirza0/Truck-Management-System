@@ -1,13 +1,15 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:animate_do/animate_do.dart';
+// animate_do removed
 
 import '../../services/developer_auth_service.dart';
+import '../../utils/page_transitions.dart';
 import 'developer_dashboard.dart';
 import 'company_detail_page.dart';
 
 class CompanyManagementPage extends StatefulWidget {
-  const CompanyManagementPage({super.key});
+  final bool isEmbedded;
+  const CompanyManagementPage({super.key, this.isEmbedded = false});
 
   @override
   State<CompanyManagementPage> createState() => _CompanyManagementPageState();
@@ -41,7 +43,7 @@ class _CompanyManagementPageState extends State<CompanyManagementPage> {
       }
     } catch (e) {
       if (e.toString().contains('Session expired') || e.toString().contains('Not authenticated')) {
-        _logout();
+        if (!widget.isEmbedded) _logout(); // Only logout if standalone
         return;
       }
       
@@ -64,6 +66,83 @@ class _CompanyManagementPageState extends State<CompanyManagementPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Content body
+    Widget content = _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text("Error: $_error", style: const TextStyle(color: Colors.red)))
+              : _companies.isEmpty
+                  ? const Center(child: Text("No companies found"))
+                  : GridView.builder(
+                      padding: const EdgeInsets.all(32),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3, 
+                        childAspectRatio: 1.6,
+                        crossAxisSpacing: 24,
+                        mainAxisSpacing: 24,
+                      ),
+                      itemCount: _companies.length,
+                      itemBuilder: (context, index) {
+                        final company = _companies[index];
+                        // Removed FadeInUp
+                        return _CompanyCard(
+                            company: company,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                SlidePageRoute( // Custom Transition
+                                  page: CompanyDetailPage(
+                                    companyId: company['id'],
+                                    companyName: company['name'] ?? "Unknown",
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                      },
+                    );
+
+    if (widget.isEmbedded) {
+      return Column(
+        children: [
+           // Header for Embedded View
+           Container(
+              height: 80,
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+              ),
+              child: Row(
+                children: [
+                  const Text(
+                    "Companies",
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.refresh_rounded, color: Color(0xFF1E293B)),
+                    onPressed: _fetchCompanies,
+                  ),
+                  const SizedBox(width: 16),
+                  FloatingActionButton.small(
+                    onPressed: _showCreateCompanyDialog,
+                    backgroundColor: const Color(0xFF1E293B),
+                    child: const Icon(Icons.add_rounded),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(child: content),
+        ],
+      );
+    }
+
+    // Standalone Scaffold (Legacy/Backup)
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -82,42 +161,7 @@ class _CompanyManagementPageState extends State<CompanyManagementPage> {
           const SizedBox(width: 16),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(child: Text("Error: $_error", style: const TextStyle(color: Colors.red)))
-              : _companies.isEmpty
-                  ? const Center(child: Text("No companies found"))
-                  : GridView.builder(
-                      padding: const EdgeInsets.all(32),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3, 
-                        childAspectRatio: 1.6,
-                        crossAxisSpacing: 24,
-                        mainAxisSpacing: 24,
-                      ),
-                      itemCount: _companies.length,
-                      itemBuilder: (context, index) {
-                        final company = _companies[index];
-                        return FadeInUp(
-                          delay: Duration(milliseconds: index * 50),
-                          child: _CompanyCard(
-                            company: company,
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => CompanyDetailPage(
-                                    companyId: company['id'],
-                                    companyName: company['name'] ?? "Unknown",
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        );
-                      },
-                    ),
+      body: content,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showCreateCompanyDialog,
         label: const Text("New Company"),

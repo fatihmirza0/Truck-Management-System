@@ -70,8 +70,16 @@ class LiveTrackingService {
         return;
       }
 
+      final userData = await _firestore.collection('users').doc(FirebaseAuth.instance.currentUser?.uid).get();
+      final companyId = userData.data()?['companyId'];
+      if (companyId == null) {
+        debugPrint('⚠️ No companyId found for user');
+        return;
+      }
+
       final users = await _firestore
           .collection('users')
+          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
           .where('role', isEqualTo: 'driver')
           .where('isActive', isEqualTo: true)
           .where('softDeleted', isEqualTo: false)
@@ -106,6 +114,7 @@ class LiveTrackingService {
         for (final batch in batches) {
           final vehiclesSnap = await _firestore
               .collection('vehicles')
+              .where('companyId', isEqualTo: companyId) // 🔥 SAAS
               .where(FieldPath.documentId, whereIn: batch)
               .get();
 
@@ -133,21 +142,26 @@ class LiveTrackingService {
   }
 
   /// 🔥 Listener'ları başlat - İYİLEŞTİRİLDİ
-  void _startListeners() {
+  void _startListeners() async {
     if (_isActive || _isDisposed) return;
 
+    final userData = await _firestore.collection('users').doc(FirebaseAuth.instance.currentUser?.uid).get();
+    final companyId = userData.data()?['companyId'];
+    if (companyId == null) return;
+
     _isActive = true;
-    _startJobsListener();
-    _startUsersListener();
+    _startJobsListener(companyId);
+    _startUsersListener(companyId);
     debugPrint('✅ Listeners started');
   }
 
   /// 🔥 Jobs Listener - İYİLEŞTİRİLDİ
-  void _startJobsListener() {
+  void _startJobsListener(String companyId) {
     _jobsSubscription?.cancel();
 
     _jobsSubscription = _firestore
         .collection('jobs')
+        .where('companyId', isEqualTo: companyId) // 🔥 SAAS
         .where('status', whereIn: ['approved', 'in_progress'])
         .snapshots(includeMetadataChanges: false)
         .listen(
@@ -189,11 +203,12 @@ class LiveTrackingService {
   }
 
   /// 🔥 Users Listener - İYİLEŞTİRİLDİ
-  void _startUsersListener() {
+  void _startUsersListener(String companyId) {
     _usersSubscription?.cancel();
 
     _usersSubscription = _firestore
         .collection('users')
+        .where('companyId', isEqualTo: companyId) // 🔥 SAAS
         .where('role', isEqualTo: 'driver')
         .snapshots(includeMetadataChanges: false)
         .listen(

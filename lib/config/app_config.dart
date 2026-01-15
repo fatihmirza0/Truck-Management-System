@@ -5,6 +5,12 @@ class AppConfig {
   // API Endpoints
   static const String updateLastLoginUrl =
       'https://us-central1-truck-dispatch-system.cloudfunctions.net/updateLastLoginHttp';
+  static const String getManagerDashboardUrl =
+      'https://us-central1-truck-dispatch-system.cloudfunctions.net/getManagerDashboardData';
+  static const String getManagerLogsUrl =
+      'https://us-central1-truck-dispatch-system.cloudfunctions.net/getManagerLogs';
+  static const String updateCompanyGoalsUrl =
+      'https://us-central1-truck-dispatch-system.cloudfunctions.net/updateCompanyGoals';
 
   // Timing Constants
   static const int splashScreenDelayMs = 1500;

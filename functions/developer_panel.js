@@ -305,42 +305,71 @@ exports.getSystemLogsHttp = onRequest((req, res) => {
             ]);
 
             const logs = [];
+            const companyIdsToFetch = new Set();
 
             jobsSnap.forEach(doc => {
+                const data = doc.data();
+                if (data.companyId) companyIdsToFetch.add(data.companyId);
                 logs.push({
                     type: 'JOB_CREATED',
-                    message: `Job ${doc.data().referenceNo} created`,
-                    timestamp: doc.data().timestamps?.createdAt?.toDate(),
-                    companyId: doc.data().companyId,
-                    details: doc.data()
+                    message: `Job ${data.referenceNo} created`,
+                    timestamp: data.timestamps?.createdAt?.toDate(),
+                    companyId: data.companyId,
+                    details: data
                 });
             });
 
             usersSnap.forEach(doc => {
+                const data = doc.data();
+                if (data.companyId) companyIdsToFetch.add(data.companyId);
                 logs.push({
                     type: 'USER_CREATED',
-                    message: `User ${doc.data().name} (${doc.data().role}) created`,
-                    timestamp: doc.data().createdAt?.toDate(),
-                    companyId: doc.data().companyId,
-                    details: doc.data()
+                    message: `User ${data.name} (${data.role}) created`,
+                    timestamp: data.createdAt?.toDate(),
+                    companyId: data.companyId,
+                    details: data
                 });
             });
 
             companiesSnap.forEach(doc => {
+                // For company creation, we definitely know the name
                 logs.push({
                     type: 'COMPANY_CREATED',
                     message: `Company ${doc.data().name} created`,
                     timestamp: doc.data().createdAt?.toDate(),
                     companyId: doc.id,
+                    companyName: doc.data().name,
                     details: doc.data()
                 });
             });
+
+            // Fetch missing company names
+            if (companyIdsToFetch.size > 0) {
+                const refs = Array.from(companyIdsToFetch).map(id => db.collection("companies").doc(id));
+                // Use getAll for efficient fetching
+                const companyDocs = await db.getAll(...refs);
+
+                const companyMap = {};
+                companyDocs.forEach(doc => {
+                    if (doc.exists) {
+                        companyMap[doc.id] = doc.data().name;
+                    }
+                });
+
+                // Enrich logs with companyName
+                logs.forEach(log => {
+                    if (!log.companyName && log.companyId) {
+                        log.companyName = companyMap[log.companyId] || "Unknown Company";
+                    }
+                });
+            }
 
             // Sort by time desc
             logs.sort((a, b) => b.timestamp - a.timestamp);
 
             res.json({ success: true, logs: logs.slice(0, 50) });
         } catch (e) {
+            console.error(e);
             res.status(400).json({ error: e.message });
         }
     });
