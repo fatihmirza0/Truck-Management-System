@@ -35,6 +35,10 @@ function requireRole(user, roles) {
   if (user.isActive !== true || user.softDeleted === true) {
     throw new Error("User inactive");
   }
+  // 🔥 COMPANY STATUS CHECK
+  if (user.companyStatus === 'inactive' && user.role !== 'developer') {
+    throw new Error("Company is inactive. Contact support.");
+  }
 }
 
 /* =========================================================
@@ -43,6 +47,9 @@ function requireRole(user, roles) {
 async function ensureSameCompany(callerId, targetUserId) {
   const caller = await getUser(callerId);
   const target = await getUser(targetUserId);
+
+  // If caller is developer, bypass company check (optional, but good for support)
+  if (caller.role === 'developer') return { caller, target };
 
   if (!caller.companyId) throw new Error("Caller has no companyId");
   if (!target.companyId) throw new Error("Target has no companyId");
@@ -59,6 +66,9 @@ async function ensureJobBelongsToCompany(callerId, jobId) {
 
   if (!jobSnap.exists) throw new Error("Job not found");
   const job = jobSnap.data();
+
+  // Developer bypass
+  if (caller.role === 'developer') return { caller, job };
 
   if (!caller.companyId) throw new Error("Caller has no companyId");
   if (!job.companyId) throw new Error("Job has no companyId");
@@ -865,29 +875,64 @@ exports.getLiveDriverLocations = onRequest(async (req, res) => {
     const locations = {};
     const history = {};
 
+    // 🔥 OPTIMIZATION: Filter first using RTDB companyId data
+    // Only fetch Firestore details for drivers that match companyId
+
+    const driverIdsToFetch = [];
+
     for (const [driverId, data] of Object.entries(allLocations)) {
+      // If RTDB has correct companyId, keep it
+      if (data.companyId && data.companyId === user.companyId) {
+        locations[driverId] = data; // Keep raw data first
+        driverIdsToFetch.push(driverId);
+      }
+      // If RTDB has NO companyId (legacy), we must check Firestore
+      else if (!data.companyId) {
+        driverIdsToFetch.push(driverId);
+      }
+      // If mismatch, skip immediately (saves read)
+    }
+
+    // Batch fetch (or parallel fetch) details for candidate drivers
+    // Firestore IN query limit is 10/30, so efficient parallel fetches are better
+
+    // We can't do 'where in' easily with IDs in a list efficiently for >10 items without chunking.
+    // Parallel gets are OK.
+
+    const validDrivers = [];
+
+    await Promise.all(driverIdsToFetch.map(async (driverId) => {
       try {
         const driverSnap = await db.collection("users").doc(driverId).get();
-        if (driverSnap.exists && driverSnap.data().companyId === user.companyId) {
-          locations[driverId] = data;
+        if (driverSnap.exists) {
+          const dData = driverSnap.data();
+          if (dData.companyId === user.companyId) {
+            // If it was legacy (no companyId in RTDB), add it now
+            if (!locations[driverId]) {
+              locations[driverId] = allLocations[driverId];
+            }
+            validDrivers.push(driverId);
+          } else {
+            // Mismatch found after fetch (legacy case), ensure removed
+            delete locations[driverId];
+          }
+        } else {
+          delete locations[driverId];
         }
-      } catch (err) {
-        console.warn(`Failed to check driver ${driverId}:`, err);
+      } catch (e) {
+        console.warn(`Failed to verify driver ${driverId}`, e);
+        delete locations[driverId];
+      }
+    }));
+
+    // Filter history based on valid drivers
+    for (const driverId of validDrivers) {
+      if (allHistory[driverId]) {
+        history[driverId] = allHistory[driverId];
       }
     }
 
-    for (const [driverId, data] of Object.entries(allHistory)) {
-      try {
-        const driverSnap = await db.collection("users").doc(driverId).get();
-        if (driverSnap.exists && driverSnap.data().companyId === user.companyId) {
-          history[driverId] = data;
-        }
-      } catch (err) {
-        console.warn(`Failed to check driver ${driverId}:`, err);
-      }
-    }
-
-    console.log(`✅ Live drivers (filtered): ${Object.keys(locations).length}`);
+    console.log(`✅ Live drivers (filtered): ${Object.keys(locations).length} (from ${Object.keys(allLocations).length})`);
 
     return res.status(200).json({
       success: true,
@@ -1083,6 +1128,7 @@ exports.updateUserPermissionsHttp = devPanel.updateUserPermissionsHttp;
 exports.getDashboardStatsHttp = devPanel.getDashboardStatsHttp;
 exports.getCompanyFullDetailsHttp = devPanel.getCompanyFullDetailsHttp;
 exports.updateCompanyPlanHttp = devPanel.updateCompanyPlanHttp;
+exports.toggleCompanyStatusHttp = devPanel.toggleCompanyStatusHttp; // ✅ Added
 // Token & Session Management
 exports.developerLogin = devPanel.developerLogin;
 exports.developerLogout = devPanel.developerLogout;
@@ -1394,4 +1440,32 @@ exports.updateCompanyGoals = onRequest((req, res) => {
       res.status(400).json({ error: e.message });
     }
   });
+});
+
+
+
+exports.onCompanyStatusChange = onDocumentUpdated("companies/{companyId}", async (event) => {
+  const before = event.data.before.data();
+  const after = event.data.after.data();
+
+  if (before.status === after.status) return;
+
+  const companyId = event.params.companyId;
+  const newStatus = after.status;
+
+  console.log(`🔄 Syncing company status ${newStatus} to users of ${companyId}`);
+
+  const usersSnap = await db.collection("users")
+    .where("companyId", "==", companyId)
+    .get();
+
+  if (usersSnap.empty) return;
+
+  const batch = db.batch();
+  usersSnap.docs.forEach(doc => {
+    batch.update(doc.ref, { companyStatus: newStatus });
+  });
+
+  await batch.commit();
+  console.log(`✅ Synced status to ${usersSnap.size} users.`);
 });

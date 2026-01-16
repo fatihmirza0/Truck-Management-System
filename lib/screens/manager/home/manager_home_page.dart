@@ -197,14 +197,17 @@ class _ManagerHomePageState extends State<ManagerHomePage> {
     String greeting = "İyi Günler";
     String emoji = "👋";
 
-    if (hour < 12) {
+    if (hour >= 6 && hour < 11) {
       greeting = "Günaydın";
       emoji = "🌅";
-    } else if (hour < 18) {
-      greeting = "Tünaydın";
+    } else if (hour >= 11 && hour < 18) {
+      greeting = "İyi Günler";
       emoji = "☀️";
-    } else {
+    } else if (hour >= 18 && hour < 23) {
       greeting = "İyi Akşamlar";
+      emoji = "🌆";
+    } else {
+      greeting = "İyi Geceler";
       emoji = "🌙";
     }
 
@@ -335,20 +338,20 @@ class _ManagerHomePageState extends State<ManagerHomePage> {
     final isTablet = width >= 600 && width < 1024;
 
     int crossAxisCount = 2;
-    double aspectRatio = 2.8;
+    double aspectRatio = 2.6; // Was 2.8
     double spacing = 12;
 
     if (width >= 1024) {
       crossAxisCount = 4;
-      aspectRatio = 3.5;
+      aspectRatio = 3.2; // Was 3.5
       spacing = 16;
     } else if (isTablet) {
       crossAxisCount = 2;
-      aspectRatio = 2.5;
+      aspectRatio = 2.3; // Was 2.5
       spacing = 12;
     } else {
       crossAxisCount = 2;
-      aspectRatio = 2.2;
+      aspectRatio = 2.0; // Was 2.2
       spacing = 10;
     }
 

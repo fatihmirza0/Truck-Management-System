@@ -151,29 +151,39 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> with SingleTicker
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFF1F5F9), // Slate 100
       appBar: AppBar(
-        title: Text(widget.companyName, style: const TextStyle(color: Color(0xFF1E293B), fontWeight: FontWeight.bold)),
+        title: Text(widget.companyName, style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: BackButton(color: const Color(0xFF1E293B)),
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.blue[700],
-          unselectedLabelColor: Colors.grey,
-          indicatorColor: Colors.blue[700],
-          tabs: const [
-            Tab(text: "Overview"),
-            Tab(text: "Users"),
-            Tab(text: "Jobs (God View)"),
-            Tab(text: "Raw Data"),
-          ],
+        leading: BackButton(color: const Color(0xFF0F172A)),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Container(
+            color: Colors.white,
+            child: TabBar(
+              controller: _tabController,
+              labelColor: const Color(0xFF2563EB), // Blue 600
+              unselectedLabelColor: const Color(0xFF64748B), // Slate 500
+              indicatorColor: const Color(0xFF2563EB),
+              indicatorWeight: 3,
+              labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+              tabs: const [
+                Tab(text: "Overview"),
+                Tab(text: "Users"),
+                Tab(text: "Jobs"),
+                Tab(text: "Raw Data"),
+              ],
+            ),
+          ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF1E293B)),
+            tooltip: "Refresh Data",
+            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF0F172A)),
             onPressed: _fetchDetails,
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: _isLoading
@@ -183,67 +193,174 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> with SingleTicker
               : TabBarView(
                   controller: _tabController,
                   children: [
-                    // 1. OVERVIEW
                     _buildOverviewTab(),
-                    // 2. USERS
                     _buildUsersTab(),
-                    // 3. JOBS
                     _buildJobsTab(),
-                    // 4. RAW
                     SingleChildScrollView(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(const JsonEncoder.withIndent('  ').convert(_data)),
+                      padding: const EdgeInsets.all(24),
+                      child: SelectableText(const JsonEncoder.withIndent('  ').convert(_data), style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
                     ),
                   ],
                 ),
     );
   }
 
+  Future<void> _toggleStatus() async {
+    final company = _data?['company'];
+    if (company == null) return;
+    
+    final currentStatus = company['status'] ?? 'inactive';
+    final newStatus = currentStatus == 'active' ? 'inactive' : 'active';
+    final action = newStatus == 'active' ? 'Activate' : 'Deactivate';
+    final color = newStatus == 'active' ? Colors.green : Colors.red;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("$action Company"),
+        content: Text("Are you sure you want to $action this company?\n\nThis will ${newStatus == 'inactive' ? 'lock out all users immediately' : 'restore access'}."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: color),
+            onPressed: () => Navigator.pop(context, true), 
+            child: Text(action),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final response = await _authService.makePostRequest('toggleCompanyStatusHttp', {
+        'companyId': widget.companyId,
+        'status': newStatus
+      });
+      
+      final resData = jsonDecode(response.body);
+      if (resData['success'] == true) {
+         _fetchDetails();
+         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Company is now $newStatus"), backgroundColor: color));
+      } else {
+         throw Exception(resData['error']);
+      }
+    } catch (e) {
+      if (mounted) {
+         setState(() => _isLoading = false);
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+      }
+    }
+  }
+
   Widget _buildOverviewTab() {
     final company = _data!['company'];
     final usage = _data!['usage'];
+    final isActive = company['status'] == 'active';
+
+    // Safely extract createdAt
+    String createdAtStr = 'N/A';
+    if (company['createdAt'] != null) {
+      if (company['createdAt'] is Map) {
+         // Handle Firestore Timestamp object
+         final seconds = company['createdAt']['_seconds'];
+         if (seconds != null) {
+            createdAtStr = DateTime.fromMillisecondsSinceEpoch(seconds * 1000).toString().split('.').first;
+         } else {
+            createdAtStr = company['createdAt'].toString();
+         }
+      } else {
+         createdAtStr = company['createdAt'].toString();
+      }
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+           // STATUS BANNER
+           if (!isActive)
+             Container(
+               width: double.infinity,
+               margin: const EdgeInsets.only(bottom: 24),
+               padding: const EdgeInsets.all(16),
+               decoration: BoxDecoration(
+                 color: const Color(0xFFFEF2F2), // Red 50
+                 borderRadius: BorderRadius.circular(12),
+                 border: Border.all(color: const Color(0xFFFECACA)) // Red 200
+               ),
+               child: Row(
+                 children: [
+                   const Icon(Icons.report_problem_rounded, color: Color(0xFFDC2626)), // Red 600
+                   const SizedBox(width: 12),
+                   const Expanded(child: Text("This company is CURRENTLY INACTIVE. Access is restricted for all users.", style: TextStyle(color: Color(0xFF991B1B), fontWeight: FontWeight.bold))),
+                   ElevatedButton(
+                      onPressed: _toggleStatus,
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF16A34A), elevation: 0),
+                      child: const Text("Activate Now"),
+                   )
+                 ],
+               ),
+             ),
+             
            Row(
              mainAxisAlignment: MainAxisAlignment.spaceBetween,
              children: [
-               const Text("Plan & Usage", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-               ElevatedButton.icon(
-                 onPressed: _updatePlanAndLimits,
-                 icon: const Icon(Icons.edit_rounded, size: 16),
-                 label: const Text("Edit Plan & Limits"),
-                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
+               const Text("Subscription & Limits", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+               Row(
+                 children: [
+                    if (isActive)
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.power_settings_new_rounded, size: 16, color: Colors.red),
+                        label: const Text("Deactivate", style: TextStyle(color: Colors.red)),
+                        style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
+                        onPressed: _toggleStatus,
+                      ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                     onPressed: _updatePlanAndLimits,
+                     icon: const Icon(Icons.edit_rounded, size: 16),
+                     label: const Text("Edit Limits"),
+                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), elevation: 0),
+                   ),
+                 ],
                )
              ],
            ),
-           const SizedBox(height: 16),
-           _InfoCard(
-             title: "Plan: ${company['plan'].toString().toUpperCase()}", 
-             content: Column(
-               children: [
-                 _LimitRow(label: "Vehicles", current: usage['vehicleCount'], limit: company['limits']?['vehicleCount'] ?? 10),
-                 _LimitRow(label: "Dispatchers", current: usage['dispatchCount'], limit: company['limits']?['dispatchCount'] ?? 3),
-                 _LimitRow(label: "Managers", current: usage['managerCount'], limit: company['limits']?['managerCount'] ?? 1),
-               ],
-             )
+           const SizedBox(height: 24),
+           
+           // STATS GRID
+           Row(
+             children: [
+               Expanded( child: _StatSummaryCard(label: "Vehicles", current: usage['vehicleCount'] ?? 0, limit: company['limits']?['vehicleCount'] ?? 10, icon: Icons.local_shipping_rounded, color: Colors.blue) ),
+               const SizedBox(width: 16),
+               Expanded( child: _StatSummaryCard(label: "Dispatchers", current: usage['dispatchCount'] ?? 0, limit: company['limits']?['dispatchCount'] ?? 3, icon: Icons.headset_mic_rounded, color: Colors.purple) ),
+               const SizedBox(width: 16),
+               Expanded( child: _StatSummaryCard(label: "Managers", current: usage['managerCount'] ?? 0, limit: company['limits']?['managerCount'] ?? 1, icon: Icons.supervisor_account_rounded, color: Colors.orange) ),
+             ],
            ),
-           const SizedBox(height: 32),
-           const Text("Company Info", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+
+           const SizedBox(height: 48),
+           const Text("Company Details", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
            const SizedBox(height: 16),
-           _InfoCard(
-             title: "Details",
-             content: Column(
-               crossAxisAlignment: CrossAxisAlignment.start,
+           Container(
+             width: double.infinity,
+             padding: const EdgeInsets.all(24),
+             decoration: BoxDecoration(
+               color: Colors.white,
+               borderRadius: BorderRadius.circular(16),
+               border: Border.all(color: Colors.grey[200]!),
+               boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+             ),
+             child: Column(
                children: [
-                 Text("Name: ${company['name']}"),
-                 Text("ID: ${company['id']}"),
-                 Text("Owner ID: ${company['ownerId']}"),
-                 Text("Created At: ${company['createdAt']}"),
-                 Text("Status: ${company['status']}"),
+                 _DetailRow(label: "Company Name", value: (company['name'] ?? 'N/A').toString()),
+                 _DetailRow(label: "Company ID", value: (company['id'] ?? 'N/A').toString(), isMono: true),
+                 _DetailRow(label: "Owner ID", value: (company['ownerId'] ?? 'N/A').toString(), isMono: true),
+                 _DetailRow(label: "Current Plan", value: (company['plan'] ?? 'starter').toString().toUpperCase()),
+                 _DetailRow(label: "Created At", value: createdAtStr),
                ],
              ),
            ),
@@ -254,28 +371,43 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> with SingleTicker
 
   Widget _buildUsersTab() {
     final users = _data!['users'] as List;
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
+    if (users.isEmpty) return const Center(child: Text("No users found", style: TextStyle(color: Colors.grey)));
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(24),
       itemCount: users.length,
+      separatorBuilder: (c, i) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final user = users[index];
-        return Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey[200]!),
+            border: Border.all(color: Colors.grey[200]!),
           ),
-          margin: const EdgeInsets.only(bottom: 12),
           child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             leading: CircleAvatar(
-              backgroundColor: Colors.blue[50], 
-              child: Text(user['role'][0].toUpperCase(), style: TextStyle(color: Colors.blue[700])),
+              backgroundColor: const Color(0xFFEFF6FF), // Blue 50
+              child: Text(user['role'] != null ? user['role'][0].toUpperCase() : '?', style: const TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
             ),
-            title: Text(user['name'] ?? "No Name"),
-            subtitle: Text("${user['email']} • ${user['role']}"),
-            trailing: Chip(
-              label: Text(user['jobStatus'] ?? 'idle'),
-              backgroundColor: user['jobStatus'] == 'busy' ? Colors.orange[50] : Colors.green[50],
+            title: Text(user['name'] ?? "No Name", style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text("${user['email']} • ${user['role']}", style: TextStyle(color: Colors.grey[500])),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: user['jobStatus'] == 'busy' ? const Color(0xFFFFF7ED) : const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: user['jobStatus'] == 'busy' ? const Color(0xFFFFEDD5) : const Color(0xFFDCFCE7)),
+              ),
+              child: Text(
+                (user['jobStatus'] ?? 'idle').toString().toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: user['jobStatus'] == 'busy' ? const Color(0xFFC2410C) : const Color(0xFF15803D),
+                )
+              ),
             ),
           ),
         );
@@ -285,28 +417,31 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> with SingleTicker
 
   Widget _buildJobsTab() {
     final jobs = _data!['recentJobs'] as List;
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
+    if (jobs.isEmpty) return const Center(child: Text("No recent jobs", style: TextStyle(color: Colors.grey)));
+    
+    return ListView.separated(
+      padding: const EdgeInsets.all(24),
       itemCount: jobs.length,
+      separatorBuilder: (c, i) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final job = jobs[index];
-        return Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey[200]!),
+            border: Border.all(color: Colors.grey[200]!),
           ),
-          margin: const EdgeInsets.only(bottom: 12),
           child: ListTile(
-            title: Text(job['referenceNo'] ?? "JOB-???"),
+            leading: const Icon(Icons.local_shipping_outlined, color: Color(0xFF64748B)),
+            title: Text(job['referenceNo'] ?? "JOB-???", style: const TextStyle(fontWeight: FontWeight.w600)),
             subtitle: Text("${job['route']?['loadPort']} -> ${job['route']?['unloadPort']}"),
             trailing: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(8),
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(6),
               ),
-              child: Text(job['status'] ?? 'unknown', style: TextStyle(color: Colors.blue[800], fontWeight: FontWeight.bold)),
+              child: Text(job['status'] ?? 'unknown', style: const TextStyle(color: Color(0xFF475569), fontWeight: FontWeight.bold, fontSize: 12)),
             ),
           ),
         );
@@ -315,69 +450,86 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> with SingleTicker
   }
 }
 
-class _InfoCard extends StatelessWidget {
-  final String title;
-  final Widget content;
-  const _InfoCard({required this.title, required this.content});
+class _StatSummaryCard extends StatelessWidget {
+  final String label;
+  final int current;
+  final int limit;
+  final IconData icon;
+  final Color color;
+
+  const _StatSummaryCard({required this.label, required this.current, required this.limit, required this.icon, required this.color});
 
   @override
   Widget build(BuildContext context) {
+    final isOver = limit > 0 && current >= limit;
+    final progress = limit > 0 ? (current / limit).clamp(0.0, 1.0) : 0.0;
+
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-        border: Border.all(color: Colors.grey[100]!),
+        border: Border.all(color: Colors.grey[200]!),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-          const Divider(height: 32),
-          content,
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF64748B))),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text("$current", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isOver ? Colors.red : const Color(0xFF0F172A))),
+              Text(" / $limit", style: const TextStyle(fontSize: 16, color: Color(0xFF94A3B8), height: 1.5)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: const Color(0xFFF1F5F9),
+              valueColor: AlwaysStoppedAnimation(isOver ? Colors.red : color),
+              minHeight: 6,
+            ),
+          )
         ],
       ),
     );
   }
 }
 
-class _LimitRow extends StatelessWidget {
+class _DetailRow extends StatelessWidget {
   final String label;
-  final int current;
-  final int limit;
+  final String value;
+  final bool isMono;
 
-  const _LimitRow({required this.label, required this.current, required this.limit});
+  const _DetailRow({required this.label, required this.value, this.isMono = false});
 
   @override
   Widget build(BuildContext context) {
-    final isOver = current >= limit;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 16)),
-          Row(
-            children: [
-              Text("$current / $limit", style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: isOver ? Colors.red : Colors.green,
-              )),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 100,
-                child: LinearProgressIndicator(
-                  value: (limit > 0) ? (current / limit).clamp(0.0, 1.0) : 0,
-                  backgroundColor: Colors.grey[100],
-                  valueColor: AlwaysStoppedAnimation(isOver ? Colors.red : Colors.green),
-                ),
-              ),
-            ],
-          ),
+          SizedBox(width: 140, child: Text(label, style: const TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w500))),
+          Expanded(child: Text(value, style: TextStyle(
+            color: const Color(0xFF0F172A), 
+            fontWeight: FontWeight.w600,
+            fontFamily: isMono ? 'monospace' : null,
+          ))),
         ],
       ),
     );

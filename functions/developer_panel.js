@@ -561,4 +561,29 @@ exports.updateCompanyPlanHttp = onRequest((req, res) => {
     });
 });
 
+exports.toggleCompanyStatusHttp = onRequest((req, res) => {
+    cors(req, res, async () => {
+        try {
+            if (req.method !== "POST") return res.status(405).end();
+            await verifyDeveloperSession(req);
+
+            const { companyId, status } = req.body;
+            if (!companyId || !["active", "inactive"].includes(status)) {
+                throw new Error("Invalid parameters");
+            }
+
+            await db.collection("companies").doc(companyId).update({
+                status: status,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+
+            res.json({ success: true, status });
+
+        } catch (e) {
+            console.error(e);
+            res.status(400).json({ error: e.message });
+        }
+    });
+});
+
 

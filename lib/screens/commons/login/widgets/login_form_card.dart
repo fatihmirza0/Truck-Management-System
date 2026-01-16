@@ -11,6 +11,7 @@ class LoginFormCard extends StatelessWidget {
   final bool isLoading;
   final String? errorMessage;
   final bool withAnimation;
+  final VoidCallback? onSecretTap;
 
   const LoginFormCard({
     super.key,
@@ -22,6 +23,7 @@ class LoginFormCard extends StatelessWidget {
     required this.isLoading,
     this.errorMessage,
     this.withAnimation = false,
+    this.onSecretTap,
   });
 
   @override
@@ -43,12 +45,15 @@ class LoginFormCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (!isDesktop) ...[
-                Transform.rotate(
-                  angle: -math.pi / 12,
-                  child: Icon(
-                    Icons.local_shipping_rounded,
-                    color: primaryColor,
-                    size: 80,
+                GestureDetector(
+                  onTap: onSecretTap,
+                  child: Transform.rotate(
+                    angle: -math.pi / 12,
+                    child: Icon(
+                      Icons.local_shipping_rounded,
+                      color: primaryColor,
+                      size: 80,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),

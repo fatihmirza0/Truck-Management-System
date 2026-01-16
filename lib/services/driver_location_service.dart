@@ -31,13 +31,18 @@ class DriverLocationService {
   bool _isIdle = false; // 🔥 YENİ: Idle state tracking
 
   String _jobStatus = 'available';
+  String? _companyId; // 🔥 Backend optimize için
+  String? _fcmToken; // 🔥 Backend optimize için
+  String? _activePlate; // 🔥 Redundancy
 
   final List<Position> _buffer = [];
 
   // ======================================================
   // CONFIGURATION
   // ======================================================
-  static const int _updateInterval = 10;
+  static const int _activeInterval = 10; // Hareket halinde
+  static const int _passiveInterval = 60; // Dururken (Pil tasarrufu)
+  
   static const int _idleTimeout = 300;
   static const int _bufferSize = 6;
   static const double _minMoveDistance = 10;
@@ -47,6 +52,8 @@ class DriverLocationService {
   static const int _historyRetentionHours = 24;
   static const int _historyMaxPoints = 500;
   static const int _historyCleanupIntervalHours = 24;
+  
+  int _currentInterval = _activeInterval;
 
   DriverLocationService(this.driverId);
 
@@ -73,6 +80,11 @@ class DriverLocationService {
     }
 
     await _initLocation();
+    await _listenJobStatus(); // 🔥 Verileri al: companyId, plate, token
+    
+    // Kısa bir gecikme ile users datasının gelmesini bekle (opsiyonel ama iyi olur)
+    await Future.delayed(const Duration(milliseconds: 500));
+    
     await _setOnline();
 
     // 🔥 onDisconnect her zaman güncelle
@@ -90,11 +102,8 @@ class DriverLocationService {
       },
       cancelOnError: false,
     );
-
-    _updateTimer = Timer.periodic(
-      const Duration(seconds: _updateInterval),
-      (_) => _updateToRTDB(),
-    );
+    
+    _startUpdateTimer(_activeInterval); // Başlangıçta aktif mod
 
     _permissionCheckTimer = Timer.periodic(
       const Duration(seconds: 10),
@@ -106,10 +115,19 @@ class DriverLocationService {
       (_) => _cleanupOldHistory(),
     );
 
-    _listenJobStatus();
     _cleanupOldHistory();
 
     debugPrint("✅ Tracking started");
+  }
+  
+  void _startUpdateTimer(int intervalSeconds) {
+    _updateTimer?.cancel();
+    _currentInterval = intervalSeconds;
+    _updateTimer = Timer.periodic(
+      Duration(seconds: intervalSeconds),
+      (_) => _updateToRTDB(),
+    );
+    debugPrint("⏱️ Update interval set to ${intervalSeconds}s");
   }
 
   // 🔥 YENİ: onDisconnect handler'ı ayarla
@@ -190,23 +208,36 @@ class DriverLocationService {
     );
   }
 
-  void _listenJobStatus() {
+  Future<void> _listenJobStatus() async {
     _jobSub = _firestore.collection('users').doc(driverId).snapshots().listen(
       (doc) {
         if (!_isTracking) return; // 🔥 Tracking yoksa işleme
 
         if (doc.exists) {
-          final newStatus = doc['jobStatus'] ?? 'available';
-          if (_jobStatus != newStatus) {
-            _jobStatus = newStatus;
-            debugPrint("🔄 Job status changed: $_jobStatus");
+          final data = doc.data();
+          if (data != null) {
+             final newStatus = data['jobStatus'] ?? 'available';
+             
+             // 🔥 Critical Data for Backend Optimization
+             _companyId = data['companyId'];
+             _fcmToken = data['fcmToken'];
+             _activePlate = data['activePlate'];
+             
+             if (_jobStatus != newStatus) {
+               _jobStatus = newStatus;
+               debugPrint("🔄 Job status changed: $_jobStatus");
 
-            // 🔥 Job status değişince idle durumunu resetle
-            if (_jobStatus == 'busy') {
-              _isIdle = false;
-            }
+               // 🔥 Job status değişince idle durumunu resetle
+               if (_jobStatus == 'busy') {
+                 _isIdle = false;
+                 // Busy modda sık güncelle
+                 if (_currentInterval != _activeInterval) {
+                    _startUpdateTimer(_activeInterval);
+                 }
+               }
 
-            _updateToRTDB();
+               _updateToRTDB();
+             }
           }
         }
       },
@@ -276,15 +307,27 @@ class DriverLocationService {
     }
 
     final avgSpeed = speeds.reduce((a, b) => a + b) / speeds.length;
+    bool wasMoving = _isMoving;
     _isMoving = totalDistance >= 20 && avgSpeed >= 8;
 
     if (_isMoving) {
       _lastMoveTime = DateTime.now();
       _isIdle = false; // 🔥 Hareket varsa idle değil
     }
+    
+    // 🔥 DYNAMIC INTERVAL SWITCH
+    // Hareket varsa veya meşgulse -> AKTİF MOD (10s)
+    // Hareket yoksa ve boşsa -> PASİF MOD (60s)
+    if (_isMoving != wasMoving) {
+       if (_isMoving || _jobStatus == 'busy') {
+         if (_currentInterval != _activeInterval) _startUpdateTimer(_activeInterval);
+       } else {
+         if (_currentInterval != _passiveInterval) _startUpdateTimer(_passiveInterval);
+       }
+    }
 
     debugPrint("🚗 Movement: dist=${totalDistance.toStringAsFixed(1)}m, "
-        "speed=${avgSpeed.toStringAsFixed(1)}km/h, moving=$_isMoving");
+        "speed=${avgSpeed.toStringAsFixed(1)}km/h, moving=$_isMoving, interval=${_currentInterval}s");
   }
 
   // ======================================================
@@ -355,6 +398,12 @@ class DriverLocationService {
         "isOnline": true,
         "timestamp": ServerValue.timestamp,
         "lastPing": ServerValue.timestamp,
+        
+        // 🔥 Backend Optimizations
+        if (_companyId != null) "companyId": _companyId,
+        if (_fcmToken != null) "fcmToken": _fcmToken,
+        if (_activePlate != null) "activePlate": _activePlate,
+
         if (_isMoving || _jobStatus == 'busy') "offlineNotified": false,
       };
 
@@ -370,7 +419,7 @@ class DriverLocationService {
           LatLng(_lastPosition!.latitude, _lastPosition!.longitude);
 
       debugPrint(
-          "📍 Location updated: online (moving: $_isMoving, job: $_jobStatus)");
+          "📍 Location updated: online (moving: $_isMoving, job: $_jobStatus, int: $_currentInterval)");
     } catch (e) {
       debugPrint("❌ RTDB update error: $e");
     } finally {
@@ -553,14 +602,21 @@ class DriverLocationService {
     if (_lastPosition == null) return;
 
     try {
-      await _db.child("locations/$driverId").update({
+      final data = {
         "lat": _lastPosition!.latitude,
         "lng": _lastPosition!.longitude,
         "isOnline": true,
         "timestamp": ServerValue.timestamp,
         "lastPing": ServerValue.timestamp,
         "offlineNotified": false,
-      });
+        
+        // 🔥 Init sırasında da gönder
+        if (_companyId != null) "companyId": _companyId,
+        if (_fcmToken != null) "fcmToken": _fcmToken,
+        if (_activePlate != null) "activePlate": _activePlate,
+      };
+
+      await _db.child("locations/$driverId").update(data);
 
       // 🔥 onDisconnect'i yeniden ayarla
       await _setupDisconnectHandler();

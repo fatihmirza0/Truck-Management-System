@@ -5,10 +5,12 @@ import 'package:lojistik/widgets/animated/animated_widgets.dart';
 
 class LoginDesktopPanel extends StatelessWidget {
   final bool withAnimation;
+  final VoidCallback? onSecretTap;
 
   const LoginDesktopPanel({
     super.key,
     this.withAnimation = false,
+    this.onSecretTap,
   });
 
   @override
@@ -17,12 +19,15 @@ class LoginDesktopPanel extends StatelessWidget {
       padding: const EdgeInsets.only(right: 40),
       child: Column(
         children: [
-          Transform.rotate(
-            angle: -math.pi / 12,
-            child: const Icon(
-              Icons.local_shipping_rounded,
-              color: Colors.white,
-              size: 120,
+          GestureDetector(
+            onTap: onSecretTap,
+            child: Transform.rotate(
+              angle: -math.pi / 12,
+              child: const Icon(
+                Icons.local_shipping_rounded,
+                color: Colors.white,
+                size: 120,
+              ),
             ),
           ),
           const SizedBox(height: 20),

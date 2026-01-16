@@ -92,22 +92,34 @@ class _DeveloperLoginPageState extends State<DeveloperLoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A), // Slate 900
-      body: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 400),
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E293B), // Slate 800
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFF334155)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.5),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
+      body: Stack(
+        children: [
+          // Back Button
+          Positioned(
+            top: 40,
+            left: 20,
+            child: IconButton(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70),
+              tooltip: "Geri Dön",
+            ),
           ),
+          Center(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 400),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B), // Slate 800
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF334155)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -199,6 +211,8 @@ class _DeveloperLoginPageState extends State<DeveloperLoginPage> {
           ),
         ),
       ),
-    );
+    ],
+  ),
+);
   }
 }

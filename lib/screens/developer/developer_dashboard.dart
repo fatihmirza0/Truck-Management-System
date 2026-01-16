@@ -77,63 +77,108 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFF1F5F9), // Slate 100
       body: Row(
         children: [
-          // SIDEBAR (Single Shell)
-          Container(
-            width: 250,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E293B),
-              boxShadow: AppTheme.softShadow,
-            ),
-            child: Column(
+          _buildSidebar(),
+          Expanded(child: _buildBody()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebar() {
+    return Container(
+      width: 260,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(right: BorderSide(color: Colors.grey[200]!)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(4, 0))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 32),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
               children: [
-                const SizedBox(height: 32),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF1E40AF)]), // Blue 600-800
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.admin_panel_settings_rounded, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
                 const Text(
                   "DEV PANEL",
                   style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
+                    color: Color(0xFF0F172A), // Slate 900
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
                   ),
                 ),
-                const SizedBox(height: 48),
-                _SidebarItem(
-                  icon: Icons.dashboard_rounded,
-                  label: "Dashboard",
-                  isActive: _currentIndex == 0,
-                  onTap: () => setState(() => _currentIndex = 0),
-                ),
-                _SidebarItem(
-                  icon: Icons.business_rounded,
-                  label: "Companies",
-                  isActive: _currentIndex == 1,
-                  onTap: () => setState(() => _currentIndex = 1),
-                ),
-                _SidebarItem(
-                  icon: Icons.security_rounded,
-                  label: "Logs & Audit",
-                  isActive: _currentIndex == 2,
-
-                  onTap: () => setState(() => _currentIndex = 2),
-                ),
-                const Spacer(),
-                const Divider(color: Colors.white10),
-                ListTile(
-                  leading: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-                  title: const Text("Logout", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-                  onTap: _logout,
-                ),
-                const SizedBox(height: 24),
               ],
             ),
           ),
-          
-          // MAIN CONTENT AREA
-          Expanded(
-            child: _buildBody(),
+          const SizedBox(height: 48),
+          _SidebarItem(
+            icon: Icons.dashboard_rounded,
+            label: "Overview",
+            isActive: _currentIndex == 0,
+            onTap: () => setState(() => _currentIndex = 0),
+          ),
+          _SidebarItem(
+            icon: Icons.business_rounded,
+            label: "Companies",
+            isActive: _currentIndex == 1,
+            onTap: () => setState(() => _currentIndex = 1),
+          ),
+          _SidebarItem(
+            icon: Icons.monitor_heart_rounded,
+            label: "System Health",
+            isActive: _currentIndex == 2,
+            onTap: () => setState(() => _currentIndex = 2),
+            badgeCount: 0, // Placeholder
+          ),
+          const Spacer(),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Color(0xFFE2E8F0),
+                    child: Icon(Icons.person, color: Color(0xFF64748B), size: 16),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text("Master Admin", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                        Text("Dev Access", style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                      ],
+                    ),
+                  ),
+                  InkWell(
+                    onTap: _logout,
+                    child: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 20),
+                  )
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -159,6 +204,8 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
            const Text("Dashboard Overview", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+           const SizedBox(height: 8),
+           Text("Welcome back, Master Admin. Here is the latest system status.", style: TextStyle(fontSize: 16, color: Colors.blueGrey[400])),
            const SizedBox(height: 32),
            _buildStatsGrid(),
            const SizedBox(height: 48),
@@ -171,41 +218,47 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
   }
 
   Widget _buildStatsGrid() {
-    return AnimatedGrid(
-      crossAxisCount: 4,
-      childAspectRatio: 1.5,
-      mainAxisSpacing: 24,
-      crossAxisSpacing: 24,
-      children: [
-        _StatCard(
-          title: "Total Companies",
-          value: "${_stats?['totalCompanies'] ?? 0}",
-          icon: Icons.business_rounded,
-          color: Colors.blue,
-          delay: 0,
-        ),
-        _StatCard(
-          title: "Total Users",
-          value: "${_stats?['totalUsers'] ?? 0}",
-          icon: Icons.people_alt_rounded,
-          color: Colors.purple,
-          delay: 100,
-        ),
-        _StatCard(
-          title: "Active Vehicles",
-          value: "${_stats?['activeVehicles'] ?? 0}",
-          icon: Icons.local_shipping_rounded,
-          color: Colors.orange,
-          delay: 200,
-        ),
-        _StatCard(
-          title: "Jobs (24h)",
-          value: "${_stats?['jobsLast24h'] ?? 0}",
-          icon: Icons.work_rounded,
-          color: Colors.green,
-          delay: 300,
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Wrap(
+          spacing: 24,
+          runSpacing: 24,
+          children: [
+            _StatCard(
+              title: "Total Companies",
+              value: "${_stats?['totalCompanies'] ?? 0}",
+              icon: Icons.business_rounded,
+              gradient: const LinearGradient(colors: [Color(0xFF3B82F6), Color(0xFF2563EB)]),
+              delay: 0,
+              width: (constraints.maxWidth - 72) / 4, // Approx 4 cols
+            ),
+            _StatCard(
+              title: "Total Users",
+              value: "${_stats?['totalUsers'] ?? 0}",
+              icon: Icons.people_alt_rounded,
+              gradient: const LinearGradient(colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)]),
+              delay: 100,
+              width: (constraints.maxWidth - 72) / 4,
+            ),
+            _StatCard(
+              title: "Active Vehicles",
+              value: "${_stats?['activeVehicles'] ?? 0}",
+              icon: Icons.local_shipping_rounded,
+              gradient: const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFD97706)]),
+              delay: 200,
+              width: (constraints.maxWidth - 72) / 4,
+            ),
+            _StatCard(
+              title: "Jobs (24h)",
+              value: "${_stats?['jobsLast24h'] ?? 0}",
+              icon: Icons.work_rounded,
+              gradient: const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
+              delay: 300,
+              width: (constraints.maxWidth - 72) / 4,
+            ),
+          ],
+        );
+      }
     );
   }
 
@@ -214,27 +267,49 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: AppTheme.softShadow,
+        border: Border.all(color: Colors.grey[200]!),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
+        ],
       ),
       child: _recentLogs.isEmpty
-          ? const Padding(padding: EdgeInsets.all(24), child: Center(child: Text("No recent activity")))
+          ? const Padding(padding: EdgeInsets.all(32), child: Center(child: Text("No recent activity")))
           : ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _recentLogs.length,
-              separatorBuilder: (c, i) => const Divider(height: 1),
+              separatorBuilder: (c, i) => Divider(height: 1, color: Colors.grey[100]),
               itemBuilder: (context, index) {
                 final log = _recentLogs[index];
+                final isJob = log['type'] == 'JOB_CREATED';
                 return ListTile(
-                  leading: Icon(
-                    log['type'] == 'JOB_CREATED' ? Icons.work : Icons.info,
-                    color: Colors.blueGrey,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isJob ? Colors.blue[50] : Colors.orange[50], // Soft background
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      isJob ? Icons.work_outline_rounded : Icons.info_outline_rounded,
+                      color: isJob ? Colors.blue[700] : Colors.orange[700],
+                      size: 20,
+                    ),
                   ),
-                  title: Text(log['message'] ?? '', style: const TextStyle(fontWeight: FontWeight.w500)),
-                  subtitle: Text(log['timestamp'] ?? '', style: TextStyle(fontSize: 12, color: Colors.grey[400])),
-                  trailing: const Icon(Icons.chevron_right, size: 16),
+                  title: Text(log['message'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  subtitle: Text(
+                    DateFormat('MMM d, h:mm a').format(DateTime.tryParse(log['timestamp'] ?? '') ?? DateTime.now()), 
+                    style: TextStyle(fontSize: 12, color: Colors.grey[400])
+                  ),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(4)
+                    ),
+                    child: const Icon(Icons.arrow_forward_rounded, size: 14, color: Colors.grey),
+                  ),
                   onTap: () {
-                      // Optionally navigate to logs page to see details
                       setState(() => _currentIndex = 2);
                   },
                 );
@@ -242,15 +317,13 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
             ),
     );
   }
-  // End of helper methods
-
 }
 
 class _SidebarItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool isActive;
-  final bool isDestructive;
+  final int badgeCount;
   final VoidCallback onTap;
 
   const _SidebarItem({
@@ -258,13 +331,11 @@ class _SidebarItem extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.isActive = false,
-    this.isDestructive = false,
+    this.badgeCount = 0,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = isDestructive ? Colors.redAccent : (isActive ? Colors.white : Colors.grey[400]);
-    
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -273,21 +344,29 @@ class _SidebarItem extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
           decoration: isActive ? BoxDecoration(
-            border: const Border(left: BorderSide(color: Colors.blueAccent, width: 4)),
-            color: Colors.blueAccent.withValues(alpha: 0.1),
+            border: const Border(left: BorderSide(color: Color(0xFF2563EB), width: 4)),
+            color: const Color(0xFFEFF6FF), // Blue 50
           ) : null,
           child: Row(
             children: [
-              Icon(icon, color: color, size: 22),
+              Icon(icon, color: isActive ? const Color(0xFF2563EB) : const Color(0xFF64748B), size: 22), // Blue 600 : Slate 500
               const SizedBox(width: 16),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                  fontSize: 15,
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: isActive ? const Color(0xFF0F172A) : const Color(0xFF64748B), // Slate 900 : Slate 500
+                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                    fontSize: 15,
+                  ),
                 ),
               ),
+              if (badgeCount > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(10)),
+                  child: Text("$badgeCount", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                )
             ],
           ),
         ),
@@ -300,27 +379,30 @@ class _StatCard extends StatelessWidget {
   final String title;
   final String value;
   final IconData icon;
-  final MaterialColor color;
+  final Gradient gradient;
   final int delay;
+  final double width;
 
   const _StatCard({
     required this.title,
     required this.value,
     required this.icon,
-    required this.color,
+    required this.gradient,
     required this.delay,
+    required this.width,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: width.clamp(240, 400),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: color.withValues(alpha: 0.1),
+            color: Colors.grey.withOpacity(0.05),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -334,18 +416,22 @@ class _StatCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
+              gradient: gradient,
               borderRadius: BorderRadius.circular(12),
+              boxShadow: const [
+                BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4))
+              ]
             ),
-            child: Icon(icon, color: color, size: 28),
+            child: Icon(icon, color: Colors.white, size: 24),
           ),
-          const Spacer(),
+          const SizedBox(height: 24),
           Text(
             value,
             style: TextStyle(
               fontSize: 32,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w800,
               color: Colors.blueGrey[900],
+              letterSpacing: -1,
             ),
           ),
           const SizedBox(height: 4),
@@ -353,59 +439,11 @@ class _StatCard extends StatelessWidget {
             title,
             style: TextStyle(
               fontSize: 14,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w600,
               color: Colors.blueGrey[400],
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class AnimatedGrid extends StatelessWidget {
-  final int crossAxisCount;
-  final double childAspectRatio;
-  final double mainAxisSpacing;
-  final double crossAxisSpacing;
-  final List<Widget> children;
-
-  const AnimatedGrid({
-    super.key,
-    required this.crossAxisCount,
-    required this.childAspectRatio,
-    required this.mainAxisSpacing,
-    required this.crossAxisSpacing,
-    required this.children,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: crossAxisCount,
-      childAspectRatio: childAspectRatio,
-      mainAxisSpacing: mainAxisSpacing,
-      crossAxisSpacing: crossAxisSpacing,
-      children: children,
-    );
-  }
-}
-
-class SectionHeader extends StatelessWidget {
-  final String title;
-  const SectionHeader({super.key, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
-        color: Color(0xFF64748B),
-        letterSpacing: 0.5,
       ),
     );
   }

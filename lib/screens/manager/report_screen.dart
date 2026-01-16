@@ -1,17 +1,15 @@
 // ------------------------------------------------------------
-//  MODERN ENTERPRISE REPORT SCREEN
-//  Pixel-Perfect Responsive Design + Year/Month Filter + YoY
+//  REVOLUTIONARY MODERN ENTERPRISE REPORT SYSTEM
+//  Comprehensive Analytics + Advanced Visuals + Smart Filtering
 // ------------------------------------------------------------
-import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:lojistik/services/firestore_service.dart';
 import 'package:lojistik/config/app_theme.dart';
 import 'package:lojistik/widgets/animated/animated_widgets.dart';
 import 'package:lojistik/utils/report_exporter.dart';
+import 'package:intl/intl.dart';
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
@@ -22,644 +20,621 @@ class ReportScreen extends StatefulWidget {
 
 class _ReportScreenState extends State<ReportScreen> {
   bool loading = true;
+  
+  // Data Lists
+  List<DocumentSnapshot> allJobs = [];
+  List<DocumentSnapshot> filteredJobs = [];
+  List<DocumentSnapshot> allUsers = [];
   Map<String, String> vehiclePlateCache = {};
 
-  List<DocumentSnapshot> users = [];
-  List<DocumentSnapshot> jobs = [];
+  // Filtering
+  DateTimeRange? selectedDateRange;
+  String? selectedDriverId;
+  String? selectedCargoType;
 
-  Map<String, Map<String, dynamic>> driverIndex = {};
-  Map<String, Map<String, dynamic>> dispatchIndex = {};
+  // KPI Metrics
+  int totalJobsCount = 0;
+  double totalDistanceKm = 0;
+  double totalWeightKg = 0;
+  double avgCompletionTimeHours = 0;
 
-  // ================= FİLTRE =================
-  int selectedYear = DateTime.now().year;
-  int? selectedMonth;
-  List<int> availableYears = [];
-
-  // ================= KPI =================
-  int todayJobs = 0;
-  int weeklyJobs = 0;
-  int monthlyJobs = 0;
-
-  // ================= GEÇEN YIL KARŞILAŞTIRMA =================
-  int prevYearJobs = 0;
-  double jobChangePercent = 0;
-
-  // ================= AGGREGATES =================
-  Map<String, int> driverJobCount = {};
-  Map<String, double> driverKm = {};
-  Map<String, double> driverHours = {};
-  Map<String, Set<String>> driverVehicles = {};
-  Map<String, int> dispatchJobCount = {};
-
-  List<int> monthlyChart = List.filled(12, 0);
-
-  String topDriver = "-";
-  String topKmDriver = "-";
-  String topDispatch = "-";
-  double topKm = 0;
-
-  bool get isDesktop => MediaQuery.of(context).size.width > 900;
-  bool get isTablet =>
-      MediaQuery.of(context).size.width > 600 &&
-      MediaQuery.of(context).size.width <= 900;
+  // Analytics
+  Map<String, int> cargoTypeDistribution = {};
+  Map<String, int> portActivity = {};
+  Map<String, int> monthlyDistribution = {};
+  List<Map<String, dynamic>> driverPerformance = [];
+  
+  // UI Helpers
+  bool get isDesktop => MediaQuery.of(context).size.width > 1100;
+  bool get isTablet => MediaQuery.of(context).size.width > 700 && MediaQuery.of(context).size.width <= 1100;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _setInitialDateRange();
+    _loadData();
   }
 
-  Future<void> _load() async {
-    try {
-      final currentUser = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(FirebaseAuth.instance.currentUser?.uid)
-          .get();
-      final companyId = currentUser.data()?['companyId'];
+  void _setInitialDateRange() {
+    final now = DateTime.now();
+    // Default to last 30 days
+    selectedDateRange = DateTimeRange(
+      start: DateTime(now.year, now.month, 1),
+      end: now,
+    );
+  }
 
-      final vehicles = await FirebaseFirestore.instance
-          .collection("vehicles")
-          .where("companyId", isEqualTo: companyId) // 🔥 SAAS
-          .where("isActive", isEqualTo: true)
-          .get();
+  Future<void> _loadData() async {
+    setState(() => loading = true);
+    try {
+      final companyId = await FirestoreService.getCompanyId();
+      
+      // Fetch data in parallel
+      final results = await Future.wait([
+        FirestoreService.fetchAllJobs(),
+        FirestoreService.fetchAllUsers(),
+        FirebaseFirestore.instance
+            .collection("vehicles")
+            .where("companyId", isEqualTo: companyId)
+            .where("isActive", isEqualTo: true)
+            .get(),
+      ]);
+
+      allJobs = results[0] as List<DocumentSnapshot>;
+      allUsers = results[1] as List<DocumentSnapshot>;
+      final vehicleDocs = (results[2] as QuerySnapshot).docs;
 
       vehiclePlateCache = {
-        for (var v in vehicles.docs) v.id: v["plate"] ?? "-"
+        for (var v in vehicleDocs) v.id: v["plate"] ?? "-"
       };
 
-      users = await FirestoreService.fetchAllUsers();
-      jobs = await FirestoreService.fetchAllJobs();
-
-      driverIndex.clear();
-      dispatchIndex.clear();
-
-      for (final doc in users) {
-        final d = doc.data() as Map<String, dynamic>;
-        final uid = doc.id;
-
-        if (d["role"] == "driver") {
-          driverIndex[uid] = d;
-        }
-
-        if (d["role"] == "dispatch") {
-          dispatchIndex[uid] = d;
-        }
-      }
-
-      await _calculateStats();
-
-      if (mounted) {
-        setState(() => loading = false);
-      }
+      _applyFiltersAndCalculate();
     } catch (e) {
-      debugPrint("Report load error → $e");
-      if (mounted) {
-        setState(() => loading = false);
-      }
+      debugPrint("Report load error: $e");
+    } finally {
+      if (mounted) setState(() => loading = false);
     }
   }
 
-  Future<void> _calculateStats() async {
-    final now = DateTime.now();
-    final weekStart = now.subtract(Duration(days: now.weekday - 1));
+  void _applyFiltersAndCalculate() {
+    filteredJobs = allJobs.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      
+      // Basic Filters
+      if (data["softDeleted"] == true) return false;
+      if (data["status"] != "completed") return false;
 
-    // Reset
-    todayJobs = 0;
-    weeklyJobs = 0;
-    monthlyJobs = 0;
-    prevYearJobs = 0;
-    jobChangePercent = 0;
-
-    driverJobCount.clear();
-    driverKm.clear();
-    driverHours.clear();
-    driverVehicles.clear();
-    dispatchJobCount.clear();
-
-    for (int i = 0; i < 12; i++) {
-      monthlyChart[i] = 0;
-    }
-    availableYears.clear();
-    availableYears.add(selectedYear);
-
-    for (final doc in jobs) {
-      final j = doc.data() as Map<String, dynamic>;
-
-      if (j["softDeleted"] == true) continue;
-      if (j["status"] != "completed") continue;
-
-      final ts = j["timestamps"]?["createdAt"] as Timestamp?;
-      if (ts == null) continue;
-
-      final created = ts.toDate();
-
-      if (!availableYears.contains(created.year)) {
-        availableYears.add(created.year);
-      }
-
-      final driverUid = j["driverId"];
-      final dispatchUid = j["createdBy"];
-      final vehicleId = j["vehicleId"];
-
-      final matchesYear = created.year == selectedYear;
-      final matchesMonth =
-          selectedMonth == null || created.month == selectedMonth;
-
-      if (created.year == selectedYear - 1 &&
-          (selectedMonth == null || created.month == selectedMonth)) {
-        prevYearJobs++;
-      }
-
-      if (!matchesYear || !matchesMonth) continue;
-
-      if (_sameDay(created, now)) todayJobs++;
-      if (created.isAfter(weekStart)) weeklyJobs++;
-      monthlyJobs++;
-
-      monthlyChart[created.month - 1]++;
-
-      if (driverUid != null) {
-        driverJobCount[driverUid] = (driverJobCount[driverUid] ?? 0) + 1;
-
-        double km = (j["distanceKm"] ?? 0).toDouble();
-        driverKm[driverUid] = (driverKm[driverUid] ?? 0) + km;
-
-        double hours = (j["durationHours"] ?? 0).toDouble();
-        driverHours[driverUid] = (driverHours[driverUid] ?? 0) + hours;
-
-        if (vehicleId != null) {
-          (driverVehicles[driverUid] ??= <String>{}).add(vehicleId);
+      // Date Range Filter
+      final ts = data["timestamps"]?["completedAt"] ?? data["timestamps"]?["createdAt"];
+      if (ts == null) return false;
+      final date = (ts as Timestamp).toDate();
+      
+      if (selectedDateRange != null) {
+        if (date.isBefore(selectedDateRange!.start) || 
+            date.isAfter(selectedDateRange!.end.add(const Duration(days: 1)))) {
+          return false;
         }
       }
 
-      if (dispatchUid != null) {
-        dispatchJobCount[dispatchUid] =
-            (dispatchJobCount[dispatchUid] ?? 0) + 1;
+      // Driver Filter
+      if (selectedDriverId != null && data["driverId"] != selectedDriverId) return false;
+
+      // Cargo Type Filter
+      if (selectedCargoType != null && data["cargoType"] != selectedCargoType) return false;
+
+      return true;
+    }).toList();
+
+    _calculateAllStats();
+  }
+
+  void _calculateAllStats() {
+    // Reset metrics
+    totalJobsCount = filteredJobs.length;
+    totalDistanceKm = 0;
+    totalWeightKg = 0;
+    double totalHours = 0;
+    
+    cargoTypeDistribution.clear();
+    portActivity.clear();
+    monthlyDistribution.clear();
+    Map<String, Map<String, dynamic>> driverStats = {};
+
+    for (var doc in filteredJobs) {
+      final d = doc.data() as Map<String, dynamic>;
+      
+      // Summations
+      totalDistanceKm += (d["distanceKm"] ?? 0).toDouble();
+      totalWeightKg += (d["cargoWeightKg"] ?? 0).toDouble();
+
+      // Completion Time (Hours)
+      final start = d["timestamps"]?["createdAt"] as Timestamp?;
+      final end = d["timestamps"]?["completedAt"] as Timestamp?;
+      if (start != null && end != null) {
+        totalHours += end.toDate().difference(start.toDate()).inMinutes / 60;
+      }
+
+      // Cargo Type Dist
+      final cType = d["cargoType"] ?? "Diğer";
+      cargoTypeDistribution[cType] = (cargoTypeDistribution[cType] ?? 0) + 1;
+
+      // Port Activity
+      final port = d["loadPort"] ?? "Bilinmiyor";
+      portActivity[port] = (portActivity[port] ?? 0) + 1;
+      final uPort = d["unloadPort"] ?? "Bilinmiyor";
+      portActivity[uPort] = (portActivity[uPort] ?? 0) + 1;
+
+      // Monthly Dist
+      final date = (d["timestamps"]?["createdAt"] as Timestamp).toDate();
+      final monthKey = DateFormat('MMMM', 'tr').format(date);
+      monthlyDistribution[monthKey] = (monthlyDistribution[monthKey] ?? 0) + 1;
+
+      // Driver Performance
+      final dId = d["driverId"];
+      if (dId != null) {
+        if (!driverStats.containsKey(dId)) {
+          driverStats[dId] = {
+            "jobs": 0,
+            "km": 0.0,
+            "weight": 0.0,
+            "name": _getDriverName(dId),
+          };
+        }
+        driverStats[dId]!["jobs"]++;
+        driverStats[dId]!["km"] += (d["distanceKm"] ?? 0).toDouble();
+        driverStats[dId]!["weight"] += (d["cargoWeightKg"] ?? 0).toDouble();
       }
     }
 
-    availableYears.sort((a, b) => b.compareTo(a));
-
-    if (prevYearJobs > 0) {
-      jobChangePercent = ((monthlyJobs - prevYearJobs) / prevYearJobs) * 100;
-    }
-
-    if (driverJobCount.isNotEmpty) {
-      topDriver = driverJobCount.entries
-          .reduce((a, b) => a.value > b.value ? a : b)
-          .key;
-    } else {
-      topDriver = "-";
-    }
-
-    if (driverKm.isNotEmpty) {
-      final topEntry =
-          driverKm.entries.reduce((a, b) => a.value > b.value ? a : b);
-      topKmDriver = topEntry.key;
-      topKm = topEntry.value;
-    }
-
-    if (dispatchJobCount.isNotEmpty) {
-      topDispatch = dispatchJobCount.entries
-          .reduce((a, b) => a.value > b.value ? a : b)
-          .key;
-    }
+    avgCompletionTimeHours = totalJobsCount > 0 ? (totalHours / totalJobsCount) : 0;
+    
+    // Sort and convert driver stats
+    driverPerformance = driverStats.values.toList();
+    driverPerformance.sort((a, b) => (b["jobs"] as int).compareTo(a["jobs"] as int));
   }
 
-  bool _sameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
+  String _getDriverName(String id) {
+    try {
+      final user = allUsers.firstWhere((u) => u.id == id);
+      return (user.data() as Map<String, dynamic>)["name"] ?? "Bilinmiyor";
+    } catch (_) {
+      return "Bilinmiyor";
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     if (loading) {
       return const Scaffold(
         backgroundColor: AppTheme.backgroundColor,
-        body: Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation(AppTheme.primaryColor),
-          ),
-        ),
+        body: Center(child: CircularProgressIndicator(color: AppTheme.primaryColor)),
       );
     }
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(isDesktop ? 32 : 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 24),
-              _buildKpiCards(),
-              const SizedBox(height: 32),
-              if (isDesktop) ...[
-                Row(
+        child: Column(
+          children: [
+            _buildCustomHeader(),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.all(isDesktop ? 32 : 20),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(flex: 2, child: _buildMonthlyChart()),
-                    const SizedBox(width: 24),
-                    Expanded(child: _buildDriverKmSection()),
+                    _buildKpiSection(),
+                    const SizedBox(height: 32),
+                    if (isDesktop) ...[
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 3, child: _buildTrendChart()),
+                          const SizedBox(width: 24),
+                          Expanded(flex: 2, child: _buildCargoPie()),
+                        ],
+                      ),
+                    ] else ...[
+                      _buildTrendChart(),
+                      const SizedBox(height: 24),
+                      _buildCargoPie(),
+                    ],
+                    const SizedBox(height: 32),
+                    if (isDesktop) ...[
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 2, child: _buildPortActivityChart()),
+                          const SizedBox(width: 24),
+                          Expanded(flex: 3, child: _buildDriverPerformanceTable()),
+                        ],
+                      ),
+                    ] else ...[
+                      _buildPortActivityChart(),
+                      const SizedBox(height: 24),
+                      _buildDriverPerformanceTable(),
+                    ],
+                    const SizedBox(height: 48),
                   ],
                 ),
-                const SizedBox(height: 32),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: _buildDispatchSection()),
-                    const SizedBox(width: 24),
-                    Expanded(flex: 2, child: _buildDriverTable()),
-                  ],
-                ),
-              ] else ...[
-                _buildMonthlyChart(),
-                const SizedBox(height: 24),
-                _buildDriverKmSection(),
-                const SizedBox(height: 24),
-                _buildDispatchSection(),
-                const SizedBox(height: 24),
-                _buildDriverTable(),
-              ],
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildHeader() {
-    if (isDesktop) {
-      return _buildDesktopHeader();
-    } else {
-      return _buildMobileHeader();
-    }
+  // --- WIDGETS ---
+
+  Widget _buildCustomHeader() {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 32 : 20,
+        vertical: 24,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            offset: const Offset(0, 2),
+            blurRadius: 10,
+          ),
+        ],
+      ),
+      child: isDesktop ? _buildDesktopHeaderContent() : _buildMobileHeaderContent(),
+    );
   }
 
-  Widget _buildDesktopHeader() {
+  Widget _buildDesktopHeaderContent() {
+    return Row(
+      children: [
+        _buildHeaderTitle(),
+        const Spacer(),
+        _buildFilterChips(),
+        const SizedBox(width: 24),
+        _buildDateRangeButton(),
+        const SizedBox(width: 16),
+        _buildExportButtons(),
+      ],
+    );
+  }
+
+  Widget _buildMobileHeaderContent() {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildHeaderTitle(),
+            _buildExportButtons(isMini: true),
+          ],
+        ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(child: _buildDateRangeButton()),
+            const SizedBox(width: 12),
+            _buildMobileFilterAnchor(),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeaderTitle() {
     return Row(
       children: [
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.primaryColor.withValues(alpha: 0.2),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            gradient: LinearGradient(
+              colors: [AppTheme.primaryColor, AppTheme.primaryColor.withValues(alpha: 0.8)],
+            ),
+            borderRadius: BorderRadius.circular(16),
           ),
-          child: const Icon(
-            Icons.analytics_outlined,
-            color: Colors.white,
-            size: 28,
-          ),
+          child: const Icon(Icons.analytics_rounded, color: Colors.white, size: 28),
         ),
         const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Genel KPI Raporu",
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.primaryColor,
-                  letterSpacing: -0.5,
-                ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Operasyonel Analiz",
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.primaryColor,
+                letterSpacing: -0.5,
               ),
-              const SizedBox(height: 4),
-              Text(
-                "Performans metriklerini ve istatistikleri görüntüleyin",
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 16),
-        _buildYearDropdown(),
-        const SizedBox(width: 12),
-        _buildMonthDropdown(),
-        const SizedBox(width: 16),
-        _buildExportButton(
-          icon: Icons.picture_as_pdf,
-          label: "PDF",
-          color: const Color(0xFFDC2626),
-          onPressed: _exportPdf,
-        ),
-        const SizedBox(width: 12),
-        _buildExportButton(
-          icon: Icons.table_chart,
-          label: "Excel",
-          color: const Color(0xFF059669),
-          onPressed: _exportExcel,
+            ),
+            Text(
+              "Verilerin gücüyle işletmenizi yönetin",
+              style: TextStyle(color: Colors.grey[500], fontSize: 13),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildMobileHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildFilterChips() {
+    return Row(
       children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E3A5F),
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF1E3A5F).withValues(alpha: 0.2),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.analytics_outlined,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Genel KPI Raporu",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1E3A5F),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    "Performans metrikleri",
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: Color(0xFF1E3A5F)),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              onSelected: (value) {
-                if (value == 'pdf') _exportPdf();
-                if (value == 'excel') _exportExcel();
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'pdf',
-                  child: Row(
-                    children: [
-                      Icon(Icons.picture_as_pdf,
-                          color: Color(0xFFDC2626), size: 20),
-                      SizedBox(width: 12),
-                      Text('PDF İndir'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'excel',
-                  child: Row(
-                    children: [
-                      Icon(Icons.table_chart,
-                          color: Color(0xFF059669), size: 20),
-                      SizedBox(width: 12),
-                      Text('Excel İndir'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+        _buildDropdownFilter(
+          label: "Sürücü",
+          value: selectedDriverId,
+          items: [
+            const DropdownMenuItem(value: null, child: Text("Tüm Sürücüler")),
+            ...allUsers
+                .where((u) => (u.data() as Map)["role"] == "driver")
+                .map((u) => DropdownMenuItem(
+                      value: u.id,
+                      child: Text((u.data() as Map)["name"] ?? "Bilinmiyor"),
+                    )),
           ],
+          onChanged: (val) {
+            setState(() {
+              selectedDriverId = val;
+              _applyFiltersAndCalculate();
+            });
+          },
         ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(child: _buildYearDropdown()),
-            const SizedBox(width: 12),
-            Expanded(child: _buildMonthDropdown()),
+        const SizedBox(width: 12),
+        _buildDropdownFilter(
+          label: "Yük Tipi",
+          value: selectedCargoType,
+          items: [
+            const DropdownMenuItem(value: null, child: Text("Tüm Yükler")),
+            ...cargoTypeDistribution.keys.map((k) => DropdownMenuItem(value: k, child: Text(k))),
           ],
+          onChanged: (val) {
+            setState(() {
+              selectedCargoType = val;
+              _applyFiltersAndCalculate();
+            });
+          },
         ),
       ],
     );
   }
 
-  Widget _buildYearDropdown() {
+  Widget _buildDropdownFilter<T>({
+    required String label,
+    required T? value,
+    required List<DropdownMenuItem<T>> items,
+    required ValueChanged<T?> onChanged,
+  }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        color: AppTheme.backgroundColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.calendar_today, size: 16, color: Color(0xFF64748B)),
-          const SizedBox(width: 8),
-          DropdownButton<int>(
-            value: availableYears.contains(selectedYear) ? selectedYear : null,
-            hint: Text(selectedYear.toString()),
-            underline: const SizedBox(),
-            icon: const Icon(Icons.arrow_drop_down, size: 20),
-            items: availableYears.isEmpty
-                ? [
-                    DropdownMenuItem(
-                      value: selectedYear,
-                      child: Text(selectedYear.toString()),
-                    )
-                  ]
-                : availableYears.map((year) {
-                    return DropdownMenuItem(
-                      value: year,
-                      child: Text(
-                        year.toString(),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
+      child: DropdownButton<T>(
+        value: value,
+        items: items,
+        onChanged: onChanged,
+        underline: const SizedBox(),
+        dropdownColor: Colors.white,
+        style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w500),
+        icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
+        hint: Text(label),
+      ),
+    );
+  }
+
+  Widget _buildDateRangeButton() {
+    final startStr = DateFormat('d MMM', 'tr').format(selectedDateRange!.start);
+    final endStr = DateFormat('d MMM yyyy', 'tr').format(selectedDateRange!.end);
+
+    return ScaleButton(
+      onTap: () async {
+        final res = await showDateRangePicker(
+          context: context,
+          firstDate: DateTime(2023),
+          lastDate: DateTime.now().add(const Duration(days: 1)),
+          initialDateRange: selectedDateRange,
+          builder: (context, child) {
+            return Theme(
+              data: Theme.of(context).copyWith(
+                colorScheme: const ColorScheme.light(
+                  primary: AppTheme.primaryColor,
+                  onPrimary: Colors.white,
+                  surface: Colors.white,
+                  onSurface: AppTheme.textPrimary,
+                ),
+              ),
+              child: child!,
+            );
+          },
+        );
+        if (res != null) {
+          setState(() {
+            selectedDateRange = res;
+            _applyFiltersAndCalculate();
+          });
+        }
+      },
+      child: Container(
+        height: 50,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          color: AppTheme.primaryColor.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.1)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.calendar_today_rounded, size: 18, color: AppTheme.primaryColor),
+            const SizedBox(width: 12),
+            Text(
+              "$startStr - $endStr",
+              style: const TextStyle(
+                color: AppTheme.primaryColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileFilterAnchor() {
+    return ScaleButton(
+      onTap: () {
+        showModalBottomSheet(
+          context: context,
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+          builder: (context) {
+            return StatefulBuilder(
+              builder: (context, setModalState) {
+                return Container(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text("Filtrele", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 24),
+                      _buildDropdownFilter(
+                        label: "Sürücü Seç",
+                        value: selectedDriverId,
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text("Tüm Sürücüler")),
+                          ...allUsers
+                              .where((u) => (u.data() as Map)["role"] == "driver")
+                              .map((u) => DropdownMenuItem(
+                                    value: u.id,
+                                    child: Text((u.data() as Map)["name"] ?? "Bilinmiyor"),
+                                  )),
+                        ],
+                        onChanged: (val) {
+                          setState(() {
+                            selectedDriverId = val;
+                            _applyFiltersAndCalculate();
+                          });
+                          setModalState(() {});
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      // Add more filters if needed
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryColor,
+                            padding: const EdgeInsets.all(16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text("Uygula", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                         ),
                       ),
-                    );
-                  }).toList(),
-            onChanged: (val) {
-              if (val == null) return;
-              setState(() {
-                selectedYear = val;
-                _load();
-              });
-            },
-          ),
-        ],
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+      child: Container(
+        height: 50,
+        width: 50,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[200]!),
+        ),
+        child: const Icon(Icons.tune_rounded, color: AppTheme.textPrimary),
       ),
     );
   }
 
-  Widget _buildMonthDropdown() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: DropdownButton<int?>(
-        value: selectedMonth,
-        underline: const SizedBox(),
-        icon: const Icon(Icons.arrow_drop_down, size: 20),
-        isExpanded: !isDesktop,
-        items: const [
-          DropdownMenuItem(value: null, child: Text("Tüm Aylar")),
-          DropdownMenuItem(value: 1, child: Text("Ocak")),
-          DropdownMenuItem(value: 2, child: Text("Şubat")),
-          DropdownMenuItem(value: 3, child: Text("Mart")),
-          DropdownMenuItem(value: 4, child: Text("Nisan")),
-          DropdownMenuItem(value: 5, child: Text("Mayıs")),
-          DropdownMenuItem(value: 6, child: Text("Haziran")),
-          DropdownMenuItem(value: 7, child: Text("Temmuz")),
-          DropdownMenuItem(value: 8, child: Text("Ağustos")),
-          DropdownMenuItem(value: 9, child: Text("Eylül")),
-          DropdownMenuItem(value: 10, child: Text("Ekim")),
-          DropdownMenuItem(value: 11, child: Text("Kasım")),
-          DropdownMenuItem(value: 12, child: Text("Aralık")),
-        ],
-        onChanged: (val) {
-          setState(() {
-            selectedMonth = val;
-            _load();
-          });
-        },
-      ),
+  Widget _buildExportButtons({bool isMini = false}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildIconButton(
+          icon: Icons.picture_as_pdf_outlined,
+          color: const Color(0xFFE11D48),
+          onTap: _exportPdf,
+          mini: isMini,
+        ),
+        const SizedBox(width: 12),
+        _buildIconButton(
+          icon: Icons.table_chart_outlined,
+          color: const Color(0xFF059669),
+          onTap: _exportExcel,
+          mini: isMini,
+        ),
+      ],
     );
   }
 
-  Widget _buildExportButton({
+  Widget _buildIconButton({
     required IconData icon,
-    required String label,
     required Color color,
-    required VoidCallback onPressed,
+    required VoidCallback onTap,
+    bool mini = false,
   }) {
     return ScaleButton(
-      onTap: onPressed,
+      onTap: onTap,
       child: Container(
+        padding: EdgeInsets.all(mini ? 10 : 12),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: color),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-        ),
+        child: Icon(icon, color: color, size: mini ? 20 : 24),
       ),
     );
   }
 
-  Widget _buildKpiCards() {
-    int crossAxisCount;
-    double childAspectRatio;
-    double spacing;
-
-    if (isDesktop) {
-      crossAxisCount = 4;
-      childAspectRatio = 1.6;
-      spacing = 16;
-    } else if (isTablet) {
-      crossAxisCount = 3;
-      childAspectRatio = 1.4;
-      spacing = 12;
-    } else {
-      crossAxisCount = 2;
-      childAspectRatio = 1.3;
-      spacing = 12;
-    }
-
+  Widget _buildKpiSection() {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final count = isDesktop ? 4 : (isTablet ? 2 : 2);
         return GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: crossAxisCount,
-          childAspectRatio: childAspectRatio,
-          crossAxisSpacing: spacing,
-          mainAxisSpacing: spacing,
+          crossAxisCount: count,
+          crossAxisSpacing: 20,
+          mainAxisSpacing: 20,
+          childAspectRatio: isDesktop ? 2.5 : 1.6,
           children: [
             _buildKpiCard(
-              icon: Icons.today_outlined,
-              title: "Bugünkü İşler",
-              value: todayJobs.toString(),
-              color: const Color(0xFF3B82F6),
+              title: "Tamamlanan İşler",
+              value: totalJobsCount.toString(),
+              subtitle: "Operasyon Hacmi",
+              icon: Icons.task_alt_rounded,
+              color: const Color(0xFF6366F1),
             ),
             _buildKpiCard(
-              icon: Icons.calendar_view_week_outlined,
-              title: "Haftalık İşler",
-              value: weeklyJobs.toString(),
-              color: const Color(0xFF8B5CF6),
-            ),
-            _buildKpiCard(
-              icon: Icons.calendar_month_outlined,
-              title: "Aylık İşler",
-              value: monthlyJobs.toString(),
-              color: const Color(0xFFEC4899),
-            ),
-            _buildKpiCard(
-              icon: jobChangePercent >= 0
-                  ? Icons.trending_up
-                  : Icons.trending_down,
-              title: "Geçen Yıla Göre",
-              value: "${jobChangePercent.toStringAsFixed(1)}%",
-              color: jobChangePercent >= 0
-                  ? const Color(0xFF10B981)
-                  : const Color(0xFFDC2626),
-            ),
-            _buildKpiCard(
-              icon: Icons.emoji_events_outlined,
-              title: "En Çok İş Yapan",
-              value: _driverName(topDriver),
+              title: "Toplam Mesafe",
+              value: "${totalDistanceKm.toStringAsFixed(0)} KM",
+              subtitle: "Kat Edilen Yol",
+              icon: Icons.route_rounded,
               color: const Color(0xFFF59E0B),
             ),
             _buildKpiCard(
-              icon: Icons.route_outlined,
-              title: "En Çok KM",
-              value: "${topKm.toStringAsFixed(1)} km",
-              color: const Color(0xFF10B981),
+              title: "Toplam Yük",
+              value: "${(totalWeightKg / 1000).toStringAsFixed(1)} Ton",
+              subtitle: "Taşınan Madde",
+              icon: Icons.fitness_center_rounded,
+              color: const Color(0xFFEC4899),
             ),
             _buildKpiCard(
-              icon: Icons.support_agent_outlined,
-              title: "Top Dispatch",
-              value: _dispatchName(topDispatch),
-              color: const Color(0xFF6366F1),
+              title: "Tamamlama Süresi",
+              value: "${avgCompletionTimeHours.toStringAsFixed(1)} Sa",
+              subtitle: "Ortalama Verim",
+              icon: Icons.timer_rounded,
+              color: const Color(0xFF10B981),
             ),
           ],
         );
@@ -668,56 +643,48 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   Widget _buildKpiCard({
-    required IconData icon,
     required String title,
     required String value,
+    required String subtitle,
+    required IconData icon,
     required Color color,
   }) {
-    double padding = isDesktop ? 16 : 12;
-    double iconSize = isDesktop ? 20 : 18;
-    double titleSize = isDesktop ? 12 : 10;
-    double valueSize = isDesktop ? 20 : 16;
-
     return AnimatedCard(
       child: Padding(
-        padding: EdgeInsets.all(padding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        padding: const EdgeInsets.all(20),
+        child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(16),
               ),
-              child: Icon(icon, size: iconSize, color: color),
+              child: Icon(icon, color: color, size: 30),
             ),
-            Flexible(
+            const SizedBox(width: 20),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
                     title,
-                    style: TextStyle(
-                      fontSize: titleSize,
-                      color: AppTheme.textSecondary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Colors.grey[500], fontSize: 12, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     value,
-                    style: TextStyle(
-                      fontSize: valueSize,
-                      fontWeight: FontWeight.w600,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
                       color: AppTheme.textPrimary,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
@@ -728,92 +695,150 @@ class _ReportScreenState extends State<ReportScreen> {
     );
   }
 
-  Widget _buildMonthlyChart() {
-    return _buildSection(
-      title: "Aylık İş Dağılımı",
-      icon: Icons.bar_chart_outlined,
-      child: Container(
-        height: isDesktop ? 300 : 250,
-        padding: EdgeInsets.all(isDesktop ? 24 : 16),
-        decoration: _buildBoxDecoration(),
+  Widget _buildTrendChart() {
+    return _buildSectionContainer(
+      title: "Haftalık İş Trendi",
+      subtitle: "Zaman bazlı performans analizi",
+      icon: Icons.auto_graph_rounded,
+      child: SizedBox(
+        height: 300,
+        child: LineChart(_getTrendData()),
+      ),
+    );
+  }
+
+  LineChartData _getTrendData() {
+    final Map<int, int> dayStats = {};
+    for (var doc in filteredJobs) {
+      final date = (doc.data() as Map)["timestamps"]["createdAt"] as Timestamp;
+      final weekday = date.toDate().weekday;
+      dayStats[weekday] = (dayStats[weekday] ?? 0) + 1;
+    }
+
+    List<FlSpot> spots = [];
+    for (int i = 1; i <= 7; i++) {
+      spots.add(FlSpot(i.toDouble(), (dayStats[i] ?? 0).toDouble()));
+    }
+
+    return LineChartData(
+      gridData: const FlGridData(show: false),
+      titlesData: FlTitlesData(
+        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        bottomTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            getTitlesWidget: (value, meta) {
+              const days = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+              if (value < 1 || value > 7) return const SizedBox();
+              return Text(days[value.toInt() - 1], style: TextStyle(color: Colors.grey[400], fontSize: 10));
+            },
+          ),
+        ),
+      ),
+      borderData: FlBorderData(show: false),
+      lineBarsData: [
+        LineChartBarData(
+          spots: spots,
+          isCurved: true,
+          color: AppTheme.primaryColor,
+          barWidth: 4,
+          isStrokeCapRound: true,
+          dotData: const FlDotData(show: true),
+          belowBarData: BarAreaData(
+            show: true,
+            gradient: LinearGradient(
+              colors: [AppTheme.primaryColor.withValues(alpha: 0.2), AppTheme.primaryColor.withValues(alpha: 0)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCargoPie() {
+    return _buildSectionContainer(
+      title: "Yük Dağılımı",
+      subtitle: "Taşınan mal grupları",
+      icon: Icons.pie_chart_rounded,
+      child: SizedBox(
+        height: 300,
+        child: cargoTypeDistribution.isEmpty
+            ? Center(child: Text("Veri yok", style: TextStyle(color: Colors.grey[400])))
+            : PieChart(
+                PieChartData(
+                  sections: cargoTypeDistribution.entries.map((e) {
+                    final index = cargoTypeDistribution.keys.toList().indexOf(e.key);
+                    final colors = [
+                      const Color(0xFF6366F1),
+                      const Color(0xFFEC4899),
+                      const Color(0xFFF59E0B),
+                      const Color(0xFF10B981),
+                      const Color(0xFF3B82F6),
+                    ];
+                    return PieChartSectionData(
+                      value: e.value.toDouble(),
+                      title: "${e.value}",
+                      color: colors[index % colors.length],
+                      radius: 50,
+                      titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    );
+                  }).toList(),
+                  sectionsSpace: 4,
+                  centerSpaceRadius: 50,
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildPortActivityChart() {
+    final sortedPorts = portActivity.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final topPorts = sortedPorts.take(5).toList();
+
+    return _buildSectionContainer(
+      title: "Liman Hareketliliği",
+      subtitle: "En yoğun 5 lokasyon",
+      icon: Icons.location_on_rounded,
+      child: SizedBox(
+        height: 400,
         child: BarChart(
           BarChartData(
+            gridData: const FlGridData(show: false),
             borderData: FlBorderData(show: false),
-            gridData: FlGridData(
-              show: true,
-              drawVerticalLine: false,
-              getDrawingHorizontalLine: (value) {
-                return FlLine(
-                  color: const Color(0xFFE2E8F0),
-                  strokeWidth: 1,
-                );
-              },
-            ),
             titlesData: FlTitlesData(
+              leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
               bottomTitles: AxisTitles(
                 sideTitles: SideTitles(
                   showTitles: true,
-                  getTitlesWidget: (value, meta) {
-                    const months = [
-                      "Oca",
-                      "Şub",
-                      "Mar",
-                      "Nis",
-                      "May",
-                      "Haz",
-                      "Tem",
-                      "Ağu",
-                      "Eyl",
-                      "Eki",
-                      "Kas",
-                      "Ara"
-                    ];
+                  getTitlesWidget: (val, meta) {
+                    if (val.toInt() >= topPorts.length) return const SizedBox();
                     return Padding(
-                      padding: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.only(top: 8.0),
                       child: Text(
-                        months[value.toInt()],
-                        style: TextStyle(
-                          fontSize: isDesktop ? 12 : 10,
-                          color: const Color(0xFF64748B),
-                        ),
+                        topPorts[val.toInt()].key,
+                        style: TextStyle(color: Colors.grey[500], fontSize: 10),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     );
                   },
                 ),
-              ),
-              leftTitles: AxisTitles(
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 40,
-                  getTitlesWidget: (value, meta) {
-                    return Text(
-                      value.toInt().toString(),
-                      style: TextStyle(
-                        fontSize: isDesktop ? 12 : 10,
-                        color: const Color(0xFF64748B),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              rightTitles: AxisTitles(
-                sideTitles: SideTitles(showTitles: false),
-              ),
-              topTitles: AxisTitles(
-                sideTitles: SideTitles(showTitles: false),
               ),
             ),
-            barGroups: List.generate(12, (i) {
+            barGroups: List.generate(topPorts.length, (i) {
               return BarChartGroupData(
                 x: i,
                 barRods: [
                   BarChartRodData(
-                    toY: monthlyChart[i].toDouble(),
-                    width: isDesktop ? 24 : 16,
+                    toY: topPorts[i].value.toDouble(),
                     color: AppTheme.primaryColor,
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(4),
-                    ),
+                    width: 20,
+                    borderRadius: BorderRadius.circular(4),
                   ),
                 ],
               );
@@ -824,450 +849,131 @@ class _ReportScreenState extends State<ReportScreen> {
     );
   }
 
-  Widget _buildDriverKmSection() {
-    if (driverKm.isEmpty) {
-      return _buildSection(
-        title: "Şoför KM Performansı",
-        icon: Icons.route_outlined,
-        child: _buildEmptyState("KM verisi bulunmuyor"),
-      );
-    }
-
-    final sorted = driverKm.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    final topItems = sorted.take(isDesktop ? 5 : 3).toList();
-
-    return _buildSection(
-      title: "Şoför KM Performansı",
-      icon: Icons.route_outlined,
-      child: Container(
-        padding: EdgeInsets.all(isDesktop ? 24 : 16),
-        decoration: _buildBoxDecoration(),
-        child: Column(
-          children: topItems.map((e) {
-            final name = _driverName(e.key);
-            final percentage = e.value / sorted.first.value;
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          name,
-                          style: TextStyle(
-                            fontSize: isDesktop ? 14 : 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textPrimary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Text(
-                        "${e.value.toStringAsFixed(1)} km",
-                        style: TextStyle(
-                          fontSize: isDesktop ? 14 : 13,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF059669),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: percentage,
-                      minHeight: 8,
-                      color: const Color(0xFF059669),
-                      backgroundColor: const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDispatchSection() {
-    if (dispatchJobCount.isEmpty) {
-      return _buildSection(
-        title: "Dispatch Performansı",
-        icon: Icons.support_agent_outlined,
-        child: _buildEmptyState("Dispatch verisi bulunmuyor"),
-      );
-    }
-
-    final sorted = dispatchJobCount.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    final topItems = sorted.take(isDesktop ? 5 : 3).toList();
-
-    return _buildSection(
-      title: "Dispatch Performansı",
-      icon: Icons.support_agent_outlined,
-      child: Container(
-        padding: EdgeInsets.all(isDesktop ? 24 : 16),
-        decoration: _buildBoxDecoration(),
-        child: Column(
-          children: topItems.map((e) {
-            final name = _dispatchName(e.key);
-            final percentage = e.value / sorted.first.value;
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          name,
-                          style: TextStyle(
-                            fontSize: isDesktop ? 14 : 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textPrimary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Text(
-                        "${e.value} iş",
-                        style: TextStyle(
-                          fontSize: isDesktop ? 14 : 13,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFFF59E0B),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: percentage,
-                      minHeight: 8,
-                      color: const Color(0xFFF59E0B),
-                      backgroundColor: const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDriverTable() {
-    final driverData = <String, Map<String, dynamic>>{};
-    for (final driverId in driverJobCount.keys) {
-      final jobs = driverJobCount[driverId] ?? 0;
-      final km = driverKm[driverId] ?? 0;
-      final hours = driverHours[driverId] ?? 0;
-      final avgKm = jobs > 0 ? km / jobs : 0;
-      final avgHours = jobs > 0 ? hours / jobs : 0;
-
-      String plate = "-";
-      final vehicleSet = driverVehicles[driverId];
-      if (vehicleSet != null && vehicleSet.isNotEmpty) {
-        final firstVehicleId = vehicleSet.first;
-        plate = vehiclePlateCache[firstVehicleId] ?? "-";
-      }
-
-      driverData[driverId] = {
-        'name': _driverName(driverId),
-        'plate': plate,
-        'jobs': jobs,
-        'km': km,
-        'avgKm': avgKm,
-        'avgHours': avgHours,
-      };
-    }
-
-    final sortedDrivers = driverData.entries.toList()
-      ..sort((a, b) => b.value['jobs'].compareTo(a.value['jobs']));
-
-    if (sortedDrivers.isEmpty) {
-      return _buildSection(
-        title: "Şoför Detay Tablosu",
-        icon: Icons.table_chart_outlined,
-        child: _buildEmptyState("Şoför verisi bulunmuyor"),
-      );
-    }
-
-    return _buildSection(
-      title: "Şoför Detay Tablosu",
-      icon: Icons.table_chart_outlined,
-      child: Container(
-        decoration: _buildBoxDecoration(),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: DataTable(
-            columns: [
-              _buildDataColumn("Şoför", Icons.person_outline),
-              _buildDataColumn("Plaka", Icons.car_rental_outlined),
-              _buildDataColumn("İş", Icons.work_outline),
-              _buildDataColumn("Toplam KM", Icons.route_outlined),
-              _buildDataColumn("Ort. KM/İş", Icons.analytics_outlined),
-              _buildDataColumn("Ort. Süre (saat)", Icons.timer_outlined),
-            ],
-            rows: sortedDrivers.map((entry) {
-              final data = entry.value;
-              return DataRow(
-                cells: [
-                  _buildDataTableCell(data['name']),
-                  _buildDataTableCell(data['plate']),
-                  _buildDataTableCell(data['jobs'].toString()),
-                  _buildDataTableCell("${data['km'].toStringAsFixed(1)} km"),
-                  _buildDataTableCell("${data['avgKm'].toStringAsFixed(1)} km"),
-                  _buildDataTableCell(
-                      "${data['avgHours'].toStringAsFixed(1)} saat"),
-                ],
-              );
-            }).toList(),
-          ),
-        ),
-      ),
-    );
-  }
-
-  DataColumn _buildDataColumn(String label, IconData icon) {
-    return DataColumn(
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
+  Widget _buildDriverPerformanceTable() {
+    return _buildSectionContainer(
+      title: "Sürücü Performans Sıralaması",
+      subtitle: "Tamamlanan iş bazlı sıralama",
+      icon: Icons.emoji_events_rounded,
+      child: Table(
+        columnWidths: const {
+          0: FlexColumnWidth(2),
+          1: FlexColumnWidth(1),
+          2: FlexColumnWidth(1),
+          3: FlexColumnWidth(1),
+        },
         children: [
-          Icon(icon, size: 16, color: const Color(0xFF64748B)),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textSecondary,
-              letterSpacing: 0.3,
-            ),
+          TableRow(
+            children: [
+              _buildTableHeader("Sürücü"),
+              _buildTableHeader("İş", alignRight: true),
+              _buildTableHeader("KM", alignRight: true),
+              _buildTableHeader("Yük", alignRight: true),
+            ],
           ),
+          ...driverPerformance.map((d) => TableRow(
+                children: [
+                   _buildTableCell(d["name"]),
+                   _buildTableCell(d["jobs"].toString(), alignRight: true, isBold: true),
+                   _buildTableCell("${d["km"].toStringAsFixed(0)}", alignRight: true),
+                   _buildTableCell("${(d["weight"] / 1000).toStringAsFixed(1)}T", alignRight: true),
+                ],
+              )),
         ],
       ),
     );
   }
 
-  DataCell _buildDataTableCell(String text) {
-    return DataCell(
-      Text(
+  Widget _buildTableHeader(String text, {bool alignRight = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Text(
         text,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w400,
+        textAlign: alignRight ? TextAlign.right : TextAlign.left,
+        style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.bold, fontSize: 13),
+      ),
+    );
+  }
+
+  Widget _buildTableCell(String text, {bool alignRight = false, bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Text(
+        text,
+        textAlign: alignRight ? TextAlign.right : TextAlign.left,
+        style: TextStyle(
           color: AppTheme.textPrimary,
+          fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+          fontSize: 14,
         ),
       ),
     );
   }
 
-  Widget _buildSection({
+  Widget _buildSectionContainer({
     required String title,
+    required String subtitle,
     required IconData icon,
     required Widget child,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 20, color: const Color(0xFF1E3A5F)),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: isDesktop ? 18 : 16,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.primaryColor,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        child,
-      ],
-    );
-  }
-
-  Widget _buildEmptyState(String message) {
-    return Container(
-      padding: EdgeInsets.all(isDesktop ? 48 : 32),
-      decoration: _buildBoxDecoration(),
-      child: Center(
+    return AnimatedCard(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              Icons.info_outline,
-              size: isDesktop ? 48 : 40,
-              color: Colors.grey[400],
+            Row(
+              children: [
+                Icon(icon, color: AppTheme.primaryColor, size: 20),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text(subtitle, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              style: TextStyle(
-                fontSize: isDesktop ? 14 : 13,
-                color: Colors.grey[600],
-              ),
-            ),
+            const SizedBox(height: 24),
+            child,
           ],
         ),
       ),
     );
   }
 
-  BoxDecoration _buildBoxDecoration() {
-    return BoxDecoration(
-      color: AppTheme.surfaceColor,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: const Color(0xFFE2E8F0)),
-      boxShadow: AppTheme.softShadow,
-    );
-  }
+  // --- ACTIONS ---
 
-  String _driverName(String uid) => driverIndex[uid]?["name"] ?? "Bilinmiyor";
-  String _dispatchName(String uid) =>
-      dispatchIndex[uid]?["name"] ?? "Bilinmiyor";
   Future<void> _exportPdf() async {
-    final drivers = driverJobCount.entries.map((e) {
-      final driverId = e.key;
-      final jobs = e.value;
-      final km = driverKm[driverId] ?? 0;
-      final hours = driverHours[driverId] ?? 0;
-      final avgKm = jobs > 0 ? km / jobs : 0;
-      final avgHours = jobs > 0 ? hours / jobs : 0;
-      String plate = "-";
-      final vehicleSet = driverVehicles[driverId];
-      if (vehicleSet != null && vehicleSet.isNotEmpty) {
-        final firstVehicleId = vehicleSet.first;
-        plate = vehiclePlateCache[firstVehicleId] ?? "-";
-      }
-
-      return {
-        "name": _driverName(driverId),
-        "plate": plate,
-        "jobs": jobs,
-        "km": km.toStringAsFixed(1),
-        "avgKm": avgKm.toStringAsFixed(1),
-        "avgHours": avgHours.toStringAsFixed(1),
-      };
-    }).toList();
-
-    final dispatchers = dispatchJobCount.entries.map((e) {
-      return {
-        "name": _dispatchName(e.key),
-        "jobs": e.value,
-      };
-    }).toList();
-
-    await ReportExporter.exportPdf(
-      year: selectedYear,
-      month: selectedMonth,
-      drivers: drivers,
-      dispatchers: dispatchers,
-      monthlyChart: monthlyChart,
-      today: todayJobs,
-      weekly: weeklyJobs,
-      monthly: monthlyJobs,
-      prevYearJobs: prevYearJobs,
-      jobChangePercent: jobChangePercent,
-      totalDrivers: driverIndex.length,
-      totalDispatch: dispatchIndex.length,
+    // Implement enhanced PDF logic in report_exporter.dart if needed
+    // For now call existing
+    final success = await ReportExporter.exportToPdf(
+      context: context,
+      jobs: filteredJobs,
+      users: allUsers,
+      title: "Operasyonel Analiz Raporu",
     );
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 12),
-              Text("PDF başarıyla oluşturuldu"),
-            ],
-          ),
-          backgroundColor: const Color(0xFF059669),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-      );
+    if (success) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("PDF Başarıyla Oluşturuldu")),
+        );
+      }
     }
   }
 
   Future<void> _exportExcel() async {
-    final drivers = driverJobCount.entries.map((e) {
-      final driverId = e.key;
-      final jobs = e.value;
-      final km = driverKm[driverId] ?? 0;
-      final hours = driverHours[driverId] ?? 0;
-      final avgKm = jobs > 0 ? km / jobs : 0;
-      final avgHours = jobs > 0 ? hours / jobs : 0;
-      String plate = "-";
-      final vehicleSet = driverVehicles[driverId];
-      if (vehicleSet != null && vehicleSet.isNotEmpty) {
-        final firstVehicleId = vehicleSet.first;
-        plate = vehiclePlateCache[firstVehicleId] ?? "-";
-      }
-
-      return {
-        "name": _driverName(driverId),
-        "plate": plate,
-        "jobs": jobs,
-        "km": km.toStringAsFixed(1),
-        "avgKm": avgKm.toStringAsFixed(1),
-        "avgHours": avgHours.toStringAsFixed(1),
-      };
-    }).toList();
-
-    final dispatchers = dispatchJobCount.entries.map((e) {
-      return {
-        "name": _dispatchName(e.key),
-        "jobs": e.value,
-      };
-    }).toList();
-
-    await ReportExporter.exportExcel(
-      year: selectedYear,
-      month: selectedMonth,
-      drivers: drivers,
-      dispatchers: dispatchers,
+    final success = await ReportExporter.exportToExcel(
+      context: context,
+      jobs: filteredJobs,
+      users: allUsers,
     );
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 12),
-              Text("Excel başarıyla oluşturuldu"),
-            ],
-          ),
-          backgroundColor: const Color(0xFF059669),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-      );
+    if (success) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Excel Başarıyla Oluşturuldu")),
+        );
+      }
     }
   }
 }

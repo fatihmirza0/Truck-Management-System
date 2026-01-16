@@ -64,6 +64,25 @@ class _CompanyManagementPageState extends State<CompanyManagementPage> {
     );
   }
 
+  // Search & Filter
+  final TextEditingController _searchController = TextEditingController();
+
+  List<dynamic> get _filteredCompanies {
+    if (_searchController.text.isEmpty) return _companies;
+    final query = _searchController.text.toLowerCase();
+    return _companies.where((c) {
+      final name = (c['name'] ?? '').toLowerCase();
+      final email = (c['ownerEmail'] ?? '').toLowerCase();
+      return name.contains(query) || email.contains(query);
+    }).toList();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     // Content body
@@ -71,36 +90,61 @@ class _CompanyManagementPageState extends State<CompanyManagementPage> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text("Error: $_error", style: const TextStyle(color: Colors.red)))
-              : _companies.isEmpty
-                  ? const Center(child: Text("No companies found"))
-                  : GridView.builder(
-                      padding: const EdgeInsets.all(32),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3, 
-                        childAspectRatio: 1.6,
-                        crossAxisSpacing: 24,
-                        mainAxisSpacing: 24,
+              : Column(
+                  children: [
+                    // Search Bar
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      color: Colors.white,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey[200]!)
+                        ),
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (_) => setState(() {}),
+                          decoration: const InputDecoration(
+                            hintText: "Search companies by name or email...",
+                            prefixIcon: Icon(Icons.search, color: Color(0xFF94A3B8)),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          ),
+                        ),
                       ),
-                      itemCount: _companies.length,
-                      itemBuilder: (context, index) {
-                        final company = _companies[index];
-                        // Removed FadeInUp
-                        return _CompanyCard(
-                            company: company,
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                SlidePageRoute( // Custom Transition
-                                  page: CompanyDetailPage(
-                                    companyId: company['id'],
-                                    companyName: company['name'] ?? "Unknown",
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                      },
-                    );
+                    ),
+                    const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                    
+                    // List
+                    Expanded(
+                      child: _filteredCompanies.isEmpty
+                          ? const Center(child: Text("No companies match your search"))
+                          : ListView.separated(
+                              padding: const EdgeInsets.all(24),
+                              itemCount: _filteredCompanies.length,
+                              separatorBuilder: (c, i) => const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final company = _filteredCompanies[index];
+                                return _CompanyListItem(
+                                    company: company,
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        SlidePageRoute(
+                                          page: CompanyDetailPage(
+                                            companyId: company['id'],
+                                            companyName: company['name'] ?? "Unknown",
+                                          ),
+                                        ),
+                                      ).then((_) => _fetchCompanies());
+                                    },
+                                  );
+                              },
+                            ),
+                    ),
+                  ],
+                );
 
     if (widget.isEmbedded) {
       return Column(
@@ -116,7 +160,7 @@ class _CompanyManagementPageState extends State<CompanyManagementPage> {
               child: Row(
                 children: [
                   const Text(
-                    "Companies",
+                    "System Companies",
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -125,14 +169,22 @@ class _CompanyManagementPageState extends State<CompanyManagementPage> {
                   ),
                   const Spacer(),
                   IconButton(
+                    tooltip: "Refresh List",
                     icon: const Icon(Icons.refresh_rounded, color: Color(0xFF1E293B)),
                     onPressed: _fetchCompanies,
                   ),
                   const SizedBox(width: 16),
-                  FloatingActionButton.small(
+                  ElevatedButton.icon(
                     onPressed: _showCreateCompanyDialog,
-                    backgroundColor: const Color(0xFF1E293B),
-                    child: const Icon(Icons.add_rounded),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text("Create Company"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
                   ),
                 ],
               ),
@@ -166,7 +218,7 @@ class _CompanyManagementPageState extends State<CompanyManagementPage> {
         onPressed: _showCreateCompanyDialog,
         label: const Text("New Company"),
         icon: const Icon(Icons.add_rounded),
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: const Color(0xFF0F172A),
       ),
     );
   }
@@ -295,11 +347,11 @@ class _CompanyManagementPageState extends State<CompanyManagementPage> {
   }
 }
 
-class _CompanyCard extends StatelessWidget {
+class _CompanyListItem extends StatelessWidget {
   final Map<String, dynamic> company;
   final VoidCallback onTap;
 
-  const _CompanyCard({required this.company, required this.onTap});
+  const _CompanyListItem({required this.company, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -307,115 +359,103 @@ class _CompanyCard extends StatelessWidget {
     final isActive = status == 'active';
     final plan = (company['plan'] ?? 'starter').toString().toUpperCase();
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withValues(alpha: 0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-            border: Border.all(color: isActive ? Colors.blue.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: isActive ? Colors.blue[50] : Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.business_rounded, 
-                      color: isActive ? Colors.blue[700] : Colors.grey,
-                      size: 24
-                    ),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: isActive ? Colors.blue[50] : Colors.red[50], 
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          company['name'] ?? "No Name",
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E293B),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                  child: Center(
+                    child: Text(
+                       company['name'] != null ? company['name'][0].toUpperCase() : '?',
+                       style: TextStyle(
+                          fontSize: 20, 
+                          fontWeight: FontWeight.bold, 
+                          color: isActive ? Colors.blue[700] : Colors.red[700]
+                       )
+                    )
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                         children: [
+                             Flexible(
+                               child: Text(
+                                  company['name'] ?? "No Name",
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1E293B),
+                                  ),
+                                  maxLines: 1, 
+                                  overflow: TextOverflow.ellipsis,
+                               ),
+                             ),
+                             if (!isActive)
+                                Container(
+                                   margin: const EdgeInsets.only(left: 8),
+                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                   decoration: BoxDecoration(
+                                      color: Colors.red[100],
+                                      borderRadius: BorderRadius.circular(4)
+                                   ),
+                                   child: const Text("INACTIVE", style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
+                                )
+                         ]
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        // "Plan: $plan • ${company['ownerEmail'] ?? 'No Email'}",
+                        // Simplified for cleaner look
+                        company['ownerEmail'] ?? 'No Email',
+                        style: TextStyle(fontSize: 13, color: Colors.blueGrey[400]),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Column(
+                   crossAxisAlignment: CrossAxisAlignment.end,
+                   children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(4),
                         ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: isActive ? Colors.green[50] : Colors.red[50],
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: isActive ? Colors.green[200]! : Colors.red[200]!),
-                              ),
-                              child: Text(
-                                status.toUpperCase(),
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: isActive ? Colors.green[700] : Colors.red[700],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.purple[50],
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: Colors.purple[200]!),
-                              ),
-                              child: Text(
-                                plan,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.purple[700],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              const Divider(),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Limits: ${company['limits']?['vehicleCount'] ?? 10} Veh • ${company['limits']?['dispatchCount'] ?? 3} Disp",
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                  Icon(Icons.arrow_forward_rounded, size: 16, color: Colors.grey[400]),
-                ],
-              ),
-            ],
+                        child: Text(plan, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF64748B))),
+                      ),
+                      const SizedBox(height: 4),
+                      Text("${company['limits']?['vehicleCount'] ?? 10} Veh • ${company['limits']?['dispatchCount'] ?? 3} Disp", style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+                   ]
+                ),
+                const SizedBox(width: 16),
+                Icon(Icons.chevron_right_rounded, color: Colors.grey[400]),
+              ],
+            ),
           ),
         ),
       ),

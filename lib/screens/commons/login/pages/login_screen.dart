@@ -121,7 +121,11 @@ class _LoginScreenState extends State<LoginScreen>
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        if (isDesktop) const LoginDesktopPanel(withAnimation: true),
+                        if (isDesktop) 
+                           LoginDesktopPanel(
+                             withAnimation: true,
+                             onSecretTap: _handleSecretTap,
+                           ),
                         LoginFormCard(
                           emailController: emailController,
                           passwordController: passwordController,
@@ -135,29 +139,12 @@ class _LoginScreenState extends State<LoginScreen>
                           onLogin: login,
                           isLoading: isLoading,
                           errorMessage: errorMessage,
+                          onSecretTap: _handleSecretTap,
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 20),
-                  // Developer Access Link
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const DeveloperLoginPage(),
-                        ),
-                      );
-                    },
-                    child: Text(
-                      "Geliştirici Girişi",
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.3),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -166,4 +153,29 @@ class _LoginScreenState extends State<LoginScreen>
       ),
     );
   }
+
+  // Secret Entry Logic
+  int _secretTapCount = 0;
+  DateTime? _lastTapTime;
+
+  void _handleSecretTap() {
+    final now = DateTime.now();
+    if (_lastTapTime != null && now.difference(_lastTapTime!) > const Duration(seconds: 1)) {
+       _secretTapCount = 0; // Reset if too slow
+    }
+    
+    _lastTapTime = now;
+    _secretTapCount++;
+
+    if (_secretTapCount >= 7) {
+      _secretTapCount = 0;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const DeveloperLoginPage(),
+        ),
+      );
+    }
+  }
+
 }

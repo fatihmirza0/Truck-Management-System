@@ -95,41 +95,45 @@ class _LogsAuditPageState extends State<LogsAuditPage> {
               children: [
                 // Filter Bar
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                   color: Colors.white,
                   child: Row(
                     children: [
-                      // Search
+                      // Search Box
                       Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          decoration: InputDecoration(
-                            hintText: "Search logs...",
-                            prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                            filled: true,
-                            fillColor: Colors.grey[50],
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide.none,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey[200]!)
+                          ),
+                          child: TextField(
+                            controller: _searchController,
+                            decoration: const InputDecoration(
+                              hintText: "Search logs by ID, name or company...",
+                              prefixIcon: Icon(Icons.search, color: Color(0xFF94A3B8)),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                             ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           ),
                         ),
                       ),
                       const SizedBox(width: 16),
                       // Type Dropdown
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(8),
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey[200]!)
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
                             value: _selectedType,
+                            icon: const Icon(Icons.filter_list_rounded, color: Color(0xFF475569)),
                             onChanged: (val) => setState(() => _selectedType = val!),
                             items: const [
-                              DropdownMenuItem(value: 'ALL', child: Text("All Types")),
+                              DropdownMenuItem(value: 'ALL', child: Text("All Activities")),
                               DropdownMenuItem(value: 'JOB_CREATED', child: Text("Jobs")),
                               DropdownMenuItem(value: 'USER_CREATED', child: Text("Users")),
                               DropdownMenuItem(value: 'COMPANY_CREATED', child: Text("Companies")),
@@ -140,13 +144,14 @@ class _LogsAuditPageState extends State<LogsAuditPage> {
                     ],
                   ),
                 ),
-                const Divider(height: 1),
+                const Divider(height: 1, color: Color(0xFFE2E8F0)),
                 
                 // List
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(24),
                     itemCount: _filteredLogs.length,
+                    separatorBuilder: (c, i) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final log = _filteredLogs[index];
                       return _LogCard(log: log);
@@ -170,7 +175,7 @@ class _LogsAuditPageState extends State<LogsAuditPage> {
               child: Row(
                 children: [
                   const Text(
-                    "Logs & Audit",
+                    "System Audit",
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -193,7 +198,7 @@ class _LogsAuditPageState extends State<LogsAuditPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text("Logs & Audit", style: TextStyle(color: Color(0xFF1E293B), fontWeight: FontWeight.bold)),
+        title: const Text("System Audit", style: TextStyle(color: Color(0xFF1E293B), fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 0,
         leading: BackButton(color: const Color(0xFF1E293B), onPressed: () {
@@ -219,7 +224,7 @@ class _LogCard extends StatelessWidget {
     if (timestamp == null) return '';
     try {
       final date = DateTime.parse(timestamp);
-      return DateFormat('MMMM d, yyyy • h:mm a').format(date);
+      return DateFormat('EEE, MMM d • h:mm a').format(date);
     } catch (e) {
       return timestamp;
     }
@@ -230,81 +235,122 @@ class _LogCard extends StatelessWidget {
     final type = log['type'] ?? 'INFO';
     Color color;
     IconData icon;
+    Color bgColor;
 
     switch (type) {
       case 'JOB_CREATED':
-        color = Colors.blue;
-        icon = Icons.work_outline;
+        color = const Color(0xFF2563EB); // Blue
+        bgColor = const Color(0xFFEFF6FF);
+        icon = Icons.work_rounded;
         break;
       case 'USER_CREATED':
-        color = Colors.green;
-        icon = Icons.person_add_alt_1;
+        color = const Color(0xFF16A34A); // Green
+        bgColor = const Color(0xFFF0FDF4);
+        icon = Icons.person_add_rounded;
         break;
       case 'COMPANY_CREATED':
-        color = Colors.purple;
-        icon = Icons.business;
+        color = const Color(0xFF9333EA); // Purple
+        bgColor = const Color(0xFFFAF5FF);
+        icon = Icons.business_rounded;
         break;
       default:
-        color = Colors.grey;
-        icon = Icons.info_outline;
+        color = const Color(0xFF64748B); // Slate
+        bgColor = const Color(0xFFF1F5F9);
+        icon = Icons.info_rounded;
     }
 
     // Company Name (backend should provide, else fallback to ID)
     final companyName = log['companyName'] ?? log['companyId'] ?? 'Unknown Company';
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[200]!),
+        border: Border.all(color: Colors.grey[200]!),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
       ),
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: color.withOpacity(0.1),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        title: Text(log['message'] ?? 'No Message', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(
-              _formatDate(log['timestamp']),
-               style: TextStyle(color: Colors.grey[500], fontSize: 12)
-            ),
-            const SizedBox(height: 2),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                companyName,
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 11, fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-        trailing: Icon(Icons.chevron_right, color: Colors.grey[300]),
-        onTap: () {
-          // Show raw details
-          showDialog(
-              context: context,
-              builder: (_) => AlertDialog(
-                title: Text(type),
-                content: SingleChildScrollView(
-                    child: Text(
-                        log['details'] != null
-                            ? const JsonEncoder.withIndent('  ').convert(log['details'])
-                            : 'No details available'
-                    )
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            // Show details
+            showDialog(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: Row(children: [Icon(icon, color: color), const SizedBox(width: 8), Text(type, style: const TextStyle(fontSize: 16))]),
+                  content: SingleChildScrollView(
+                      child: Text(
+                          log['details'] != null
+                              ? const JsonEncoder.withIndent('  ').convert(log['details'])
+                              : 'No structured details available'
+                      )
+                  ),
+                  actions: [TextButton(onPressed: ()=>Navigator.pop(context), child: const Text("Close"))],
+                )
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: bgColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: color, size: 20),
                 ),
-                actions: [TextButton(onPressed: ()=>Navigator.pop(context), child: const Text("Close"))],
-              )
-          );
-        },
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              log['message'] ?? 'No Message',
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF1E293B)),
+                            ),
+                          ),
+                          Text(
+                             _formatDate(log['timestamp']),
+                             style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.business, size: 12, color: Color(0xFF64748B)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  companyName,
+                                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -88,49 +88,19 @@ class LiveTrackingService {
       for (final u in users.docs) {
         final d = u.data();
 
+        // 🔥 FIX: Plakayı direkt user verisinden al
+        // activeVehicleId ile vehicles collection'a gitmeye gerek yok
         _userCache[u.id] = {
           'name': d['name'] ?? '',
           'phone': d['phone'] ?? '',
+          'plate': d['activePlate'] ?? '—', // ✅ Critical Fix
           'activeVehicleId': d['activeVehicleId'],
         };
 
         _jobStatusCache[u.id] = d['jobStatus'] ?? 'available';
       }
 
-      final Set<String> vehicleIds = _userCache.values
-          .map((v) => v['activeVehicleId'])
-          .whereType<String>() // 🔥 kilit nokta
-          .toSet();
-
-      if (vehicleIds.isNotEmpty) {
-        // 🔥 Firestore'da whereIn max 10 item alır, batch'lere böl
-        final batches = <List<String>>[];
-        final idList = vehicleIds.toList(); // List<String>
-
-        for (int i = 0; i < idList.length; i += 10) {
-          batches.add(idList.sublist(i, i + 10 > idList.length ? idList.length : i + 10));
-        }
-
-        for (final batch in batches) {
-          final vehiclesSnap = await _firestore
-              .collection('vehicles')
-              .where('companyId', isEqualTo: companyId) // 🔥 SAAS
-              .where(FieldPath.documentId, whereIn: batch)
-              .get();
-
-          for (final vehicleDoc in vehiclesSnap.docs) {
-            final plate = vehicleDoc.data()['plate'] ?? '';
-
-            _userCache.forEach((driverId, data) {
-              if (data['activeVehicleId'] == vehicleDoc.id) {
-                data['plate'] = plate;
-              }
-            });
-          }
-        }
-      }
-
-      debugPrint('✅ Preloaded ${_userCache.length} drivers');
+      debugPrint('✅ Preloaded ${_userCache.length} drivers with plate data');
 
       // 🔥 Listener'ları sadece ilk kez başlat
       if (!_isActive) {
@@ -229,6 +199,7 @@ class LiveTrackingService {
                 if (_userCache.containsKey(driverId)) {
                   _userCache[driverId]!['name'] = data['name'] ?? '';
                   _userCache[driverId]!['phone'] = data['phone'] ?? '';
+                  _userCache[driverId]!['plate'] = data['activePlate'] ?? '—'; // ✅ Fix
                 }
               }
             } catch (e) {
