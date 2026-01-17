@@ -15,6 +15,7 @@ import 'jobs/pages/jobs_page.dart';
 import 'add_user/pages/add_user_page.dart';
 import 'users/pages/users_page.dart';
 import 'report_screen.dart';
+import 'vehicles/pages/vehicles_page.dart';
 
 class ManagerScreen extends StatefulWidget {
   const ManagerScreen({super.key});
@@ -49,6 +50,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
       const CompletedJobsPage(),
       const AddUserPage(),
       const UsersPage(),
+      const VehiclesPage(), // Added VehiclesPage
       const ReportScreen(),
       const ManagerLogsPage(),
     ];
@@ -61,6 +63,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
     "Tamamlanan İşler",
     "Personel Ekle",
     "Kullanıcılar",
+    "Araçlar",
     "Raporlar",
     "Denetim Kayıtları",
   ];
@@ -72,6 +75,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
     "Filtre & Export",
     "Yeni Kullanıcı",
     "Kullanıcı Listesi",
+    "Filo Yönetimi",
     "İş Raporları",
     "Logs & Audit",
   ];
@@ -83,6 +87,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
     Icons.task_alt_outlined,
     Icons.person_add_outlined,
     Icons.people_alt_outlined,
+    Icons.directions_car_filled_outlined,
     Icons.bar_chart_outlined,
     Icons.history_toggle_off_rounded,
   ];
@@ -265,8 +270,9 @@ class _ManagerScreenState extends State<ManagerScreen> {
             ),
             _mobileDrawerItem("Personel Ekle", Icons.person_add_outlined, 4),
             _mobileDrawerItem("Kullanıcılar", Icons.people_alt_outlined, 5),
-            _mobileDrawerItem("Raporlar", Icons.bar_chart_outlined, 6),
-            _mobileDrawerItem("Denetim Kayıtları", Icons.history_toggle_off_rounded, 7),
+            _mobileDrawerItem("Araçlar", Icons.directions_car_filled_outlined, 6),
+            _mobileDrawerItem("Raporlar", Icons.bar_chart_outlined, 7),
+            _mobileDrawerItem("Denetim Kayıtları", Icons.history_toggle_off_rounded, 8),
             const Spacer(),
             // Profile
             Padding(
@@ -452,8 +458,9 @@ class _ManagerScreenState extends State<ManagerScreen> {
                   _menuItem("Tamamlanan İşler", Icons.task_alt_outlined, 3),
                   _menuItem("Personel Ekle", Icons.person_add_outlined, 4),
                   _menuItem("Kullanıcılar", Icons.people_alt_outlined, 5),
-                  _menuItem("Raporlar", Icons.bar_chart_outlined, 6),
-                  _menuItem("Denetim Kayıtları", Icons.history_toggle_off_rounded, 7),
+                  _menuItem("Araçlar", Icons.directions_car_filled_outlined, 6),
+                  _menuItem("Raporlar", Icons.bar_chart_outlined, 7),
+                  _menuItem("Denetim Kayıtları", Icons.history_toggle_off_rounded, 8),
                   const Spacer(),
                   Padding(
                     padding: const EdgeInsets.all(8),

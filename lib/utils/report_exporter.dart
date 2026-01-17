@@ -255,4 +255,159 @@ class ReportExporter {
       return false;
     }
   }
+  // =========================================================
+  // DRIVER SPECIFIC EXPORT (Map<String, dynamic> support)
+  // =========================================================
+  
+  static Future<bool> exportDriverJobsToPdf({
+    required BuildContext context,
+    required List<Map<String, dynamic>> jobs,
+  }) async {
+    print("Starting PDF export for ${jobs.length} jobs...");
+    try {
+      print("Loading fonts...");
+      final font = await _fontRegular();
+      final bold = await _fontBold();
+      print("Fonts loaded.");
+      
+      Uint8List? logoBytes;
+      try {
+        print("Loading logo...");
+        logoBytes = (await rootBundle.load("assets/logo.png")).buffer.asUint8List();
+        print("Logo loaded.");
+      } catch (e) {
+        print("Logo load failed (ignoring): $e");
+      }
+
+      final pdf = pw.Document(theme: pw.ThemeData.withFont(base: font, bold: bold));
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          header: (context) => _buildHeader("Tamamlanan İşler Raporu", logoBytes),
+          footer: (context) => _buildFooter(context),
+          build: (context) => [
+             pw.SizedBox(height: 20),
+            _buildJobsTableFromMaps(jobs),
+          ],
+        ),
+      );
+      print("PDF Document created.");
+
+      print("Opening FilePicker...");
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: "PDF Kaydet",
+        fileName: "is_gecmisi_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf",
+        allowedExtensions: ["pdf"],
+        type: FileType.custom,
+      );
+      print("FilePicker result: $path");
+
+      if (path == null) return false;
+      final file = File(path);
+      print("Writing file...");
+      await file.writeAsBytes(await pdf.save());
+      print("File written successfully.");
+      return true;
+    } catch (e, stack) {
+      print("Driver PDF Export Error: $e");
+      print(stack);
+      return false;
+    }
+  }
+
+  static Future<bool> exportDriverJobsToExcel({
+    required BuildContext context,
+    required List<Map<String, dynamic>> jobs,
+  }) async {
+    try {
+      final workbook = Workbook();
+      final sheet = workbook.worksheets[0];
+      sheet.name = "İş Geçmişi";
+
+      // Headers
+      final headers = ["Tarih", "Yük", "Ağırlık (KG)", "Mesafe (KM)", "Yükleme", "Boşaltma"];
+      final style = workbook.styles.add('HeaderStyle');
+      style.bold = true;
+      style.backColor = '#DCE6F1';
+      sheet.getRangeByName('A1:F1').cellStyle = style;
+
+      for (int i = 0; i < headers.length; i++) {
+        sheet.getRangeByIndex(1, i + 1).setText(headers[i]);
+      }
+
+      for (int i = 0; i < jobs.length; i++) {
+        final j = jobs[i];
+        final row = i + 2;
+        
+        DateTime? date;
+        final ts = j["timestamps"];
+        if (ts is Map) {
+           final createdAt = ts['createdAt'];
+           if (createdAt is Timestamp) date = createdAt.toDate();
+        }
+
+        if (date != null) {
+          sheet.getRangeByIndex(row, 1).setText(DateFormat('dd.MM.yyyy').format(date));
+        }
+        
+        sheet.getRangeByIndex(row, 2).setText(j["cargoType"]?.toString() ?? "-");
+        sheet.getRangeByIndex(row, 3).setNumber(double.tryParse(j["cargoWeightKg"]?.toString() ?? "0") ?? 0);
+        sheet.getRangeByIndex(row, 4).setNumber(double.tryParse(j["distanceKm"]?.toString() ?? "0") ?? 0);
+        
+        final route = j["route"] as Map? ?? {};
+        sheet.getRangeByIndex(row, 5).setText(route["loadPort"]?.toString() ?? j["loadPort"]?.toString() ?? "-");
+        sheet.getRangeByIndex(row, 6).setText(route["unloadPort"]?.toString() ?? j["unloadPort"]?.toString() ?? "-");
+      }
+
+      for (int i = 1; i <= 6; i++) sheet.autoFitColumn(i);
+
+      final List<int> bytes = workbook.saveAsStream();
+      workbook.dispose();
+
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: "Excel Kaydet",
+        fileName: "is_gecmisi_${DateFormat('yyyyMMdd').format(DateTime.now())}.xlsx",
+        type: FileType.custom,
+        allowedExtensions: ["xlsx"],
+      );
+
+      if (path == null) return false;
+      await File(path).writeAsBytes(bytes);
+      return true;
+    } catch (e) {
+      print("Driver Excel Export Error: $e");
+      return false;
+    }
+  }
+
+  static pw.Widget _buildJobsTableFromMaps(List<Map<String, dynamic>> jobs) {
+    return pw.Table.fromTextArray(
+      headers: ["Tarih", "Yük", "Mesafe", "Ruta"],
+      data: jobs.map((d) {
+        DateTime date = DateTime.now();
+        final ts = d["timestamps"];
+        if (ts is Map) {
+           final created = ts['createdAt'];
+           if (created is Timestamp) date = created.toDate();
+        }
+        
+        final route = d["route"] as Map? ?? {};
+        final load = route["loadPort"]?.toString() ?? d["loadPort"]?.toString() ?? "-";
+        final unload = route["unloadPort"]?.toString() ?? d["unloadPort"]?.toString() ?? "-";
+
+        return [
+          DateFormat('dd.MM.yy').format(date),
+          "${d["cargoType"] ?? "-"} (${d["cargoWeightKg"] ?? 0} kg)",
+          "${d["distanceKm"] ?? 0} km",
+          "$load -> $unload",
+        ];
+      }).toList(),
+      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+      headerDecoration: const pw.BoxDecoration(color: PdfColors.blue800),
+      cellHeight: 20,
+      cellStyle: const pw.TextStyle(fontSize: 9),
+    );
+  }
 }

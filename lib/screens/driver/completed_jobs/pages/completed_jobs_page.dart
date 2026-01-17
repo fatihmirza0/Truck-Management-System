@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../widgets/completed_jobs_summary.dart';
+import '../../../../services/firestore_service.dart';
+import '../../../../utils/report_exporter.dart';
 import '../widgets/completed_jobs_search.dart';
 import '../widgets/date_filter_button.dart';
 import '../widgets/date_range_picker_dialog.dart' as custom;
@@ -60,12 +62,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   // FIRESTORE
   // ======================================================
   Stream<QuerySnapshot> _getCompletedJobs() {
-    return FirebaseFirestore.instance
-        .collection('jobs')
-        .where('status', isEqualTo: 'completed')
-        .where('driverId', isEqualTo: widget.uid)
-        .where('softDeleted', isEqualTo: false)
-        .snapshots();
+    return FirestoreService.getDriverJobs(widget.uid, 'completed');
   }
 
   // ======================================================
@@ -134,19 +131,24 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
     return true;
   }
 
+  // ======================================================
+  // FILTERING (Separated)
+  // ======================================================
+  List<Map<String, dynamic>> _getFilteredJobs(List<Map<String, dynamic>> jobs) {
+    return jobs.where(_applyFilters).toList();
+  }
+
   List<Map<String, dynamic>> _applySearchAndPagination(
-      List<Map<String, dynamic>> jobs) {
-    final filtered = jobs.where(_applyFilters).toList();
-
-    if (_searchQuery.isNotEmpty || _dateRange != null) return filtered;
-
+      List<Map<String, dynamic>> filteredJobs) {
+    
+    // Pagination
     final start = (_currentPage - 1) * _itemsPerPage;
     final end = start + _itemsPerPage;
-    if (start >= filtered.length) return [];
+    if (start >= filteredJobs.length) return [];
 
-    return filtered.sublist(
+    return filteredJobs.sublist(
       start,
-      end > filtered.length ? filtered.length : end,
+      end > filteredJobs.length ? filteredJobs.length : end,
     );
   }
 
@@ -201,11 +203,24 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
             return db.compareTo(da);
           });
 
-          final visibleJobs = _applySearchAndPagination(allJobs);
+          final filteredJobs = _getFilteredJobs(allJobs);
+          final visibleJobs = _searchQuery.isNotEmpty || _dateRange != null 
+              ? filteredJobs 
+              : _applySearchAndPagination(filteredJobs);
 
           return Column(
             children: [
-              CompletedJobsSummary(totalJobs: allJobs.length),
+              CompletedJobsSummary(
+                totalJobs: filteredJobs.length,
+                onExportPdf: () => ReportExporter.exportDriverJobsToPdf(
+                  context: context,
+                  jobs: filteredJobs,
+                ),
+                onExportExcel: () => ReportExporter.exportDriverJobsToExcel(
+                  context: context,
+                  jobs: filteredJobs,
+                ),
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(

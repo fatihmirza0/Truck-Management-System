@@ -3,10 +3,14 @@ import 'package:flutter/material.dart';
 
 class CompletedJobsSummary extends StatelessWidget {
   final int totalJobs;
+  final VoidCallback onExportPdf;
+  final VoidCallback onExportExcel;
 
   const CompletedJobsSummary({
     super.key,
     required this.totalJobs,
+    required this.onExportPdf,
+    required this.onExportExcel,
   });
 
   static const Color border = Color(0xFFE2E8F0);
@@ -35,6 +39,36 @@ class CompletedJobsSummary extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _SummaryRow(label: "Toplam İş", value: totalJobs.toString()),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onExportPdf,
+                  icon: const Icon(Icons.picture_as_pdf, size: 16),
+                  label: const Text("PDF"),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red[700],
+                    side: BorderSide(color: Colors.red[200]!),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onExportExcel,
+                  icon: const Icon(Icons.table_chart, size: 16),
+                  label: const Text("Excel"),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.green[700],
+                    side: BorderSide(color: Colors.green[200]!),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

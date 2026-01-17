@@ -362,6 +362,12 @@ class FirestoreService {
           'ownership': d['ownership'] ?? '-',
           'assignedDriverId': d['assignedDriverId'],
           'isActive': d['isActive'] ?? true,
+          'status': d['status'],
+          'insurancePolicyNumber': d['insurancePolicyNumber'],
+          'insuranceExpiryDate': d['insuranceExpiryDate'],
+          'lastMaintenanceDate': d['lastMaintenanceDate'],
+          'lastMaintenanceKm': d['lastMaintenanceKm'],
+          'currentKm': d['currentKm'],
         };
       }).toList();
     } catch (e) {
@@ -405,6 +411,12 @@ class FirestoreService {
     required String type,
     required String ownership,
     String? assignedDriverId,
+    String status = 'active', // active, maintenance, out_of_service
+    String? insurancePolicyNumber,
+    DateTime? insuranceExpiryDate,
+    DateTime? lastMaintenanceDate,
+    double? lastMaintenanceKm,
+    double? currentKm,
   }) async {
     final companyId = await getCompanyId(); // 🔥 SAAS
     if (companyId == null) throw Exception('Company ID bulunamadı');
@@ -417,12 +429,52 @@ class FirestoreService {
         'ownership': ownership,
         'assignedDriverId': assignedDriverId,
         'isActive': true,
+        'status': status,
+        'insurancePolicyNumber': insurancePolicyNumber,
+        'insuranceExpiryDate': insuranceExpiryDate != null ? Timestamp.fromDate(insuranceExpiryDate) : null,
+        'lastMaintenanceDate': lastMaintenanceDate != null ? Timestamp.fromDate(lastMaintenanceDate) : null,
+        'lastMaintenanceKm': lastMaintenanceKm,
+        'currentKm': currentKm,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       return vehicleRef.id;
     } catch (e) {
       print('Create vehicle error: $e');
+      rethrow;
+    }
+  }
+
+  /// Update vehicle details
+  static Future<void> updateVehicle({
+    required String vehicleId,
+    required String plate,
+    required String type,
+    required String ownership,
+    String? assignedDriverId,
+    String status = 'active',
+    String? insurancePolicyNumber,
+    DateTime? insuranceExpiryDate,
+    DateTime? lastMaintenanceDate,
+    double? lastMaintenanceKm,
+    double? currentKm,
+  }) async {
+    try {
+      await _firestore.collection('vehicles').doc(vehicleId).update({
+        'plate': plate.trim().toUpperCase(),
+        'type': type,
+        'ownership': ownership,
+        'assignedDriverId': assignedDriverId,
+        'status': status,
+        'insurancePolicyNumber': insurancePolicyNumber,
+        'insuranceExpiryDate': insuranceExpiryDate != null ? Timestamp.fromDate(insuranceExpiryDate) : null,
+        'lastMaintenanceDate': lastMaintenanceDate != null ? Timestamp.fromDate(lastMaintenanceDate) : null,
+        'lastMaintenanceKm': lastMaintenanceKm,
+        'currentKm': currentKm,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('Update vehicle error: $e');
       rethrow;
     }
   }
