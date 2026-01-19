@@ -1,6 +1,7 @@
 // 📁 lib/screens/driver/completed_job_detail/widgets/documents_grid.dart
 import 'package:flutter/material.dart';
 import 'detail_card.dart';
+import '../../../dispatch/dispatch_job_detail/widgets/storage_helper.dart';
 
 class DocumentsGrid extends StatelessWidget {
   final List<String> documents;
@@ -58,28 +59,45 @@ class DocumentsGrid extends StatelessWidget {
         ),
         itemBuilder: (context, i) {
           final url = documents[i];
-          return GestureDetector(
-            onTap: () => _openImage(context, url),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                color: bg,
-                child: Image.network(
-                  url,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    );
-                  },
-                  errorBuilder: (_, __, ___) => const Icon(
-                    Icons.broken_image_outlined,
-                    color: textMuted,
+          return FutureBuilder<String>(
+            future: StorageHelper.getDownloadUrl(url),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                );
+              }
+              
+              final displayUrl = snapshot.data ?? url;
+
+              return GestureDetector(
+                onTap: () => _openImage(context, displayUrl),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    color: bg,
+                    child: Image.network(
+                      displayUrl,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        );
+                      },
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.broken_image_outlined,
+                        color: textMuted,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           );
         },
       ),

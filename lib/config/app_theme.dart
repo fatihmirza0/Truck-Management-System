@@ -39,7 +39,6 @@ class AppTheme {
         brightness: Brightness.light,
         primary: primaryColor,
         surface: surfaceColor,
-        background: backgroundColor,
       ),
       scaffoldBackgroundColor: backgroundColor,
 

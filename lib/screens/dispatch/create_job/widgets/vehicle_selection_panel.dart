@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lojistik/services/firestore_service.dart';
 import 'package:lojistik/config/app_theme.dart';
 import 'package:lojistik/widgets/animated/animated_widgets.dart';
+import 'package:lojistik/models/vehicle_model.dart';
 
 class VehicleSelectionPanel extends StatelessWidget {
   final Animation<double> animation;
@@ -12,7 +13,7 @@ class VehicleSelectionPanel extends StatelessWidget {
   final String selectedDriverUid;
   final Function(String) onSearchChanged;
   final VoidCallback onClose;
-  final Function(Map<String, dynamic>) onSelectVehicle;
+  final Function(Vehicle) onSelectVehicle;
 
   const VehicleSelectionPanel({
     super.key,
@@ -159,7 +160,7 @@ class VehicleSelectionPanel extends StatelessWidget {
   }
 
   Widget _buildVehicleList() {
-    return FutureBuilder<List<Map<String, dynamic>>>(
+    return FutureBuilder<List<Vehicle>>(
       future: FirestoreService.fetchVehiclesByDriver(selectedDriverUid),
       builder: (context, snap) {
         if (!snap.hasData) {
@@ -181,8 +182,9 @@ class VehicleSelectionPanel extends StatelessWidget {
 
         final vehicles = snap.data!.where((v) {
           if (searchQuery.isEmpty) return true;
-          return v['plate'].toString().toLowerCase().contains(searchQuery) ||
-              v['type'].toString().toLowerCase().contains(searchQuery);
+          final q = searchQuery.toLowerCase();
+          return v.plate.toLowerCase().contains(q) ||
+              v.type.toLowerCase().contains(q);
         }).toList();
 
         if (vehicles.isEmpty) {
@@ -206,7 +208,7 @@ class VehicleSelectionPanel extends StatelessWidget {
           itemCount: vehicles.length,
           itemBuilder: (context, i) {
             final vehicle = vehicles[i];
-            final isSelected = vehicle['vehicleId'] == selectedVehicleId;
+            final isSelected = vehicle.id == selectedVehicleId;
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -247,7 +249,7 @@ class VehicleSelectionPanel extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              vehicle['plate'],
+                              vehicle.plate,
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
@@ -256,7 +258,7 @@ class VehicleSelectionPanel extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              vehicle['type'],
+                              vehicle.type,
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppTheme.textSecondary,

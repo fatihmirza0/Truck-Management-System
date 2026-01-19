@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:lojistik/config/app_theme.dart';
 import 'package:lojistik/widgets/animated/animated_widgets.dart';
+import 'package:lojistik/models/job_model.dart';
 
 class JobCard extends StatelessWidget {
-  final Map<String, dynamic> job;
+  final Job job;
   final String jobId;
   final String Function(String?) userName;
   final String Function(String?) vehiclePlate;
@@ -24,9 +25,7 @@ class JobCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = job['status'] ?? 'pending';
-    final cargo = job['cargo'] as Map<String, dynamic>?;
-    final route = job['route'] as Map<String, dynamic>?;
+    final status = job.status;
 
     return SlideInWidget(
       child: AnimatedCard(
@@ -55,7 +54,7 @@ class JobCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          job['referenceNo'] ?? "-",
+                          job.referenceNo,
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
@@ -72,7 +71,7 @@ class JobCard extends StatelessWidget {
               const SizedBox(height: 14),
 
               // Route Visual
-              _buildRouteVisual(route),
+              _buildRouteVisual(job),
 
               const SizedBox(height: 14),
               const Divider(height: 1, color: Color(0xFFF1F5F9)),
@@ -85,14 +84,14 @@ class JobCard extends StatelessWidget {
                     child: _buildInfoItem(
                       Icons.person_outline,
                       "Şoför",
-                      userName(job['driverId']),
+                      userName(job.driverId),
                     ),
                   ),
                   Expanded(
                     child: _buildInfoItem(
                       Icons.local_shipping_outlined,
                       "Plaka",
-                      vehiclePlate(job['vehicleId']),
+                      vehiclePlate(job.vehicleId),
                     ),
                   ),
                 ],
@@ -104,14 +103,14 @@ class JobCard extends StatelessWidget {
                     child: _buildInfoItem(
                       Icons.inventory_2_outlined,
                       "Yük",
-                      cargo?['type'] ?? "-",
+                      job.cargoType,
                     ),
                   ),
                   Expanded(
                     child: _buildInfoItem(
                       Icons.scale_outlined,
                       "Ağırlık",
-                      "${cargo?['weightKg'] ?? 0} kg",
+                      "${job.cargoWeightKg} kg",
                     ),
                   ),
                 ],
@@ -229,13 +228,13 @@ class JobCard extends StatelessWidget {
     );
   }
 
-  Widget _buildRouteVisual(Map<String, dynamic>? route) {
+  Widget _buildRouteVisual(Job job) {
     return Column(
       children: [
         _buildRoutePoint(
           Icons.location_on_rounded,
           AppTheme.primaryColor,
-          route?['loadPort'] ?? "Yükleme Noktası",
+          job.loadPort,
           true,
         ),
         Padding(
@@ -258,7 +257,7 @@ class JobCard extends StatelessWidget {
         _buildRoutePoint(
           Icons.flag_rounded,
           const Color(0xFF64748B),
-          route?['unloadPort'] ?? "Varış Noktası",
+          job.unloadPort,
           false,
         ),
       ],

@@ -62,7 +62,7 @@ class AuthService {
   }
 
   /// Kayıtlı kullanıcı bilgilerini al
-  static Future<Map<String, String?>> getSavedUserData() async {
+  static Future<Map<String, dynamic>> getSavedUserData() async {
     final prefs = await SharedPreferences.getInstance();
     return {
       'uid': prefs.getString(_keyUserId),

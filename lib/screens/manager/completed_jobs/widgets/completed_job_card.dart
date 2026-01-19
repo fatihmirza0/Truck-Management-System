@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:lojistik/models/job_model.dart';
 import '../../../../widgets/animated/animated_widgets.dart';
 
 class CompletedJobCard extends StatelessWidget {
-  final Map<String, dynamic> job;
+  final Job job;
   final String driverName;
   final String dateStr;
   final VoidCallback onTap;
@@ -24,8 +25,6 @@ class CompletedJobCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final route = job["route"] as Map<String, dynamic>?;
-
     return SlideInWidget(
       delay: Duration(milliseconds: 50 * index),
       child: AnimatedCard(
@@ -66,7 +65,7 @@ class CompletedJobCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              (job["referenceNo"] ?? "-").toString(),
+                              job.referenceNo,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -145,7 +144,7 @@ class CompletedJobCard extends StatelessWidget {
                   _infoRow(
                     Icons.route_outlined,
                     "GÜZERGAH",
-                    "${route?["loadPort"] ?? "-"} → ${route?["unloadPort"] ?? "-"}",
+                    "${job.loadPort} → ${job.unloadPort}",
                   ),
                   const SizedBox(height: 20),
                   const Divider(height: 1),

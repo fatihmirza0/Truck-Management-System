@@ -2,13 +2,18 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:lojistik/services/firestore_Service.dart';
+import 'package:lojistik/services/firestore_service.dart';
+import 'package:lojistik/services/auth_service.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lojistik/screens/dispatch/dispatch_job_detail/pages/dispatch_job_detail_page.dart';
 import '../widgets/jobs_page_header.dart';
 import '../widgets/jobs_search_bar.dart';
 import '../widgets/jobs_status_tabs.dart';
 import '../widgets/job_card.dart';
 import '../widgets/empty_state.dart';
+import '../../../../models/job_model.dart';
+import '../../../../models/user_model.dart';
+import '../../../../models/vehicle_model.dart';
 
 class DispatchJobsPage extends StatefulWidget {
   const DispatchJobsPage({super.key});
@@ -23,8 +28,8 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
   String _selectedStatus = FirestoreService.statusPending;
 
   bool _loading = true;
-  final Map<String, String> _driverNameCache = {};
-  final Map<String, String> _vehiclePlateCache = {};
+  final Map<String, AppUser> _driverCache = {};
+  final Map<String, Vehicle> _vehicleCache = {};
 
   bool get isDesktop => MediaQuery.of(context).size.width > 900;
 
@@ -47,53 +52,52 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
 
   Future<void> _loadCaches() async {
     try {
-      final driverCache = await FirestoreService.fetchDriverCache();
-      final vehicleCache = await FirestoreService.fetchVehicleCache();
+      final companyId = await FirestoreService.getCompanyId();
+      if (companyId == null) return;
+
+      final drivers = await FirebaseFirestore.instance
+          .collection('users')
+          .where('companyId', isEqualTo: companyId)
+          .where('role', isEqualTo: 'driver')
+          .get();
+
+      final vehicles = await FirebaseFirestore.instance
+          .collection('vehicles')
+          .where('companyId', isEqualTo: companyId)
+          .get();
 
       setState(() {
-        _driverNameCache.addAll(driverCache);
-        _vehiclePlateCache.addAll(vehicleCache);
+        for (var doc in drivers.docs) {
+          _driverCache[doc.id] = AppUser.fromFirestore(doc);
+        }
+        for (var doc in vehicles.docs) {
+          _vehicleCache[doc.id] = Vehicle.fromFirestore(doc);
+        }
         _loading = false;
       });
     } catch (e) {
-      print('Cache load error: $e');
+      debugPrint('Cache load error: $e');
       setState(() => _loading = false);
     }
   }
 
-  Stream<QuerySnapshot> _jobsStream() {
-    final currentUid = FirebaseAuth.instance.currentUser?.uid;
-    if (currentUid == null) {
-      return const Stream.empty();
-    }
-
-    return FirestoreService.getDispatchJobsStream(
-      userId: currentUid,
+  Stream<List<Job>> _jobsStream() {
+    return FirestoreService.getJobsStream(
       status: _selectedStatus,
     );
   }
 
-  List<QueryDocumentSnapshot> _filterJobs(List<QueryDocumentSnapshot> docs) {
-    if (_searchQuery.isEmpty) return docs;
+  List<Job> _filterJobs(List<Job> jobs) {
+    if (_searchQuery.isEmpty) return jobs;
 
-    return docs.where((doc) {
-      final job = doc.data() as Map<String, dynamic>;
-
-      final driverId = job["driverId"];
-      final driverName = _driverNameCache[driverId]?.toLowerCase() ?? "";
-
-      final vehicleId = job["vehicleId"];
-      final vehiclePlate = _vehiclePlateCache[vehicleId]?.toLowerCase() ?? "";
-
-      final route = job["route"] as Map<String, dynamic>? ?? {};
-      final loadPort = route["loadPort"]?.toString().toLowerCase() ?? "";
-      final unloadPort = route["unloadPort"]?.toString().toLowerCase() ?? "";
-
-      final cargo = job["cargo"] as Map<String, dynamic>? ?? {};
-      final cargoType = cargo["type"]?.toString().toLowerCase() ?? "";
-      final cargoDesc = cargo["description"]?.toString().toLowerCase() ?? "";
-
-      final refNo = job["referenceNo"]?.toString().toLowerCase() ?? "";
+    return jobs.where((job) {
+      final driverName = _driverCache[job.driverId]?.name.toLowerCase() ?? "";
+      final vehiclePlate = _vehicleCache[job.vehicleId]?.plate.toLowerCase() ?? "";
+      final loadPort = job.loadPort.toLowerCase();
+      final unloadPort = job.unloadPort.toLowerCase();
+      final cargoType = job.cargoType.toLowerCase();
+      final cargoDesc = job.cargoDescription.toLowerCase();
+      final refNo = job.referenceNo.toLowerCase();
 
       return driverName.contains(_searchQuery) ||
           vehiclePlate.contains(_searchQuery) ||
@@ -105,15 +109,15 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
     }).toList();
   }
 
-  void _openDetail(Map<String, dynamic> job, String jobId) {
+  void _openDetail(Job job) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => DispatchJobDetailPage(
-          jobId: jobId,
-          data: job,
-          driverName: _driverNameCache[job["driverId"]] ?? "Bilinmiyor",
-          vehiclePlate: _vehiclePlateCache[job["vehicleId"]] ?? "Bilinmiyor",
+          jobId: job.id,
+          job: job,
+          driverName: _driverCache[job.driverId]?.name ?? "Bilinmiyor",
+          vehiclePlate: _vehicleCache[job.vehicleId]?.plate ?? "Bilinmiyor",
         ),
       ),
     );
@@ -148,7 +152,7 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
 
             // 📦 Jobs List/Grid
             Expanded(
-              child: StreamBuilder<QuerySnapshot>(
+              child: StreamBuilder<List<Job>>(
                 stream: _jobsStream(),
                 builder: (context, snapshot) {
                   if (_loading) {
@@ -167,7 +171,7 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
                     );
                   }
 
-                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
                     return EmptyState(
                       icon: Icons.inbox_outlined,
                       title: "Henüz İş Yok",
@@ -175,8 +179,8 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
                     );
                   }
 
-                  final allDocs = snapshot.data!.docs;
-                  final filtered = _filterJobs(allDocs);
+                  final allJobs = snapshot.data!;
+                  final filtered = _filterJobs(allJobs);
 
                   if (_searchQuery.isNotEmpty && filtered.isEmpty) {
                     return EmptyState(
@@ -198,7 +202,7 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
     );
   }
 
-  Widget _buildDesktopGrid(List<QueryDocumentSnapshot> docs) {
+  Widget _buildDesktopGrid(List<Job> jobs) {
     return GridView.builder(
       padding: const EdgeInsets.only(bottom: 32),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -207,35 +211,33 @@ class _DispatchJobsPageState extends State<DispatchJobsPage> {
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
       ),
-      itemCount: docs.length,
+      itemCount: jobs.length,
       itemBuilder: (context, index) {
-        final doc = docs[index];
-        final job = doc.data() as Map<String, dynamic>;
+        final job = jobs[index];
         return JobCard(
           job: job,
-          jobId: doc.id,
-          driverName: _driverNameCache[job["driverId"]] ?? "Bilinmiyor",
-          vehiclePlate: _vehiclePlateCache[job["vehicleId"]] ?? "Bilinmiyor",
-          onTap: () => _openDetail(job, doc.id),
+          jobId: job.id,
+          driverName: _driverCache[job.driverId]?.name ?? "Bilinmiyor",
+          vehiclePlate: _vehicleCache[job.vehicleId]?.plate ?? "Bilinmiyor",
+          onTap: () => _openDetail(job),
         );
       },
     );
   }
 
-  Widget _buildMobileList(List<QueryDocumentSnapshot> docs) {
+  Widget _buildMobileList(List<Job> jobs) {
     return ListView.separated(
-      itemCount: docs.length,
+      itemCount: jobs.length,
       padding: const EdgeInsets.only(bottom: 32),
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        final doc = docs[index];
-        final job = doc.data() as Map<String, dynamic>;
+        final job = jobs[index];
         return JobCard(
           job: job,
-          jobId: doc.id,
-          driverName: _driverNameCache[job["driverId"]] ?? "Bilinmiyor",
-          vehiclePlate: _vehiclePlateCache[job["vehicleId"]] ?? "Bilinmiyor",
-          onTap: () => _openDetail(job, doc.id),
+          jobId: job.id,
+          driverName: _driverCache[job.driverId]?.name ?? "Bilinmiyor",
+          vehiclePlate: _vehicleCache[job.vehicleId]?.plate ?? "Bilinmiyor",
+          onTap: () => _openDetail(job),
         );
       },
     );

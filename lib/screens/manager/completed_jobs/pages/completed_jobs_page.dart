@@ -1,20 +1,14 @@
-import 'dart:io';
-
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:open_filex/open_filex.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
-
 import 'package:lojistik/services/firestore_service.dart';
+import 'package:lojistik/utils/report_exporter.dart';
 import '../../../dispatch/dispatch_job_detail/pages/dispatch_job_detail_page.dart';
 import '../widgets/completed_jobs_header.dart';
 import '../widgets/completed_jobs_filters.dart';
 import '../widgets/completed_jobs_list_view.dart';
+import '../../../../models/job_model.dart';
+import '../../../../models/user_model.dart';
+import '../../../../models/vehicle_model.dart';
 
 class CompletedJobsPage extends StatefulWidget {
   const CompletedJobsPage({super.key});
@@ -42,10 +36,9 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   DateTime? _startDate;
   DateTime? _endDate;
   String? _selectedDriverId;
-  String? _companyId;
 
-  Map<String, Map<String, dynamic>> userCache = {};
-  Map<String, Map<String, dynamic>> vehicleCache = {};
+  final Map<String, AppUser> _driverCache = {};
+  final Map<String, Vehicle> _vehicleCache = {};
 
   bool exportingPdf = false;
   bool exportingExcel = false;
@@ -60,37 +53,26 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   }
 
   Future<void> _loadCache() async {
-    userCache.clear();
-    vehicleCache.clear();
+    _driverCache.clear();
+    _vehicleCache.clear();
 
     try {
       final cid = await FirestoreService.getCompanyId();
-      if (mounted) {
-        setState(() {
-          _companyId = cid;
-        });
-      }
-
       if (cid == null) return;
 
-      final users = await FirebaseFirestore.instance
-          .collection("users")
-          .where("companyId", isEqualTo: cid) // 🔥 SAAS
-          .where("softDeleted", isEqualTo: false)
-          .get();
+      final drivers = await FirestoreService.fetchAllUsers();
+      final vehicles = await FirestoreService.fetchAllVehicles();
 
-      final vehicles = await FirebaseFirestore.instance
-          .collection("vehicles")
-          .where("companyId", isEqualTo: cid) // 🔥 SAAS
-          .where("isActive", isEqualTo: true)
-          .get();
-
-      for (var u in users.docs) {
-        userCache[u.id] = u.data();
-      }
-      for (var v in vehicles.docs) {
-        vehicleCache[v.id] = v.data();
-      }
+      setState(() {
+        for (var u in drivers) {
+          if (u.role == "driver") {
+            _driverCache[u.uid] = u;
+          }
+        }
+        for (var v in vehicles) {
+          _vehicleCache[v.id] = v;
+        }
+      });
     } catch (e) {
       debugPrint("Cache load error: $e");
     }
@@ -102,46 +84,31 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   // HELPERS
   // --------------------------------------------------
   String userName(String? uid) =>
-      uid == null ? "-" : (userCache[uid]?["name"] ?? "-");
+      uid == null ? "-" : (_driverCache[uid]?.name ?? "-");
 
   String vehiclePlate(String? id) =>
-      id == null ? "-" : (vehicleCache[id]?["plate"] ?? "-");
+      id == null ? "-" : (_vehicleCache[id]?.plate ?? "-");
 
-  DateTime? completedAtFromJob(Map<String, dynamic> job) {
-    return (job["timestamps"]?["completedAt"] as Timestamp?)?.toDate();
+  DateTime? completedAtFromJob(Job job) {
+    return job.timestamps.completedAt;
   }
 
   String formatDateShort(DateTime d) {
     return "${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}";
   }
 
-  String formatTimestamp(Timestamp t) => formatDateShort(t.toDate());
-
-  void _toast(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg)),
-    );
-  }
 
   // --------------------------------------------------
   // FIRESTORE
   // --------------------------------------------------
-  Stream<QuerySnapshot> _stream() {
-    if (_companyId == null) return const Stream.empty();
-
-    return FirebaseFirestore.instance
-        .collection("jobs")
-        .where("companyId", isEqualTo: _companyId) // 🔥 SAAS
-        .where("softDeleted", isEqualTo: false)
-        .where("status", isEqualTo: "completed")
-        .orderBy("timestamps.completedAt", descending: true)
-        .snapshots();
+  Stream<List<Job>> _stream() {
+    return FirestoreService.getJobsStream(status: "completed");
   }
 
   // --------------------------------------------------
   // FILTER
   // --------------------------------------------------
-  List<QueryDocumentSnapshot> _applyFilters(List<QueryDocumentSnapshot> docs) {
+  List<Job> _applyFilters(List<Job> jobs) {
     final DateTime? start = _startDate == null
         ? null
         : DateTime(_startDate!.year, _startDate!.month, _startDate!.day);
@@ -150,15 +117,14 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
         ? null
         : DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
 
-    return docs.where((doc) {
-      final job = doc.data() as Map<String, dynamic>;
+    return jobs.where((job) {
       final completedAt = completedAtFromJob(job);
       if (completedAt == null) return false;
 
       if (start != null && completedAt.isBefore(start)) return false;
       if (end != null && completedAt.isAfter(end)) return false;
 
-      if (_selectedDriverId != null && job["driverId"] != _selectedDriverId) {
+      if (_selectedDriverId != null && job.driverId != _selectedDriverId) {
         return false;
       }
 
@@ -293,12 +259,9 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   // --------------------------------------------------
   // DRIVER SELECTOR
   // --------------------------------------------------
-  List<MapEntry<String, Map<String, dynamic>>> _drivers() {
-    final list =
-        userCache.entries.where((e) => e.value["role"] == "driver").toList();
-    list.sort((a, b) => (a.value["name"] ?? "")
-        .toString()
-        .compareTo((b.value["name"] ?? "").toString()));
+  List<AppUser> _drivers() {
+    final list = _driverCache.values.toList();
+    list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return list;
   }
 
@@ -396,11 +359,9 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                     child: Builder(
                       builder: (context) {
                         final q = ctrl.text.trim().toLowerCase();
-                        final list = _drivers().where((e) {
+                        final list = _drivers().where((u) {
                           if (q.isEmpty) return true;
-                          final name =
-                              (e.value["name"] ?? "").toString().toLowerCase();
-                          return name.contains(q);
+                          return u.name.toLowerCase().contains(q);
                         }).toList();
 
                         if (list.isEmpty) {
@@ -419,9 +380,9 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                               const SizedBox(height: 10),
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                           itemBuilder: (_, i) {
-                            final e = list[i];
-                            final id = e.key;
-                            final name = (e.value["name"] ?? "-").toString();
+                            final u = list[i];
+                            final id = u.uid;
+                            final name = u.name;
                             final selected = _selectedDriverId == id;
 
                             return Material(
@@ -505,19 +466,27 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   Future<void> _runPdfExport() async {
     if (exportingPdf) return;
 
+    final messenger = ScaffoldMessenger.of(context);
     setState(() => exportingPdf = true);
     try {
-      final snap = await _stream().first;
-      final filtered = _applyFilters(snap.docs);
+      final jobs = await _stream().first;
+      final filtered = _applyFilters(jobs);
 
       if (filtered.isEmpty) {
-        _toast("Export edilecek kayıt yok.");
+        messenger.showSnackBar(const SnackBar(content: Text("Export edilecek kayıt yok.")));
         return;
       }
 
-      await _exportPdf(filtered);
+      final driversList = _driverCache.values.toList();
+      if (!context.mounted) return;
+      await ReportExporter.exportToPdf(
+        context: context, 
+        jobs: filtered, 
+        users: driversList, 
+        title: "Tamamlanan İş Raporu"
+      );
     } catch (e) {
-      _toast("PDF export hatası: $e");
+      messenger.showSnackBar(SnackBar(content: Text("PDF export hatası: $e")));
     } finally {
       if (mounted) setState(() => exportingPdf = false);
     }
@@ -526,200 +495,28 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   Future<void> _runExcelExport() async {
     if (exportingExcel) return;
 
+    final messenger = ScaffoldMessenger.of(context);
     setState(() => exportingExcel = true);
     try {
-      final snap = await _stream().first;
-      final filtered = _applyFilters(snap.docs);
+      final jobs = await _stream().first;
+      final filtered = _applyFilters(jobs);
 
       if (filtered.isEmpty) {
-        _toast("Export edilecek kayıt yok.");
+        messenger.showSnackBar(const SnackBar(content: Text("Export edilecek kayıt yok.")));
         return;
       }
 
-      await _exportExcel(filtered);
+      final driversList = _driverCache.values.toList();
+      if (!context.mounted) return;
+      await ReportExporter.exportToExcel(
+        context: context, 
+        jobs: filtered, 
+        users: driversList
+      );
     } catch (e) {
-      _toast("Excel export hatası: $e");
+      messenger.showSnackBar(SnackBar(content: Text("Excel export hatası: $e")));
     } finally {
       if (mounted) setState(() => exportingExcel = false);
-    }
-  }
-
-  Future<void> _exportExcel(List<QueryDocumentSnapshot> jobs) async {
-    final workbook = xlsio.Workbook();
-    final sheet = workbook.worksheets[0];
-    sheet.name = "Completed Jobs";
-
-    final headers = [
-      "Referans",
-      "Şoför",
-      "Plaka",
-      "Yük",
-      "Kg",
-      "Tamamlanma Tarihi"
-    ];
-
-    for (int i = 0; i < headers.length; i++) {
-      sheet.getRangeByIndex(1, i + 1).setText(headers[i]);
-    }
-
-    int row = 2;
-    for (var doc in jobs) {
-      final j = doc.data() as Map<String, dynamic>;
-      final cargo = j["cargo"] as Map<String, dynamic>?;
-      final completedAt = j["timestamps"]?["completedAt"] as Timestamp?;
-
-      sheet
-          .getRangeByIndex(row, 1)
-          .setText((j["referenceNo"] ?? "-").toString());
-      sheet.getRangeByIndex(row, 2).setText(userName(j["driverId"]));
-      sheet.getRangeByIndex(row, 3).setText(vehiclePlate(j["vehicleId"]));
-      sheet.getRangeByIndex(row, 4).setText((cargo?["type"] ?? "-").toString());
-      sheet
-          .getRangeByIndex(row, 5)
-          .setNumber(((cargo?["weightKg"] ?? 0) as num).toDouble());
-      sheet.getRangeByIndex(row, 6).setText(
-            completedAt == null ? "-" : formatTimestamp(completedAt),
-          );
-      row++;
-    }
-
-    final bytes = workbook.saveAsStream();
-    workbook.dispose();
-
-    // Dinamik dosya ismi
-    String fileName = "tamamlanan_isler";
-    if (_startDate != null) {
-      fileName += "_${formatDateShort(_startDate!)}-${formatDateShort(_endDate ?? _startDate!)}";
-    }
-
-    final path = await FilePicker.platform.saveFile(
-      dialogTitle: "Excel Raporunu Kaydet",
-      fileName: "$fileName.xlsx",
-      type: FileType.custom,
-      allowedExtensions: ["xlsx"],
-    );
-
-    if (path == null) return; // Kullanıcı iptal etti
-
-    final file = File(path);
-    await file.writeAsBytes(bytes, flush: true);
-    await OpenFilex.open(file.path);
-  }
-
-  Future<void> _exportPdf(List<QueryDocumentSnapshot> jobs) async {
-    try {
-      final pdf = pw.Document();
-
-      // Fontları yükle (Türkçe karakter desteği için)
-      final fontData = await rootBundle.load("assets/fonts/Roboto-Regular.ttf");
-      final fontBoldData = await rootBundle.load("assets/fonts/Roboto-Bold.ttf");
-      final ttfBase = pw.Font.ttf(fontData);
-      final ttfBold = pw.Font.ttf(fontBoldData);
-
-      // Filtre bilgisini oluştur
-      String filterInfo = "Tüm Kayıtlar";
-      if (_startDate != null) {
-        filterInfo =
-            "Tarih: ${formatDateShort(_startDate!)} - ${formatDateShort(_endDate ?? _startDate!)}";
-      }
-      if (_selectedDriverId != null) {
-        final name = userName(_selectedDriverId);
-        if (_startDate != null) {
-          filterInfo += "  |  Şoför: $name";
-        } else {
-          filterInfo = "Şoför: $name";
-        }
-      }
-
-      pdf.addPage(
-        pw.MultiPage(
-          theme: pw.ThemeData.withFont(
-            base: ttfBase,
-            bold: ttfBold,
-          ),
-          pageFormat: const PdfPageFormat(
-            21.0 * PdfPageFormat.cm,
-            29.7 * PdfPageFormat.cm,
-            marginAll: 2.0 * PdfPageFormat.cm,
-          ),
-          header: (context) => pw.Header(
-            level: 0,
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text("Tamamlanan İş Raporu",
-                    style: pw.TextStyle(
-                        fontSize: 22, fontWeight: pw.FontWeight.bold)),
-                pw.Text(formatDateShort(DateTime.now()),
-                    style: const pw.TextStyle(fontSize: 12)),
-              ],
-            ),
-          ),
-          footer: (context) => pw.Container(
-            alignment: pw.Alignment.centerRight,
-            margin: const pw.EdgeInsets.only(top: 1.0 * PdfPageFormat.cm),
-            child: pw.Text(
-              "Sayfa ${context.pageNumber} / ${context.pagesCount}",
-              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
-            ),
-          ),
-          build: (context) => [
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(top: 8, bottom: 20),
-              child: pw.Text(filterInfo,
-                  style: pw.TextStyle(
-                    fontSize: 12,
-                    color: PdfColors.grey700,
-                  )),
-            ),
-            pw.Table.fromTextArray(
-              headerStyle:
-                  pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
-              cellStyle: const pw.TextStyle(fontSize: 10),
-              headers: ["Ref No", "Şoför", "Plaka", "Yük Tipi", "Kilo", "Tarih"],
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
-              data: jobs.map((doc) {
-                final j = doc.data() as Map<String, dynamic>;
-                final cargo = j["cargo"] as Map<String, dynamic>?;
-                final completedAt = completedAtFromJob(j);
-
-                return [
-                  (j["referenceNo"] ?? "-").toString(),
-                  userName(j["driverId"]),
-                  vehiclePlate(j["vehicleId"]),
-                  (cargo?["type"] ?? "-").toString(),
-                  (cargo?["weightKg"] ?? 0).toString(),
-                  completedAt == null ? "-" : formatDateShort(completedAt),
-                ];
-              }).toList(),
-            ),
-          ],
-        ),
-      );
-
-      final bytes = await pdf.save();
-      
-      // Dinamik dosya ismi
-      String fileName = "tamamlanan_isler_raporu";
-      if (_startDate != null) {
-        fileName += "_${formatDateShort(_startDate!)}-${formatDateShort(_endDate ?? _startDate!)}";
-      }
-
-      final path = await FilePicker.platform.saveFile(
-        dialogTitle: "PDF Raporunu Kaydet",
-        fileName: "$fileName.pdf",
-        type: FileType.custom,
-        allowedExtensions: ["pdf"],
-      );
-
-      if (path == null) return; // Kullanıcı iptal etti
-
-      final file = File(path);
-      await file.writeAsBytes(bytes, flush: true);
-      await OpenFilex.open(file.path);
-    } catch (e) {
-      debugPrint("PDF Export Error: $e");
-      _toast("PDF export hatası oluştu.");
     }
   }
 
@@ -771,10 +568,10 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                           context,
                           MaterialPageRoute(
                             builder: (_) => DispatchJobDetailPage(
-                              jobId: id,
-                              data: job,
-                              driverName: userName(job["driverId"]),
-                              vehiclePlate: vehiclePlate(job["vehicleId"]),
+                              jobId: job.id,
+                              job: job,
+                              driverName: userName(job.driverId),
+                              vehiclePlate: vehiclePlate(job.vehicleId),
                             ),
                           ),
                         );

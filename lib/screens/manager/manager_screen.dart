@@ -16,6 +16,7 @@ import 'add_user/pages/add_user_page.dart';
 import 'users/pages/users_page.dart';
 import 'report_screen.dart';
 import 'vehicles/pages/vehicles_page.dart';
+import '../subscription/pricing_page.dart';
 
 class ManagerScreen extends StatefulWidget {
   const ManagerScreen({super.key});
@@ -50,9 +51,10 @@ class _ManagerScreenState extends State<ManagerScreen> {
       const CompletedJobsPage(),
       const AddUserPage(),
       const UsersPage(),
-      const VehiclesPage(), // Added VehiclesPage
+      const VehiclesPage(),
       const ReportScreen(),
       const ManagerLogsPage(),
+      const PricingPage(), // Added PricingPage
     ];
   }
 
@@ -66,6 +68,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
     "Araçlar",
     "Raporlar",
     "Denetim Kayıtları",
+    "Paketler & Ödeme",
   ];
 
   final List<String> _subTitles = [
@@ -78,6 +81,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
     "Filo Yönetimi",
     "İş Raporları",
     "Logs & Audit",
+    "Abonelik ve Planlar",
   ];
 
   final List<IconData> _icons = [
@@ -90,6 +94,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
     Icons.directions_car_filled_outlined,
     Icons.bar_chart_outlined,
     Icons.history_toggle_off_rounded,
+    Icons.credit_card_outlined,
   ];
 
 
@@ -273,6 +278,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
             _mobileDrawerItem("Araçlar", Icons.directions_car_filled_outlined, 6),
             _mobileDrawerItem("Raporlar", Icons.bar_chart_outlined, 7),
             _mobileDrawerItem("Denetim Kayıtları", Icons.history_toggle_off_rounded, 8),
+            _mobileDrawerItem("Paketler & Ödeme", Icons.credit_card_outlined, 9),
             const Spacer(),
             // Profile
             Padding(
@@ -448,19 +454,40 @@ class _ManagerScreenState extends State<ManagerScreen> {
                           setState(() => _sidebarOpen = !_sidebarOpen),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   _sidebarHeader(),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+                  
+                  // Core Operations
                   _menuItem("Ana Sayfa", Icons.dashboard_outlined, 0),
                   _menuItem("Canlı Takip", CupertinoIcons.map, 1),
-                  _menuItem(
-                      "İş Yönetimi", Icons.dashboard_customize_outlined, 2),
+                  _menuItem("İş Yönetimi", Icons.dashboard_customize_outlined, 2),
                   _menuItem("Tamamlanan İşler", Icons.task_alt_outlined, 3),
+                  
+                  // Divider
+                  if (showText)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Divider(color: Colors.white.withOpacity(0.1), height: 1),
+                    ),
+                  
+                  // Management
                   _menuItem("Personel Ekle", Icons.person_add_outlined, 4),
                   _menuItem("Kullanıcılar", Icons.people_alt_outlined, 5),
                   _menuItem("Araçlar", Icons.directions_car_filled_outlined, 6),
+                  
+                  // Divider
+                  if (showText)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Divider(color: Colors.white.withOpacity(0.1), height: 1),
+                    ),
+                  
+                  // System & Reports
                   _menuItem("Raporlar", Icons.bar_chart_outlined, 7),
                   _menuItem("Denetim Kayıtları", Icons.history_toggle_off_rounded, 8),
+                  _menuItem("Paketler & Ödeme", Icons.credit_card_outlined, 9),
+                  
                   const Spacer(),
                   Padding(
                     padding: const EdgeInsets.all(8),
@@ -527,8 +554,8 @@ class _ManagerScreenState extends State<ManagerScreen> {
       borderRadius: BorderRadius.circular(12),
       onTap: () => setState(() => _index = idx),
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        padding: const EdgeInsets.all(14),
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        padding: const EdgeInsets.all(10),
         child: Row(
           mainAxisAlignment:
               showText ? MainAxisAlignment.start : MainAxisAlignment.center,
@@ -539,6 +566,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
                     color: selected
                         ? ManagerScreen.accent
                         : Colors.white.withValues(alpha: 0.6),
+                    size: 20,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -550,6 +578,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
                         color: selected ? Colors.white : Colors.white70,
                         fontWeight:
                             selected ? FontWeight.w600 : FontWeight.w400,
+                        fontSize: 14,
                       ),
                     ),
                   ),
@@ -560,6 +589,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
                     color: selected
                         ? ManagerScreen.accent
                         : Colors.white.withValues(alpha: 0.6),
+                    size: 20,
                   ),
                 ],
         ),

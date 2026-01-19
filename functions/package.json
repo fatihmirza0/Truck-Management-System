@@ -3,8 +3,9 @@
   "description": "Cloud Functions for Firebase",
   "scripts": {
     "lint": "eslint .",
-    "serve": "firebase emulators:start --only functions",
-    "shell": "firebase functions:shell",
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log"
@@ -12,16 +13,25 @@
   "engines": {
     "node": "20"
   },
-  "main": "index.js",
+  "main": "lib/index.js",
   "dependencies": {
+    "@paddle/paddle-node-sdk": "^3.5.0",
+    "axios": "^1.13.2",
     "cors": "^2.8.5",
     "firebase-admin": "^13.6.0",
-    "firebase-functions": "^7.0.0"
+    "firebase-functions": "^6.1.1",
+    "iyzipay": "^2.0.64",
+    "xml2js": "^0.6.2"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/node": "^25.0.9",
+    "@types/xml2js": "^0.4.14",
     "eslint": "^8.15.0",
     "eslint-config-google": "^0.14.0",
-    "firebase-functions-test": "^3.4.1"
+    "firebase-functions-test": "^3.4.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   },
   "private": true
 }

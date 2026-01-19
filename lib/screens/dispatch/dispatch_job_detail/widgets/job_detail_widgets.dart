@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:lojistik/services/firestore_Service.dart';
+import 'package:lojistik/services/firestore_service.dart';
 import 'storage_helper.dart';
 
 /// İş durumu chip'i

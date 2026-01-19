@@ -2,15 +2,20 @@
 class AppConfig {
   AppConfig._();
 
+  // API Configuration
+  static const String apiBaseUrl = 'https://us-central1-truck-dispatch-system.cloudfunctions.net';
+
   // API Endpoints
-  static const String updateLastLoginUrl =
-      'https://us-central1-truck-dispatch-system.cloudfunctions.net/updateLastLoginHttp';
-  static const String getManagerDashboardUrl =
-      'https://us-central1-truck-dispatch-system.cloudfunctions.net/getManagerDashboardData';
-  static const String getManagerLogsUrl =
-      'https://us-central1-truck-dispatch-system.cloudfunctions.net/getManagerLogs';
-  static const String updateCompanyGoalsUrl =
-      'https://us-central1-truck-dispatch-system.cloudfunctions.net/updateCompanyGoals';
+  static const String updateLastLoginUrl = '$apiBaseUrl/updateLastLoginHttp';
+  static const String getManagerDashboardUrl = '$apiBaseUrl/getManagerDashboardData';
+  static const String getManagerLogsUrl = '$apiBaseUrl/getManagerLogs';
+  static const String updateCompanyGoalsUrl = '$apiBaseUrl/updateCompanyGoals';
+  static const String createJobUrl = '$apiBaseUrl/createJobHttp';
+  static const String createDriverUrl = '$apiBaseUrl/createDriverHttp';
+  static const String createUserUrl = '$apiBaseUrl/createUserHttp';
+  static const String updateUserUrl = '$apiBaseUrl/updateUserHttp';
+  static const String softDeleteUserUrl = '$apiBaseUrl/softDeleteUserHttp';
+  static const String jobActionUrl = '$apiBaseUrl/jobActionHttp';
 
   // Timing Constants
   static const int splashScreenDelayMs = 1500;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lojistik/services/auth_service.dart';
 import 'package:lojistik/config/app_theme.dart';
 import 'package:lojistik/widgets/animated/floating_particles.dart';
@@ -61,22 +62,13 @@ class _LoginScreenState extends State<LoginScreen>
 
     if (result['success'] == true) {
       final role = result['role'];
-      final uid = result['uid'];
 
       if (role == 'manager') {
-        Navigator.pushReplacementNamed(context, '/manager');
+        context.go('/manager');
       } else if (role == 'dispatch') {
-        Navigator.pushReplacementNamed(
-          context,
-          '/dispatch',
-          arguments: {"uid": uid},
-        );
+        context.go('/dispatch');
       } else if (role == 'driver') {
-        Navigator.pushReplacementNamed(
-          context,
-          '/driver',
-          arguments: {"uid": uid},
-        );
+        context.go('/driver');
       } else {
         setState(() => errorMessage = "Bilinmeyen kullanıcı tipi");
       }

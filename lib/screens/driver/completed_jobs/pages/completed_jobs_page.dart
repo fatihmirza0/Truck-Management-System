@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../widgets/completed_jobs_summary.dart';
 import '../../../../services/firestore_service.dart';
@@ -10,6 +9,7 @@ import '../widgets/date_range_picker_dialog.dart' as custom;
 import '../widgets/completed_job_list_item.dart';
 import '../widgets/completed_jobs_empty_state.dart';
 import '../widgets/pagination_controls.dart';
+import '../../../../models/job_model.dart';
 
 class CompletedJobsPage extends StatefulWidget {
   final String uid;
@@ -61,54 +61,28 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   // ======================================================
   // FIRESTORE
   // ======================================================
-  Stream<QuerySnapshot> _getCompletedJobs() {
-    return FirestoreService.getDriverJobs(widget.uid, 'completed');
+  Stream<List<Job>> _getCompletedJobs() {
+    return FirestoreService.getJobsStream(status: 'completed');
   }
 
   // ======================================================
   // HELPERS
   // ======================================================
-  DateTime? _jobCompletedAt(Map<String, dynamic> job) {
-    final ts = (job['timestamps'] as Map?)?.cast<String, dynamic>() ?? {};
-    final completed = ts['completedAt'];
-    final reviewed = ts['reviewedAt'];
-    if (completed is Timestamp) return completed.toDate();
-    if (reviewed is Timestamp) return reviewed.toDate();
-
-    final legacy = job['completedAt'];
-    if (legacy is Timestamp) return legacy.toDate();
-
-    return null;
+  DateTime? _jobCompletedAt(Job job) {
+    return job.timestamps.completedAt ?? job.timestamps.reviewedAt;
   }
 
-  DateTime? _jobCreatedAt(Map<String, dynamic> job) {
-    final ts = (job['timestamps'] as Map?)?.cast<String, dynamic>() ?? {};
-    final created = ts['createdAt'];
-    if (created is Timestamp) return created.toDate();
-
-    final legacy = job['createdAt'];
-    if (legacy is Timestamp) return legacy.toDate();
-
-    return null;
-  }
-
-  String _loadPort(Map<String, dynamic> job) {
-    final route = (job['route'] as Map?)?.cast<String, dynamic>() ?? {};
-    return (route['loadPort'] ?? job['loadPort'] ?? '-').toString();
-  }
-
-  String _unloadPort(Map<String, dynamic> job) {
-    final route = (job['route'] as Map?)?.cast<String, dynamic>() ?? {};
-    return (route['unloadPort'] ?? job['unloadPort'] ?? '-').toString();
+  DateTime? _jobCreatedAt(Job job) {
+    return job.timestamps.createdAt;
   }
 
   // ======================================================
   // FILTER LOGIC
   // ======================================================
-  bool _applyFilters(Map<String, dynamic> job) {
+  bool _applyFilters(Job job) {
     if (_searchQuery.isNotEmpty) {
-      final load = _loadPort(job).toLowerCase();
-      final unload = _unloadPort(job).toLowerCase();
+      final load = job.loadPort.toLowerCase();
+      final unload = job.unloadPort.toLowerCase();
       if (!load.contains(_searchQuery) && !unload.contains(_searchQuery)) {
         return false;
       }
@@ -134,12 +108,12 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   // ======================================================
   // FILTERING (Separated)
   // ======================================================
-  List<Map<String, dynamic>> _getFilteredJobs(List<Map<String, dynamic>> jobs) {
+  List<Job> _getFilteredJobs(List<Job> jobs) {
     return jobs.where(_applyFilters).toList();
   }
 
-  List<Map<String, dynamic>> _applySearchAndPagination(
-      List<Map<String, dynamic>> filteredJobs) {
+  List<Job> _applySearchAndPagination(
+      List<Job> filteredJobs) {
     
     // Pagination
     final start = (_currentPage - 1) * _itemsPerPage;
@@ -178,7 +152,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: bg,
-      body: StreamBuilder<QuerySnapshot>(
+      body: StreamBuilder<List<Job>>(
         stream: _getCompletedJobs(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
@@ -189,13 +163,7 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
             );
           }
 
-          final allJobs = snapshot.data!.docs.map((doc) {
-            final m = (doc.data() as Map<String, dynamic>?) ?? {};
-            return {
-              ...m,
-              'id': doc.id,
-            };
-          }).toList();
+          final allJobs = snapshot.data!;
 
           allJobs.sort((a, b) {
             final da = _jobCompletedAt(a) ?? _jobCreatedAt(a) ?? DateTime(1970);
@@ -249,8 +217,8 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
                           final job = visibleJobs[i];
                           return CompletedJobListItem(
                             job: job,
-                            loadPort: _loadPort(job),
-                            unloadPort: _unloadPort(job),
+                            loadPort: job.loadPort,
+                            unloadPort: job.unloadPort,
                           );
                         },
                       ),
@@ -269,4 +237,3 @@ class _CompletedJobsPageState extends State<CompletedJobsPage> {
     );
   }
 }
-

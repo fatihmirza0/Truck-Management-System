@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lojistik/services/firestore_service.dart';
 import 'package:lojistik/config/app_theme.dart';
 import 'package:lojistik/widgets/animated/animated_widgets.dart';
+import 'package:lojistik/models/user_model.dart';
 
 class DriverSelectionPanel extends StatelessWidget {
   final Animation<double> animation;
@@ -11,7 +12,7 @@ class DriverSelectionPanel extends StatelessWidget {
   final String? selectedDriverUid;
   final Function(String) onSearchChanged;
   final VoidCallback onClose;
-  final Function(Map<String, dynamic>) onSelectDriver;
+  final Function(AppUser) onSelectDriver;
 
   const DriverSelectionPanel({
     super.key,
@@ -157,7 +158,7 @@ class DriverSelectionPanel extends StatelessWidget {
   }
 
   Widget _buildDriverList() {
-    return FutureBuilder<List<Map<String, dynamic>>>(
+    return FutureBuilder<List<AppUser>>(
       future: FirestoreService.fetchDrivers(),
       builder: (context, snap) {
         if (!snap.hasData) {
@@ -179,10 +180,10 @@ class DriverSelectionPanel extends StatelessWidget {
 
         final drivers = snap.data!.where((d) {
           if (searchQuery.isEmpty) return true;
-          final q = searchQuery;
-          return d['name'].toString().toLowerCase().contains(q) ||
-              d['email'].toString().toLowerCase().contains(q) ||
-              (d['activePlate'] ?? '').toString().toLowerCase().contains(q);
+          final q = searchQuery.toLowerCase();
+          return d.name.toLowerCase().contains(q) ||
+              d.email.toLowerCase().contains(q) ||
+              (d.activePlate ?? '').toLowerCase().contains(q);
         }).toList();
 
         if (drivers.isEmpty) {
@@ -206,8 +207,8 @@ class DriverSelectionPanel extends StatelessWidget {
           itemCount: drivers.length,
           itemBuilder: (context, i) {
             final driver = drivers[i];
-            final isSelected = driver['uid'] == selectedDriverUid;
-            final isBusy = (driver['jobStatus'] ?? 'available') == 'busy';
+            final isSelected = driver.uid == selectedDriverUid;
+            final isBusy = driver.jobStatus == 'busy';
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -259,7 +260,7 @@ class DriverSelectionPanel extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    driver['name'],
+                                    driver.name,
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
@@ -294,16 +295,16 @@ class DriverSelectionPanel extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              driver['email'],
+                              driver.email,
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppTheme.textSecondary,
                               ),
                             ),
-                            if (driver['activePlate'] != null) ...[
+                            if (driver.activePlate != null) ...[
                               const SizedBox(height: 2),
                               Text(
-                                "🚛 ${driver['activePlate']}",
+                                "🚛 ${driver.activePlate}",
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: AppTheme.primaryColor,

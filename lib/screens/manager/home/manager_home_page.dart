@@ -110,9 +110,9 @@ class _ManagerHomePageState extends State<ManagerHomePage> {
       );
     }
 
-    final stats = _data!['stats'];
-    final goals = _data!['goals'];
-    final recentJobs = _data!['recentJobs'] as List;
+    final stats = _data!['stats'] ?? {};
+    final goals = _data!['goals'] ?? {};
+    final recentJobs = (_data!['recentJobs'] as List?) ?? [];
     final distribution = stats['distribution'] ?? {};
 
     return Container(

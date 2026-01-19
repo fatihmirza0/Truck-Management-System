@@ -208,8 +208,27 @@ class _LogItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final type = log['type'];
-    final color = type == 'JOB_ACTIVITY' ? Colors.blue : Colors.orange;
-    final icon = type == 'JOB_ACTIVITY' ? Icons.work_outline : Icons.login_outlined;
+    final action = log['action'];
+    
+    Color color = Colors.blue;
+    IconData icon = Icons.info_outline;
+
+    if (type == 'LOGIN_ACTIVITY') {
+      color = Colors.orange;
+      icon = Icons.login_outlined;
+    } else if (action == 'created') {
+      color = Colors.green;
+      icon = Icons.add_circle_outline;
+    } else if (action == 'approved') {
+      color = Colors.teal;
+      icon = Icons.check_circle_outline;
+    } else if (action == 'rejected') {
+      color = Colors.red;
+      icon = Icons.cancel_outlined;
+    } else if (action == 'completed') {
+      color = Colors.purple;
+      icon = Icons.verified_outlined;
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -218,6 +237,13 @@ class _LogItem extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey[200]!),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -240,24 +266,35 @@ class _LogItem extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        log['message'] ?? 'Mesaj Yok',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                        maxLines: 1,
+                        log['message'] ?? 'Eylem gerçekleştirildi',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Color(0xFF1E293B),
+                        ),
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
                       _formatDate(log['timestamp']),
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                      style: TextStyle(color: Colors.grey[400], fontSize: 11),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  log['description'] ?? '',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                ),
+                if (log['details'] != null && log['details']['referenceNo'] != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      "Referans: ${log['details']['referenceNo']}",
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

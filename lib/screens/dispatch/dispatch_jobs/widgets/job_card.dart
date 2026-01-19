@@ -1,9 +1,11 @@
 // 📁 lib/pages/widgets/job_card.dart
 import 'package:flutter/material.dart';
-import 'package:lojistik/services/firestore_Service.dart';
+import 'package:lojistik/services/firestore_service.dart';
+
+import '../../../../models/job_model.dart';
 
 class JobCard extends StatelessWidget {
-  final Map<String, dynamic> job;
+  final Job job;
   final String jobId;
   final String driverName;
   final String vehiclePlate;
@@ -25,19 +27,15 @@ class JobCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = job["status"];
+    final status = job.status;
     final statusColor = FirestoreService.getStatusColor(status);
     final statusText = FirestoreService.getStatusText(status);
 
-    final route = job["route"] as Map<String, dynamic>? ?? {};
-    final loadPort = route["loadPort"] ?? "-";
-    final unloadPort = route["unloadPort"] ?? "-";
+    final loadPort = job.loadPort;
+    final unloadPort = job.unloadPort;
 
-    final cargo = job["cargo"] as Map<String, dynamic>? ?? {};
-    final cargoType = cargo["type"] ?? "-";
-    final cargoWeight = cargo["weightKg"] != null
-        ? "${cargo["weightKg"]} kg"
-        : "-";
+    final cargoType = job.cargoType;
+    final cargoWeight = "${job.cargoWeightKg} kg";
 
     return Container(
       decoration: BoxDecoration(
@@ -83,7 +81,7 @@ class JobCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            job["referenceNo"] ?? "REF-XXX",
+                            job.referenceNo,
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,

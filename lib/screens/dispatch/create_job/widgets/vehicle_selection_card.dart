@@ -2,9 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:lojistik/config/app_theme.dart';
 import 'package:lojistik/widgets/animated/animated_widgets.dart';
+import 'package:lojistik/models/vehicle_model.dart';
 
 class VehicleSelectionCard extends StatelessWidget {
-  final Map<String, dynamic>? selectedVehicle;
+  final Vehicle? selectedVehicle;
   final VoidCallback onTap;
 
   const VehicleSelectionCard({
@@ -80,7 +81,7 @@ class VehicleSelectionCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          selectedVehicle!['plate'],
+                          selectedVehicle!.plate,
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -89,7 +90,7 @@ class VehicleSelectionCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          selectedVehicle!['type'] ?? '-',
+                          selectedVehicle!.type,
                           style: const TextStyle(
                               fontSize: 12, color: AppTheme.textSecondary),
                         ),

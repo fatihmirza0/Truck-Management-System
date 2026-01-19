@@ -7,9 +7,10 @@ service cloud.firestore {
     // HELPER FUNCTIONS (SAFE & DEFENSIVE)
     // =========================================================
 
-    // 1. Check if user is authenticated
+    // 1. Check if user is authenticated and has a valid identity
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null && 
+             request.auth.token.firebase.identities.size() > 0;
     }
 
     // 2. Check if user document exists
@@ -17,55 +18,25 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
-    // 3. Safe fetch of user data (returns null if doesn't exist)
+    // 3. Safe fetch of user data
     function getUserDataSafe() {
       return userExists() 
         ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data 
         : null;
     }
 
-    // 4. Get user role safely
+    // 4. Get user role
     function getUserRole() {
       let data = getUserDataSafe();
       return data != null ? data.role : null;
     }
 
-    // 5. Get user's company ID safely
-    function getMyCompanyId() {
-      let data = getUserDataSafe();
-      return data != null ? data.companyId : null;
-    }
-
-    // 6. Check if user is Super Admin
-    function isSuperAdmin() {
-      return getUserRole() == 'super_admin';
-    }
-
-    // 7. Check if user is Manager/Admin
-    function isManager() {
-      let role = getUserRole();
-      return role == 'manager' || role == 'admin';
-    }
-
-    // 8. Granular Permission Check
-    function hasPermission(perm) {
-      let data = getUserDataSafe();
-      return data != null && perm in data.permissions;
-    }
-
-    // 9. Multi-Tenancy: Check if resource belongs to same company
+    // 5. Multi-Tenancy check
     function isSameCompany(resourceData) {
+      let myCompanyId = getUserDataSafe().companyId;
       return isSignedIn() && (
-        isSuperAdmin() || 
-        (getMyCompanyId() != null && resourceData.companyId == getMyCompanyId())
-      );
-    }
-
-    // 10. Validate new resource has correct company ID
-    function isValidNewResource() {
-      return isSignedIn() && (
-        isSuperAdmin() || 
-        (getMyCompanyId() != null && request.resource.data.companyId == getMyCompanyId())
+        getUserRole() == 'super_admin' || 
+        (myCompanyId != null && resourceData.companyId == myCompanyId)
       );
     }
 
@@ -75,104 +46,70 @@ service cloud.firestore {
 
     // --- COMPANIES ---
     match /companies/{companyId} {
-      allow create: if isSignedIn() && isSuperAdmin();
-      allow delete: if isSignedIn() && isSuperAdmin();
-      
       allow read: if isSignedIn() && (
-        isSuperAdmin() || 
-        (getMyCompanyId() != null && companyId == getMyCompanyId())
+        getUserRole() == 'super_admin' || 
+        (getUserDataSafe().companyId == companyId)
       );
-      
-      allow update: if isSignedIn() && (
-        isSuperAdmin() || 
-        (getMyCompanyId() != null && companyId == getMyCompanyId() && isManager())
-      );
+      allow write: if isSignedIn() && getUserRole() == 'super_admin';
     }
 
     // --- USERS ---
     match /users/{userId} {
-      // READ: 
-      // 1. User can ALWAYS read their own profile (even if doesn't exist yet)
-      // 2. Other users in same company can read (if both user docs exist)
       allow read: if isSignedIn() && (
-        request.auth.uid == userId ||  // ✅ Own document - always allowed
-        (userExists() && resource.data != null && isSameCompany(resource.data))
-      );
-
-      // CREATE: 
-      // Managers can create users for their company
-      // OR user can create their own profile (for onboarding)
-      allow create: if isSignedIn() && (
-        request.auth.uid == userId ||  // Self-creation
-        (isValidNewResource() && (isSuperAdmin() || isManager()))
-      );
-
-      // UPDATE:
-      // 1. User updates own profile
-      // 2. Managers update users in same company
-      allow update: if isSignedIn() && (
         request.auth.uid == userId || 
-        (userExists() && isSameCompany(resource.data) && isManager()) ||
-        isSuperAdmin()
+        isSameCompany(resource.data)
       );
-      
-      // DELETE:
-      allow delete: if isSignedIn() && (
-        (userExists() && isSameCompany(resource.data) && isManager()) ||
-        isSuperAdmin()
+      allow create: if isSignedIn() && (
+        request.auth.uid == userId ||
+        (getUserRole() in ['manager', 'admin', 'super_admin'])
       );
+      allow update: if isSignedIn() && (
+        request.auth.uid == userId ||
+        (isSameCompany(resource.data) && getUserRole() in ['manager', 'admin', 'super_admin'])
+      );
+      allow delete: if isSignedIn() && getUserRole() == 'super_admin';
     }
 
     // --- JOBS ---
     match /jobs/{jobId} {
-      allow read: if isSignedIn() && (
-        isSuperAdmin() ||
-        (
-          resource.data.companyId != null && userExists() && isSameCompany(resource.data) && (
-            isManager() || 
-            (getUserRole() == 'driver' && resource.data.driverId == request.auth.uid) ||
-            (getUserRole() == 'dispatch' && resource.data.createdBy == request.auth.uid)
-          )
-        )
-      );
-      
-      // CREATE: Only Super Admin (others must use Backend API)
-      allow create: if isSignedIn() && isSuperAdmin();
-
-      // UPDATE: Managers and Dispatchers can update checks/status
-      allow update: if isSignedIn() && userExists() && isSameCompany(resource.data) && (
-        isSuperAdmin() || 
+      allow read: if isSignedIn() && isSameCompany(resource.data);
+      allow create: if false; // Only via backend Cloud Function
+      allow update: if isSignedIn() && isSameCompany(resource.data) && (
         getUserRole() in ['manager', 'admin', 'dispatch', 'driver']
       );
 
-      // Subcollection: LOGS
       match /logs/{logId} {
-        allow read: if isSignedIn() && userExists() && 
-          isSameCompany(get(/databases/$(database)/documents/jobs/$(jobId)).data);
-        allow create: if isSignedIn() && userExists() && 
-          isSameCompany(get(/databases/$(database)/documents/jobs/$(jobId)).data);
+        allow read: if isSignedIn() && isSameCompany(get(/databases/$(database)/documents/jobs/$(jobId)).data);
+        allow create: if isSignedIn();
       }
     }
 
     // --- VEHICLES ---
     match /vehicles/{vehicleId} {
-      allow read: if isSignedIn() && userExists() && isSameCompany(resource.data);
-      
-      allow create: if isSignedIn() && userExists() && isValidNewResource() && (
-        isSuperAdmin() || 
-        getUserRole() in ['manager', 'admin', 'dispatch']
-      );
-      
-      allow update: if isSignedIn() && userExists() && isSameCompany(resource.data) && (
-        isSuperAdmin() || 
-        getUserRole() in ['manager', 'admin', 'dispatch']
-      );
+      allow read: if isSignedIn() && isSameCompany(resource.data);
+      allow write: if isSignedIn() && getUserRole() in ['manager', 'admin', 'dispatch', 'super_admin'];
     }
+
+    // --- SUBSCRIPTION & PAYMENT (READ-ONLY FOR USERS) ---
     
-    // --- NOTIFICATIONS ---
-    match /notifications/{notifId} {
-       allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-       allow write: if false; // Only backend writes
+    match /customers/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if false; // Backend only
+    }
+
+    match /subscriptions/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if false; // Backend only
+    }
+
+    match /invoices/{invoiceId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false; // Backend only
+    }
+
+    // Prevent unauthorized access to other collections
+    match /{path=**} {
+      allow read, write: if isSignedIn() && getUserRole() == 'super_admin';
     }
   }
 }

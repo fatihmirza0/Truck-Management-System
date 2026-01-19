@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:lojistik/models/job_model.dart';
 import 'completed_job_card.dart';
 
 class CompletedJobsListView extends StatelessWidget {
-  final Stream<QuerySnapshot> stream;
-  final List<QueryDocumentSnapshot> Function(List<QueryDocumentSnapshot>) applyFilters;
+  final Stream<List<Job>> stream;
+  final List<Job> Function(List<Job>) applyFilters;
   final String Function(String?) userName;
   final String Function(DateTime) formatDateShort;
-  final void Function(Map<String, dynamic> job, String id) onJobTap;
+  final void Function(Job job, String id) onJobTap;
 
   const CompletedJobsListView({
     super.key,
@@ -20,11 +20,10 @@ class CompletedJobsListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
+    return StreamBuilder<List<Job>>(
       stream: stream,
       builder: (context, snap) {
         if (snap.hasError) {
-          // Permission denied or other errors -> Show empty state (or error state)
           return _emptyState();
         }
 
@@ -36,7 +35,7 @@ class CompletedJobsListView extends StatelessWidget {
           );
         }
 
-        final filtered = applyFilters(snap.data!.docs);
+        final filtered = applyFilters(snap.data!);
 
         if (filtered.isEmpty) return _emptyState();
 
@@ -50,17 +49,16 @@ class CompletedJobsListView extends StatelessWidget {
           ),
           itemCount: filtered.length,
           itemBuilder: (context, i) {
-            final d = filtered[i];
-            final j = d.data() as Map<String, dynamic>;
+            final j = filtered[i];
             
-            final completedAt = (j["timestamps"]?["completedAt"] as Timestamp?)?.toDate();
+            final completedAt = j.timestamps.completedAt;
 
             return CompletedJobCard(
               job: j,
-              driverName: userName(j["driverId"]),
+              driverName: userName(j.driverId),
               dateStr: completedAt == null ? "-" : formatDateShort(completedAt),
               index: i,
-              onTap: () => onJobTap(j, d.id),
+              onTap: () => onJobTap(j, j.id),
             );
           },
         );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../models/vehicle_model.dart';
 import '../../../../services/firestore_service.dart';
 import '../../../../config/app_theme.dart';
 import '../../../../widgets/animated/animated_widgets.dart';
@@ -23,7 +24,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
       children: [
         _buildHeader(),
         Expanded(
-          child: StreamBuilder<List<Map<String, dynamic>>>(
+          child: StreamBuilder<List<Vehicle>>(
             stream: Stream.fromFuture(FirestoreService.fetchVehicles()),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
@@ -38,10 +39,10 @@ class _VehiclesPageState extends State<VehiclesPage> {
               
               // Filter logic
               vehicles = vehicles.where((v) {
-                final plate = (v['plate'] ?? "").toString().toLowerCase();
-                final type = (v['type'] ?? "").toString().toLowerCase();
+                final plate = v.plate.toLowerCase();
+                final type = v.type.toLowerCase();
                 final query = _searchQuery.toLowerCase();
-                final status = v['status'] ?? 'active';
+                final status = v.status;
 
                 final matchesSearch = plate.contains(query) || type.contains(query);
                 final matchesFilter = _filterStatus == 'all' || status == _filterStatus;
@@ -66,9 +67,10 @@ class _VehiclesPageState extends State<VehiclesPage> {
                   return _VehicleCard(
                     vehicle: vehicles[index],
                     onTap: () async {
+                      final vehicle = vehicles[index];
                       final result = await Navigator.push(
                         context,
-                        SlidePageRoute(page: VehicleDetailPage(vehicle: vehicles[index])),
+                        SlidePageRoute(page: VehicleDetailPage(vehicle: vehicle)),
                       );
                       if (result == true) {
                         setState(() {}); // Refresh list
@@ -269,14 +271,14 @@ class _VehiclesPageState extends State<VehiclesPage> {
 }
 
 class _VehicleCard extends StatelessWidget {
-  final Map<String, dynamic> vehicle;
+  final Vehicle vehicle;
   final VoidCallback onTap;
 
   const _VehicleCard({required this.vehicle, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final status = vehicle['status'] ?? 'active';
+    final status = vehicle.status;
     Color statusColor;
     String statusText;
     IconData statusIcon;
@@ -324,7 +326,7 @@ class _VehicleCard extends StatelessWidget {
                 Row(
                   children: [
                     Hero(
-                      tag: 'vehicle_icon_${vehicle['vehicleId']}',
+                      tag: 'vehicle_icon_${vehicle.id}',
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -346,7 +348,7 @@ class _VehicleCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          vehicle['plate'] ?? "-",
+                          vehicle.plate,
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -355,7 +357,7 @@ class _VehicleCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          vehicle['type'] ?? "-",
+                          vehicle.type,
                           style: const TextStyle(
                             fontSize: 13,
                             color: AppTheme.textSecondary,
@@ -404,15 +406,15 @@ class _VehicleCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    vehicle['assignedDriverId'] != null ? "Şoför Atandı" : "Şoför Atanmadı",
+                    vehicle.assignedDriverId != null ? "Şoför Atandı" : "Şoför Atanmadı",
                     style: TextStyle(
                       fontSize: 14,
-                      fontWeight: vehicle['assignedDriverId'] != null ? FontWeight.w600 : FontWeight.w400,
-                      color: vehicle['assignedDriverId'] != null ? AppTheme.textPrimary : AppTheme.textSecondary,
+                      fontWeight: vehicle.assignedDriverId != null ? FontWeight.w600 : FontWeight.w400,
+                      color: vehicle.assignedDriverId != null ? AppTheme.textPrimary : AppTheme.textSecondary,
                     ),
                   ),
                 ),
-                if (vehicle['assignedDriverId'] != null)
+                if (vehicle.assignedDriverId != null)
                   const Icon(Icons.chevron_right_rounded, size: 18, color: AppTheme.textSecondary),
               ],
             )

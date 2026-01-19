@@ -2,9 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:lojistik/config/app_theme.dart';
 import 'package:lojistik/widgets/animated/animated_widgets.dart';
+import 'package:lojistik/models/user_model.dart';
 
 class DriverSelectionCard extends StatelessWidget {
-  final Map<String, dynamic>? selectedDriver;
+  final AppUser? selectedDriver;
   final VoidCallback onTap;
 
   const DriverSelectionCard({
@@ -80,7 +81,7 @@ class DriverSelectionCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          selectedDriver!['name'],
+                          selectedDriver!.name,
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -89,7 +90,7 @@ class DriverSelectionCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          selectedDriver!['email'] ?? '-',
+                          selectedDriver!.email,
                           style: const TextStyle(
                               fontSize: 12, color: AppTheme.textSecondary),
                         ),

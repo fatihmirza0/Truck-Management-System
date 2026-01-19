@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:lojistik/services/firestore_Service.dart';
+import 'package:lojistik/services/firestore_service.dart';
+import 'package:lojistik/models/job_model.dart';
 import '../widgets/job_detail_widgets.dart';
 
 class DispatchJobDetailPage extends StatefulWidget {
   final String jobId;
-  final Map<String, dynamic> data;
+  final Job job;
   final String? driverName;
   final String? vehiclePlate;
 
   const DispatchJobDetailPage({
     super.key,
     required this.jobId,
-    required this.data,
+    required this.job,
     this.driverName,
     this.vehiclePlate,
   });
@@ -53,26 +54,26 @@ class _DispatchJobDetailPageState extends State<DispatchJobDetailPage> {
 
   void _initializeControllers() {
     _cargoTypeCtrl = TextEditingController(
-      text: widget.data['cargo']?['type'] ?? '',
+      text: widget.job.cargoType,
     );
     _cargoDescCtrl = TextEditingController(
-      text: widget.data['cargo']?['description'] ?? '',
+      text: widget.job.cargoDescription,
     );
     _cargoWeightCtrl = TextEditingController(
-      text: widget.data['cargo']?['weightKg']?.toString() ?? '',
+      text: widget.job.cargoWeightKg.toString(),
     );
     _loadPortCtrl = TextEditingController(
-      text: widget.data['route']?['loadPort'] ?? '',
+      text: widget.job.loadPort,
     );
     _unloadPortCtrl = TextEditingController(
-      text: widget.data['route']?['unloadPort'] ?? '',
+      text: widget.job.unloadPort,
     );
     _referenceNoCtrl = TextEditingController(
-      text: widget.data['referenceNo'] ?? '',
+      text: widget.job.referenceNo,
     );
 
-    _selectedDriverId = widget.data['driverId'];
-    _selectedVehicleId = widget.data['vehicleId'];
+    _selectedDriverId = widget.job.driverId;
+    _selectedVehicleId = widget.job.vehicleId;
   }
 
   @override
@@ -101,36 +102,26 @@ class _DispatchJobDetailPageState extends State<DispatchJobDetailPage> {
   }
 
   Future<void> _loadDrivers() async {
-    final driversSnap = await FirebaseFirestore.instance
-        .collection('users')
-        .where('role', isEqualTo: 'driver')
-        .where('softDeleted', isEqualTo: false)
-        .where('isActive', isEqualTo: true)
-        .get();
+    final drivers = await FirestoreService.fetchDrivers();
 
-    _drivers = driversSnap.docs.map((doc) {
-      final data = doc.data();
+    _drivers = drivers.map((driver) {
       return {
-        'uid': doc.id,
-        'name': data['name'] ?? '',
-        'email': data['email'] ?? '',
+        'uid': driver.uid,
+        'name': driver.name,
+        'email': driver.email,
       };
     }).toList();
   }
 
   Future<void> _loadVehicles() async {
-    final vehiclesSnap = await FirebaseFirestore.instance
-        .collection('vehicles')
-        .where('isActive', isEqualTo: true)
-        .get();
+    final vehicles = await FirestoreService.fetchVehicles();
 
-    _vehicles = vehiclesSnap.docs.map((doc) {
-      final data = doc.data();
+    _vehicles = vehicles.map((vehicle) {
       return {
-        'vehicleId': doc.id,
-        'plate': data['plate'] ?? '',
-        'type': data['type'] ?? '',
-        'assignedDriverId': data['assignedDriverId'],
+        'vehicleId': vehicle.id,
+        'plate': vehicle.plate,
+        'type': vehicle.type,
+        'assignedDriverId': vehicle.assignedDriverId,
       };
     }).toList();
   }
@@ -163,7 +154,7 @@ class _DispatchJobDetailPageState extends State<DispatchJobDetailPage> {
   }
 
   bool get _canEdit {
-    final status = widget.data['status'];
+    final status = widget.job.status;
     return status == FirestoreService.statusPending ||
         status == FirestoreService.statusRejected;
   }
@@ -228,15 +219,11 @@ class _DispatchJobDetailPageState extends State<DispatchJobDetailPage> {
       'vehicleId': _selectedVehicleId,
       'status': FirestoreService.statusPending,
       'rejectionReason': null,
-      'route': {
-        'loadPort': _loadPortCtrl.text.trim(),
-        'unloadPort': _unloadPortCtrl.text.trim(),
-      },
-      'cargo': {
-        'type': _cargoTypeCtrl.text.trim(),
-        'description': _cargoDescCtrl.text.trim(),
-        'weightKg': double.parse(_cargoWeightCtrl.text),
-      },
+      'loadPort': _loadPortCtrl.text.trim(),
+      'unloadPort': _unloadPortCtrl.text.trim(),
+      'cargoType': _cargoTypeCtrl.text.trim(),
+      'cargoDescription': _cargoDescCtrl.text.trim(),
+      'cargoWeightKg': double.parse(_cargoWeightCtrl.text),
       'timestamps.reviewedAt': null,
     };
 
@@ -327,7 +314,7 @@ class _DispatchJobDetailPageState extends State<DispatchJobDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final status = widget.data['status'] ?? FirestoreService.statusPending;
+    final status = widget.job.status;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -353,7 +340,7 @@ class _DispatchJobDetailPageState extends State<DispatchJobDetailPage> {
           const Icon(Icons.description_outlined, size: 22),
           const SizedBox(width: 12),
           const Text(
-            "İş Detayları",
+             "İş Detayları",
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           ),
           const SizedBox(width: 12),
@@ -390,7 +377,7 @@ class _DispatchJobDetailPageState extends State<DispatchJobDetailPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         JobReferenceCard(
-          referenceNo: widget.data['referenceNo'] ?? 'REF-XXX',
+          referenceNo: widget.job.referenceNo,
         ),
         const SizedBox(height: 16),
         Row(
@@ -415,52 +402,22 @@ class _DispatchJobDetailPageState extends State<DispatchJobDetailPage> {
         const SizedBox(height: 12),
         InfoCard(
           title: 'Güzergah',
-          value: '${widget.data['route']?['loadPort'] ?? '-'} → '
-              '${widget.data['route']?['unloadPort'] ?? '-'}',
+          value: '${widget.job.loadPort} → ${widget.job.unloadPort}',
           icon: Icons.route_outlined,
         ),
         const SizedBox(height: 12),
-        CargoInfoCard(cargo: widget.data['cargo']),
+        CargoInfoCard(cargo: {
+          'type': widget.job.cargoType,
+          'description': widget.job.cargoDescription,
+          'weightKg': widget.job.cargoWeightKg,
+        }),
         if (status == FirestoreService.statusRejected &&
-            widget.data['rejectionReason'] != null) ...[
+            widget.job.rejectionReason != null) ...[
           const SizedBox(height: 12),
-          RejectionReasonCard(reason: widget.data['rejectionReason']),
-        ],
-        if (status == 'completed' &&
-            widget.data['documents'] != null &&
-            (widget.data['documents'] as List).isNotEmpty) ...[
-          const SizedBox(height: 12),
-          DocumentsCard(
-            documents: widget.data['documents'] as List,
-            referenceNo: widget.data['referenceNo'] ?? 'REF-XXX',
-            showDebug: false,
-          ),
-        ],
-        if (_canEdit) ...[
-          const SizedBox(height: 20),
-          _buildEditButton(),
+          RejectionReasonCard(reason: widget.job.rejectionReason!),
         ],
         const SizedBox(height: 20),
       ],
-    );
-  }
-
-  Widget _buildEditButton() {
-    return ElevatedButton.icon(
-      onPressed: () => setState(() => _editing = true),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF1E3A5F),
-        foregroundColor: Colors.white,
-        minimumSize: const Size(double.infinity, 50),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-      ),
-      icon: const Icon(Icons.edit_outlined),
-      label: const Text(
-        'İşi Düzenle ve Tekrar Gönder',
-        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-      ),
     );
   }
 
@@ -469,7 +426,7 @@ class _DispatchJobDetailPageState extends State<DispatchJobDetailPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         JobReferenceCard(
-          referenceNo: widget.data['referenceNo'] ?? 'REF-XXX',
+           referenceNo: widget.job.referenceNo,
         ),
         const SizedBox(height: 16),
         const Text(

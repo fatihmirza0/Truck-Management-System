@@ -9,6 +9,8 @@ import '../widgets/driver_selection_card.dart';
 import '../widgets/vehicle_selection_card.dart';
 import '../widgets/driver_selection_panel.dart';
 import '../widgets/vehicle_selection_panel.dart';
+import '../../../../models/user_model.dart';
+import '../../../../models/vehicle_model.dart';
 
 class CreateJobPage extends StatefulWidget {
   const CreateJobPage({super.key});
@@ -28,9 +30,9 @@ class _CreateJobPageState extends State<CreateJobPage>
   final _vehicleSearchController = TextEditingController();
 
   String? _selectedDriverUid;
-  Map<String, dynamic>? _selectedDriver;
+  AppUser? _selectedDriver;
   String? _selectedVehicleId;
-  Map<String, dynamic>? _selectedVehicle;
+  Vehicle? _selectedVehicle;
   bool _isCreatingJob = false;
   bool _showDriverPanel = false;
   bool _showVehiclePanel = false;
@@ -111,7 +113,7 @@ class _CreateJobPageState extends State<CreateJobPage>
 
     try {
       final driverStatus =
-          await FirestoreService.getDriverStatus(_selectedDriverUid!);
+          await FirestoreService.getDriverStatus(_selectedDriver!.uid);
       if (driverStatus == 'busy') {
         _showSnackBar("Bu şoför zaten aktif bir görevde.", isError: true);
         setState(() => _isCreatingJob = false);
@@ -121,31 +123,30 @@ class _CreateJobPageState extends State<CreateJobPage>
       final loadCoords = await RouteUtils.geocode(loadPort);
       final unloadCoords = await RouteUtils.geocode(unloadPort);
 
-      if (loadCoords == null || unloadCoords == null) {
-        _showSnackBar("Adresler koordinata çevrilemedi.", isError: true);
-        setState(() => _isCreatingJob = false);
-        return;
-      }
-
-      double distanceKm = await RouteUtils.getRouteKm(
-        loadCoords['lat']!,
-        loadCoords['lng']!,
-        unloadCoords['lat']!,
-        unloadCoords['lng']!,
-      );
-
-      if (distanceKm == 0) {
-        distanceKm = RouteUtils.haversineKm(
+      double distanceKm = 0;
+      if (loadCoords != null && unloadCoords != null) {
+        distanceKm = await RouteUtils.getRouteKm(
           loadCoords['lat']!,
           loadCoords['lng']!,
           unloadCoords['lat']!,
           unloadCoords['lng']!,
         );
+
+        if (distanceKm == 0) {
+          distanceKm = RouteUtils.haversineKm(
+            loadCoords['lat']!,
+            loadCoords['lng']!,
+            unloadCoords['lat']!,
+            unloadCoords['lng']!,
+          );
+        }
+      } else {
+        debugPrint("Geocoding failed or CORS issue. Proceeding with distance: 0");
       }
 
       await FirestoreService.createJob(
-        driverId: _selectedDriverUid!,
-        vehicleId: _selectedVehicleId!,
+        driverId: _selectedDriver!.uid,
+        vehicleId: _selectedVehicle!.id,
         loadPort: loadPort,
         unloadPort: unloadPort,
         cargoType: cargoType,
@@ -154,7 +155,7 @@ class _CreateJobPageState extends State<CreateJobPage>
         distanceKm: distanceKm,
       );
 
-      await FirestoreService.updateDriverStatus(_selectedDriverUid!, 'busy');
+      await FirestoreService.updateDriverStatus(_selectedDriver!.uid, 'busy');
 
       _loadPortController.clear();
       _unloadPortController.clear();
@@ -243,9 +244,9 @@ class _CreateJobPageState extends State<CreateJobPage>
     });
   }
 
-  void _selectDriver(Map<String, dynamic> driver) {
+  void _selectDriver(AppUser driver) {
     setState(() {
-      _selectedDriverUid = driver['uid'];
+      _selectedDriverUid = driver.uid;
       _selectedDriver = driver;
       _selectedVehicleId = null;
       _selectedVehicle = null;
@@ -253,9 +254,9 @@ class _CreateJobPageState extends State<CreateJobPage>
     _closeDriverPanel();
   }
 
-  void _selectVehicle(Map<String, dynamic> vehicle) {
+  void _selectVehicle(Vehicle vehicle) {
     setState(() {
-      _selectedVehicleId = vehicle['vehicleId'];
+      _selectedVehicleId = vehicle.id;
       _selectedVehicle = vehicle;
     });
     _closeVehiclePanel();

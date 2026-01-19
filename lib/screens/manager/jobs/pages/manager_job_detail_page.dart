@@ -2,19 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:lojistik/config/app_theme.dart';
 import 'package:lojistik/widgets/animated/animated_widgets.dart';
+import 'package:lojistik/models/job_model.dart';
 import 'package:lojistik/screens/dispatch/dispatch_job_detail/widgets/storage_helper.dart';
 import '../job_service.dart';
 
 class ManagerJobDetailPage extends StatefulWidget {
   final String jobId;
-  final Map<String, dynamic> data;
+  final Job job;
   final String driverName;
   final String vehiclePlate;
 
   const ManagerJobDetailPage({
     super.key,
     required this.jobId,
-    required this.data,
+    required this.job,
     required this.driverName,
     required this.vehiclePlate,
   });
@@ -125,9 +126,7 @@ class _ManagerJobDetailPageState extends State<ManagerJobDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final status = widget.data['status'] ?? 'pending';
-    final cargo = widget.data['cargo'] as Map<String, dynamic>?;
-    final route = widget.data['route'] as Map<String, dynamic>?;
+    final status = widget.job.status;
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -155,13 +154,13 @@ class _ManagerJobDetailPageState extends State<ManagerJobDetailPage> {
               children: [
                 _buildReferenceCard(),
                 const SizedBox(height: 20),
-                _buildInfoGrid(cargo, route),
+                _buildInfoGrid(),
                 const SizedBox(height: 20),
-                if (status == "rejected" && widget.data['rejectionReason'] != null)
-                  _buildRejectionReasonCard(widget.data['rejectionReason']),
+                if (status == "rejected" && widget.job.rejectionReason != null)
+                  _buildRejectionReasonCard(widget.job.rejectionReason!),
                 const SizedBox(height: 20),
-                if (widget.data['documents'] != null && (widget.data['documents'] as List).isNotEmpty)
-                  _buildDocumentsSection(widget.data['documents'] as List),
+                // if (widget.job.documents != null && widget.job.documents.isNotEmpty)
+                //   _buildDocumentsSection(widget.job.documents),
                 const SizedBox(height: 24),
                 _buildLogsSection(),
                 const SizedBox(height: 100), // Spacing for bottom buttons
@@ -242,7 +241,7 @@ class _ManagerJobDetailPageState extends State<ManagerJobDetailPage> {
               ),
               const SizedBox(height: 4),
               Text(
-                widget.data['referenceNo'] ?? "-",
+                widget.job.referenceNo,
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
@@ -256,7 +255,7 @@ class _ManagerJobDetailPageState extends State<ManagerJobDetailPage> {
     );
   }
 
-  Widget _buildInfoGrid(Map<String, dynamic>? cargo, Map<String, dynamic>? route) {
+  Widget _buildInfoGrid() {
     return Column(
       children: [
         Row(
@@ -269,15 +268,15 @@ class _ManagerJobDetailPageState extends State<ManagerJobDetailPage> {
         const SizedBox(height: 16),
         _buildDetailCard(
           "Güzergah",
-          "${route?['loadPort'] ?? '-'} \u2192 ${route?['unloadPort'] ?? '-'}",
+          "${widget.job.loadPort} \u2192 ${widget.job.unloadPort}",
           Icons.route_rounded,
         ),
         const SizedBox(height: 16),
         Row(
           children: [
-            Expanded(child: _buildDetailCard("Yük Tipi", cargo?['type'] ?? "-", Icons.inventory_2_rounded)),
+            Expanded(child: _buildDetailCard("Yük Tipi", widget.job.cargoType, Icons.inventory_2_rounded)),
             const SizedBox(width: 16),
-            Expanded(child: _buildDetailCard("Ağırlık", "${cargo?['weightKg'] ?? 0} kg", Icons.scale_rounded)),
+            Expanded(child: _buildDetailCard("Ağırlık", "${widget.job.cargoWeightKg} kg", Icons.scale_rounded)),
           ],
         ),
       ],
@@ -418,7 +417,7 @@ class _ManagerJobDetailPageState extends State<ManagerJobDetailPage> {
             padding: const EdgeInsets.only(bottom: 12),
             child: _ManagerDocumentItem(
               document: docMap,
-              referenceNo: widget.data['referenceNo'] ?? "REF",
+              referenceNo: widget.job.referenceNo,
               index: index + 1,
             ),
           );

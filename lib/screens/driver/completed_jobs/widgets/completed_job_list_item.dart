@@ -1,9 +1,10 @@
 // 📁 lib/screens/driver/completed_jobs/widgets/completed_job_list_item.dart
 import 'package:flutter/material.dart';
 import '../../completed_job_detail/pages/completed_job_detail_page.dart';
+import '../../../../models/job_model.dart';
 
 class CompletedJobListItem extends StatelessWidget {
-  final Map<String, dynamic> job;
+  final Job job;
   final String loadPort;
   final String unloadPort;
 
@@ -19,7 +20,7 @@ class CompletedJobListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = job['referenceNo'] ?? '-';
+    final title = job.referenceNo;
     final subtitle = "$loadPort → $unloadPort";
 
     return Container(
@@ -55,6 +56,3 @@ class CompletedJobListItem extends StatelessWidget {
     );
   }
 }
-
-
-

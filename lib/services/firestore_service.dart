@@ -1,18 +1,19 @@
 import 'dart:convert';
 import 'dart:ui';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
-// import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import 'auth_service.dart';
+import '../models/user_model.dart';
+import '../models/job_model.dart';
+import '../models/vehicle_model.dart';
+import '../config/app_config.dart';
 
 class FirestoreService {
   static final _firestore = FirebaseFirestore.instance;
   static final _auth = FirebaseAuth.instance;
 
-  static const _baseUrl =
-      "https://us-central1-truck-dispatch-system.cloudfunctions.net";
   // static final _functions = FirebaseFunctions.instance;
 
   static Future<Map<String, String>> _headers() async {
@@ -58,24 +59,23 @@ class FirestoreService {
   }
 
   /// Get current user data
-  static Future<Map<String, dynamic>?> getCurrentUserData() async {
+  static Future<AppUser?> getCurrentUserData() async {
     final uid = currentUserUid;
     if (uid == null) return null;
 
     try {
       final doc = await _firestore.collection('users').doc(uid).get();
       if (!doc.exists) return null;
-      return doc.data();
+      return AppUser.fromFirestore(doc);
     } catch (e) {
-      print('Get current user data error: $e');
+      debugPrint('Get current user data error: $e');
       return null;
     }
   }
 
-  // 🔥 SAAS HELPER
+  // 🔥 SAAS HELPER - Use local cache from AuthService for reliability and speed
   static Future<String?> getCompanyId() async {
-    final userData = await getCurrentUserData();
-    return userData?['companyId'];
+    return await AuthService.getCompanyId();
   }
 
   // ============================================
@@ -89,7 +89,7 @@ class FirestoreService {
     required String plate,
   }) async {
     final res = await http.post(
-      Uri.parse("$_baseUrl/createDriverHttp"),
+      Uri.parse(AppConfig.createDriverUrl),
       headers: await _headers(),
       body: jsonEncode({
         "name": name,
@@ -115,7 +115,7 @@ class FirestoreService {
     String? plate,
   }) async {
     final res = await http.post(
-      Uri.parse("$_baseUrl/createUserHttp"),
+      Uri.parse(AppConfig.createUserUrl),
       headers: await _headers(),
       body: jsonEncode({
         "name": name,
@@ -141,7 +141,7 @@ class FirestoreService {
     String? plate,
   }) async {
     final res = await http.post(
-      Uri.parse("$_baseUrl/updateUserHttp"),
+      Uri.parse(AppConfig.updateUserUrl),
       headers: await _headers(),
       body: jsonEncode({
         "uid": uid,
@@ -160,7 +160,7 @@ class FirestoreService {
 
   static Future<void> softDeleteUserHttp(String userId) async {
     final res = await http.post(
-      Uri.parse("$_baseUrl/softDeleteUserHttp"),
+      Uri.parse(AppConfig.softDeleteUserUrl),
       headers: await _headers(),
       body: jsonEncode({"userId": userId}),
     );
@@ -178,44 +178,27 @@ class FirestoreService {
     return doc.data()?['jobStatus'] ?? 'available';
   }
 
-  // ============================================
-  // JOB OPERATIONS (HTTP)
-  // ============================================
-
-  static Future<void> jobActionHttp({
-    required String jobId,
-    required String action, // approve | reject | complete
-    String? reason,
-  }) async {
-    final res = await http.post(
-      Uri.parse("$_baseUrl/jobActionHttp"),
-      headers: await _headers(),
-      body: jsonEncode({
-        "jobId": jobId,
-        "action": action,
-        "reason": reason,
-      }),
-    );
-
-    if (res.statusCode != 200) {
-      throw Exception(res.body);
-    }
-  }
-
-  /// Get user data by UID
-  static Future<Map<String, dynamic>?> getUserData(String uid) async {
+  /// Get user data by UID with company scoping
+  static Future<AppUser?> getUserData(String uid) async {
     try {
+      final companyId = await getCompanyId();
+      if (companyId == null) return null;
+
       final doc = await _firestore.collection('users').doc(uid).get();
       if (!doc.exists) return null;
-      return doc.data();
+      
+      final user = AppUser.fromFirestore(doc);
+      if (user.companyId != companyId) return null; // 🔥 Security Check
+      
+      return user;
     } catch (e) {
-      print('Get user data error: $e');
+      debugPrint('Get user data error: $e');
       return null;
     }
   }
 
   /// Fetch all active drivers
-  static Future<List<Map<String, dynamic>>> fetchDrivers() async {
+  static Future<List<AppUser>> fetchDrivers() async {
     try {
       final companyId = await getCompanyId();
       if (companyId == null) return [];
@@ -228,25 +211,15 @@ class FirestoreService {
           .where('isActive', isEqualTo: true)
           .get();
 
-      return snap.docs.map((doc) {
-        final d = doc.data();
-        return {
-          'uid': doc.id,
-          'name': d['name'] ?? '-',
-          'email': d['email'] ?? '-',
-          'phone': d['phone'] ?? '-',
-          'jobStatus': d['jobStatus'] ?? 'available', // 🔥
-          'activePlate': d['activePlate'],             // 🔥
-        };
-      }).toList();
+      return snap.docs.map((doc) => AppUser.fromFirestore(doc)).toList();
     } catch (e) {
-      print('Fetch drivers error: $e');
+      debugPrint('Fetch drivers error: $e');
       return [];
     }
   }
 
   /// Fetch all users (for reports)
-  static Future<List<DocumentSnapshot>> fetchAllUsers() async {
+  static Future<List<AppUser>> fetchAllUsers() async {
     try {
       final companyId = await getCompanyId();
       if (companyId == null) return [];
@@ -254,11 +227,11 @@ class FirestoreService {
       final snap = await _firestore
           .collection("users")
           .where('companyId', isEqualTo: companyId) // 🔥 SAAS
-          .where("softDeleted", isEqualTo: false,)
+          .where("softDeleted", isEqualTo: false)
           .get();
-      return snap.docs;
+      return snap.docs.map((doc) => AppUser.fromFirestore(doc)).toList();
     } catch (e) {
-      print('Fetch all users error: $e');
+      debugPrint('Fetch all users error: $e');
       return [];
     }
   }
@@ -329,20 +302,27 @@ class FirestoreService {
   // VEHICLE OPERATIONS
   // ============================================
 
-  /// Get vehicle data by vehicleId
-  static Future<Map<String, dynamic>?> getVehicleData(String vehicleId) async {
+  /// Get vehicle data by vehicleId with company scoping
+  static Future<Vehicle?> getVehicleData(String vehicleId) async {
     try {
+      final companyId = await getCompanyId();
+      if (companyId == null) return null;
+
       final doc = await _firestore.collection('vehicles').doc(vehicleId).get();
       if (!doc.exists) return null;
-      return doc.data();
+      
+      final vehicle = Vehicle.fromFirestore(doc);
+      if (vehicle.companyId != companyId) return null; // 🔥 Security Check
+      
+      return vehicle;
     } catch (e) {
-      print('Get vehicle data error: $e');
+      debugPrint('Get vehicle data error: $e');
       return null;
     }
   }
 
   /// Fetch all active vehicles
-  static Future<List<Map<String, dynamic>>> fetchVehicles() async {
+  static Future<List<Vehicle>> fetchVehicles() async {
     try {
       final companyId = await getCompanyId();
       if (companyId == null) return [];
@@ -353,31 +333,33 @@ class FirestoreService {
           .where('isActive', isEqualTo: true)
           .get();
 
-      return snap.docs.map((doc) {
-        final d = doc.data();
-        return {
-          'vehicleId': doc.id,
-          'plate': d['plate'] ?? '-',
-          'type': d['type'] ?? '-',
-          'ownership': d['ownership'] ?? '-',
-          'assignedDriverId': d['assignedDriverId'],
-          'isActive': d['isActive'] ?? true,
-          'status': d['status'],
-          'insurancePolicyNumber': d['insurancePolicyNumber'],
-          'insuranceExpiryDate': d['insuranceExpiryDate'],
-          'lastMaintenanceDate': d['lastMaintenanceDate'],
-          'lastMaintenanceKm': d['lastMaintenanceKm'],
-          'currentKm': d['currentKm'],
-        };
-      }).toList();
+      return snap.docs.map((doc) => Vehicle.fromFirestore(doc)).toList();
     } catch (e) {
-      print('Fetch vehicles error: $e');
+      debugPrint('Fetch vehicles error: $e');
+      return [];
+    }
+  }
+
+  /// Fetch all vehicles (for reports)
+  static Future<List<Vehicle>> fetchAllVehicles() async {
+    try {
+      final companyId = await getCompanyId();
+      if (companyId == null) return [];
+
+      final snap = await _firestore
+          .collection('vehicles')
+          .where('companyId', isEqualTo: companyId)
+          .get();
+
+      return snap.docs.map((doc) => Vehicle.fromFirestore(doc)).toList();
+    } catch (e) {
+      debugPrint('Fetch all vehicles error: $e');
       return [];
     }
   }
 
   /// Fetch vehicles assigned to a specific driver
-  static Future<List<Map<String, dynamic>>> fetchVehiclesByDriver(
+  static Future<List<Vehicle>> fetchVehiclesByDriver(
       String driverId) async {
     try {
       final companyId = await getCompanyId();
@@ -390,17 +372,9 @@ class FirestoreService {
           .where('isActive', isEqualTo: true)
           .get();
 
-      return snap.docs.map((doc) {
-        final d = doc.data();
-        return {
-          'vehicleId': doc.id,
-          'plate': d['plate'] ?? '-',
-          'type': d['type'] ?? '-',
-          'ownership': d['ownership'] ?? '-',
-        };
-      }).toList();
+      return snap.docs.map((doc) => Vehicle.fromFirestore(doc)).toList();
     } catch (e) {
-      print('Fetch vehicles by driver error: $e');
+      debugPrint('Fetch vehicles by driver error: $e');
       return [];
     }
   }
@@ -533,7 +507,7 @@ class FirestoreService {
     required double distanceKm,
   }) async {
     final res = await http.post(
-      Uri.parse("$_baseUrl/createJobHttp"),
+      Uri.parse(AppConfig.createJobUrl),
       headers: await _headers(),
       body: jsonEncode({
         "driverId": driverId,
@@ -655,20 +629,27 @@ class FirestoreService {
     }
   }
 
-  /// Get job details
-  static Future<Map<String, dynamic>?> getJobDetails(String jobId) async {
+  /// Get job details with company scoping
+  static Future<Job?> getJobDetails(String jobId) async {
     try {
+      final companyId = await getCompanyId();
+      if (companyId == null) return null;
+
       final doc = await _firestore.collection('jobs').doc(jobId).get();
       if (!doc.exists) return null;
-      return doc.data();
+      
+      final job = Job.fromFirestore(doc);
+      if (job.companyId != companyId) return null; // 🔥 Security Check
+      
+      return job;
     } catch (e) {
-      print('Get job details error: $e');
+      debugPrint('Get job details error: $e');
       return null;
     }
   }
 
   /// Fetch all jobs (for reports)
-  static Future<List<DocumentSnapshot>> fetchAllJobs() async {
+  static Future<List<Job>> fetchAllJobs() async {
     final companyId = await getCompanyId();
     if (companyId == null) return [];
 
@@ -678,7 +659,7 @@ class FirestoreService {
         .where("softDeleted", isEqualTo: false)
         .get();
 
-    return snap.docs;
+    return snap.docs.map((doc) => Job.fromFirestore(doc)).toList();
   }
 
   /// Stream job logs
@@ -696,97 +677,38 @@ class FirestoreService {
     }
   }
 
-  /// Stream jobs by status
-  static Stream<QuerySnapshot> getJobsByStatus(String status) async* {
-    final companyId = await getCompanyId();
-    if (companyId == null) yield* Stream.empty();
-
-    try {
-      final role = await AuthService.getSavedUserRole(); // 🔥 Check Role
-      final uid = currentUserUid; // Need UID for filter
-
-      var query = _firestore
-          .collection('jobs')
-          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
-          .where('softDeleted', isEqualTo: false)
-          .where('status', isEqualTo: status);
-
-      // 🔥 Restricted Access for Dispatch
-      if (role == 'dispatch' && uid != null) {
-        query = query.where('createdBy', isEqualTo: uid);
-      }
-
-      yield* query
-          .orderBy('timestamps.createdAt', descending: true)
-          .snapshots();
-    } catch (e) {
-      print('Get jobs by status error: $e');
-      yield* Stream.empty();
-    }
-  }
-
-  /// Stream jobs by dispatch user
-  static Stream<QuerySnapshot<Map<String, dynamic>>> getDispatchJobsStream({
-    required String userId,
+  /// Consolidated stream for jobs based on role and status
+  static Stream<List<Job>> getJobsStream({
     required String status,
   }) async* {
     final companyId = await getCompanyId();
-    if (companyId == null) yield* Stream.empty();
-
-    try {
-      yield* _firestore
-          .collection("jobs")
-          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
-          .where("createdBy", isEqualTo: userId)
-          .where("status", isEqualTo: status)
-          .where("softDeleted", isEqualTo: false)
-          .orderBy("timestamps.createdAt", descending: true)
-          .snapshots();
-    } catch (e) {
-      print('Get dispatch jobs stream error: $e');
-      yield* Stream.empty();
+    if (companyId == null) {
+      yield [];
+      return;
     }
+
+    final role = await AuthService.getSavedUserRole(); // 🔥 Use AuthService
+    final uid = currentUserUid;
+
+    Query<Map<String, dynamic>> query = _firestore
+        .collection('jobs')
+        .where('companyId', isEqualTo: companyId) // 🔥 SAAS
+        .where('softDeleted', isEqualTo: false)
+        .where('status', isEqualTo: status);
+
+    // 🔥 Role-based filtering
+    if (role == 'dispatch' && uid != null) {
+      query = query.where('createdBy', isEqualTo: uid);
+    } else if (role == 'driver' && uid != null) {
+      query = query.where('driverId', isEqualTo: uid);
+    }
+
+    yield* query
+        .orderBy('timestamps.createdAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map((doc) => Job.fromFirestore(doc)).toList());
   }
 
-  /// Alternative method for compatibility
-  static Stream<QuerySnapshot> getDispatchJobs(String userId, String status) async* {
-    final companyId = await getCompanyId();
-    if (companyId == null) yield* Stream.empty();
-
-    try {
-      yield* _firestore
-          .collection('jobs')
-          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
-          .where('createdBy', isEqualTo: userId)
-          .where('status', isEqualTo: status)
-          .where('softDeleted', isEqualTo: false)
-          .orderBy('timestamps.createdAt', descending: true)
-          .snapshots();
-    } catch (e) {
-      print('Get dispatch jobs error: $e');
-      yield* Stream.empty();
-    }
-  }
-
-  /// Stream jobs by driver
-  static Stream<QuerySnapshot> getDriverJobs(String driverId, String status) async* {
-    final companyId = await getCompanyId();
-    if (companyId == null) yield* Stream.empty();
-
-    try {
-      yield* _firestore
-          .collection('jobs')
-          .where('companyId', isEqualTo: companyId) // 🔥 SAAS
-          .where('driverId', isEqualTo: driverId)
-          .where('status', isEqualTo: status)
-          .where('softDeleted', isEqualTo: false)
-          .orderBy('timestamps.createdAt', descending: true)
-          .snapshots();
-    } catch (e) {
-      print('Get driver jobs error: $e');
-      yield* Stream.empty();
-    }
-  }
 
   // ============================================
   // CACHE HELPERS
@@ -931,10 +853,14 @@ class FirestoreService {
     required String actorId,
   }) async {
     try {
+      final companyId = await getCompanyId();
+      if (companyId == null) return;
+
       await _firestore.collection("logs").add({
         "action": action,
         "jobId": jobId,
         "actorId": actorId,
+        "companyId": companyId, // 🔥 SAAS
         "createdAt": FieldValue.serverTimestamp(),
       });
     } catch (e) {

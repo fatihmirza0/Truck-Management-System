@@ -26,16 +26,15 @@ class ActiveJobCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final route = job['route'] as Map<String, dynamic>?;
+    final cargo = job['cargo'] as Map<String, dynamic>?;
+
     final String referenceNo = (job['referenceNo'] ?? '-').toString();
-
-    final route = (job['route'] as Map?)?.cast<String, dynamic>() ?? {};
-    final String loadPort = (route['loadPort'] ?? '-').toString();
-    final String unloadPort = (route['unloadPort'] ?? '-').toString();
-
-    final cargo = (job['cargo'] as Map?)?.cast<String, dynamic>() ?? {};
-    final String cargoType = (cargo['type'] ?? '-').toString();
-    final String cargoDesc = (cargo['description'] ?? '-').toString();
-    final dynamic w = cargo['weightKg'];
+    final String loadPort = (job['loadPort'] ?? route?['loadPort'] ?? '-').toString();
+    final String unloadPort = (job['unloadPort'] ?? route?['unloadPort'] ?? '-').toString();
+    final String cargoType = (job['cargoType'] ?? cargo?['type'] ?? '-').toString();
+    final String cargoDesc = (job['cargoDescription'] ?? cargo?['description'] ?? '-').toString();
+    final dynamic w = job['cargoWeightKg'] ?? cargo?['weightKg'];
     final String weightKg = (w == null) ? '-' : w.toString();
 
     return Container(

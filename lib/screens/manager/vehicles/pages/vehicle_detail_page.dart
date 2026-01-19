@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../../../models/vehicle_model.dart';
+import '../../../../models/user_model.dart';
 import '../../../../services/firestore_service.dart';
 import '../../../../config/app_theme.dart';
 
 class VehicleDetailPage extends StatefulWidget {
-  final Map<String, dynamic>? vehicle;
+  final Vehicle? vehicle;
 
   const VehicleDetailPage({super.key, this.vehicle});
 
@@ -26,29 +28,25 @@ class _VehicleDetailPageState extends State<VehicleDetailPage> {
   DateTime? _insuranceExpiryDate;
   DateTime? _lastMaintenanceDate;
 
-  List<Map<String, dynamic>> _drivers = [];
+  List<AppUser> _drivers = [];
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
     final v = widget.vehicle;
-    _plateController = TextEditingController(text: v?['plate']);
-    _typeController = TextEditingController(text: v?['type']);
-    _ownershipController = TextEditingController(text: v?['ownership']);
-    _insurancePolicyController = TextEditingController(text: v?['insurancePolicyNumber']);
-    _currentKmController = TextEditingController(text: v?['currentKm']?.toString());
-    _lastMaintenanceKmController = TextEditingController(text: v?['lastMaintenanceKm']?.toString());
+    _plateController = TextEditingController(text: v?.plate);
+    _typeController = TextEditingController(text: v?.type);
+    _ownershipController = TextEditingController(text: v?.ownership);
+    _insurancePolicyController = TextEditingController(text: v?.insurancePolicyNumber);
+    _currentKmController = TextEditingController(text: v?.currentKm?.toString());
+    _lastMaintenanceKmController = TextEditingController(text: v?.lastMaintenanceKm?.toString());
     
-    _status = v?['status'] ?? 'active';
-    _assignedDriverId = v?['assignedDriverId'];
+    _status = v?.status ?? 'active';
+    _assignedDriverId = v?.assignedDriverId;
     
-    if (v?['insuranceExpiryDate'] != null) {
-      _insuranceExpiryDate = (v!['insuranceExpiryDate'] as dynamic).toDate();
-    }
-    if (v?['lastMaintenanceDate'] != null) {
-      _lastMaintenanceDate = (v!['lastMaintenanceDate'] as dynamic).toDate();
-    }
+    _insuranceExpiryDate = v?.insuranceExpiryDate;
+    _lastMaintenanceDate = v?.lastMaintenanceDate;
 
     _fetchDrivers();
   }
@@ -96,7 +94,7 @@ class _VehicleDetailPageState extends State<VehicleDetailPage> {
       } else {
         // Update
         await FirestoreService.updateVehicle(
-          vehicleId: widget.vehicle!['vehicleId'],
+          vehicleId: widget.vehicle!.id,
           plate: _plateController.text,
           type: _typeController.text,
           ownership: _ownershipController.text,
@@ -174,7 +172,7 @@ class _VehicleDetailPageState extends State<VehicleDetailPage> {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.02),
+                          color: Colors.black.withValues(alpha: 0.02),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -205,7 +203,7 @@ class _VehicleDetailPageState extends State<VehicleDetailPage> {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.02),
+                          color: Colors.black.withValues(alpha: 0.02),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -230,7 +228,7 @@ class _VehicleDetailPageState extends State<VehicleDetailPage> {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.02),
+                          color: Colors.black.withValues(alpha: 0.02),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -281,7 +279,7 @@ class _VehicleDetailPageState extends State<VehicleDetailPage> {
               color: Colors.white,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 20,
                   offset: const Offset(0, -5),
                 ),
@@ -315,7 +313,7 @@ class _VehicleDetailPageState extends State<VehicleDetailPage> {
         ),
         if (_isSaving)
           Container(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
             child: const Center(
               child: CircularProgressIndicator(color: Colors.white),
             ),
@@ -331,21 +329,21 @@ class _VehicleDetailPageState extends State<VehicleDetailPage> {
       child: Column(
         children: [
           Hero(
-            tag: 'vehicle_icon_${widget.vehicle!['vehicleId']}',
+            tag: 'vehicle_icon_${widget.vehicle!.id}',
             child: Container(
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withOpacity(0.1),
+                color: AppTheme.primaryColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
-                border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2), width: 2),
+                border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.2), width: 2),
               ),
               child: const Icon(Icons.local_shipping, size: 40, color: AppTheme.primaryColor),
             ),
           ),
           const SizedBox(height: 16),
           Text(
-            widget.vehicle!['plate'],
+            widget.vehicle!.plate,
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -361,7 +359,7 @@ class _VehicleDetailPageState extends State<VehicleDetailPage> {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              widget.vehicle!['type'],
+              widget.vehicle!.type,
               style: const TextStyle(
                 fontSize: 14,
                 color: AppTheme.textSecondary,
@@ -453,9 +451,15 @@ class _VehicleDetailPageState extends State<VehicleDetailPage> {
       items: [
         const DropdownMenuItem(value: null, child: Text("Atanmadı")),
         ..._drivers.map((d) => DropdownMenuItem(
-          value: d['uid'], 
-          child: Text(d['name'] ?? "İsimsiz"),
+          value: d.uid, 
+          child: Text(d.name),
         )),
+        // 🔥 FIX: handle assigned driver not in fetched (active) drivers list
+        if (_assignedDriverId != null && !_drivers.any((d) => d.uid == _assignedDriverId))
+          DropdownMenuItem(
+            value: _assignedDriverId,
+            child: Text("Bilinmeyen Sürücü ($_assignedDriverId)"),
+          ),
       ],
       onChanged: (val) {
         setState(() => _assignedDriverId = val);

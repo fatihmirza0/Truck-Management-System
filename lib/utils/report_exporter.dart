@@ -3,14 +3,16 @@
 // -----------------------------------------------------------------------------
 
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart' show BuildContext;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:syncfusion_flutter_xlsio/xlsio.dart';
 import 'package:intl/intl.dart';
+import '../models/job_model.dart';
+import '../models/user_model.dart';
 
 class ReportExporter {
   static Future<pw.Font> _fontRegular() async {
@@ -28,8 +30,8 @@ class ReportExporter {
   // ---------------------------------------------------------
   static Future<bool> exportToPdf({
     required BuildContext context,
-    required List<DocumentSnapshot> jobs,
-    required List<DocumentSnapshot> users,
+    required List<Job> jobs,
+    required List<AppUser> users,
     required String title,
   }) async {
     try {
@@ -50,16 +52,14 @@ class ReportExporter {
       Map<String, String> driverNames = {};
       
       for (var u in users) {
-        final d = u.data() as Map;
-        if (d["role"] == "driver") driverNames[u.id] = d["name"] ?? "Bilinmiyor";
+        if (u.role == "driver") driverNames[u.uid] = u.name;
       }
 
       for (var j in jobs) {
-        final d = j.data() as Map;
-        totalDistance += (d["distanceKm"] ?? 0).toDouble();
-        totalWeight += (d["cargoWeightKg"] ?? 0).toDouble();
-        final dId = d["driverId"];
-        if (dId != null) driverJobs[dId] = (driverJobs[dId] ?? 0) + 1;
+        totalDistance += j.distanceKm;
+        totalWeight += j.cargoWeightKg;
+        final dId = j.driverId;
+        if (dId.isNotEmpty) driverJobs[dId] = (driverJobs[dId] ?? 0) + 1;
       }
 
       pdf.addPage(
@@ -95,7 +95,7 @@ class ReportExporter {
       await file.writeAsBytes(await pdf.save());
       return true;
     } catch (e) {
-      print("PDF Export Error: $e");
+      debugPrint("PDF Export Error: $e");
       return false;
     }
   }
@@ -162,7 +162,7 @@ class ReportExporter {
 
   static pw.Widget _buildDriverTable(Map<String, int> jobs, Map<String, String> names) {
     final sorted = jobs.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    return pw.Table.fromTextArray(
+    return pw.TableHelper.fromTextArray(
       headers: ["Sürücü", "Tamamlanan İş"],
       data: sorted.take(10).map((e) => [names[e.key] ?? "Bilinmiyor", e.value.toString()]).toList(),
       headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
@@ -172,17 +172,16 @@ class ReportExporter {
     );
   }
 
-  static pw.Widget _buildJobsTable(List<DocumentSnapshot> jobs) {
-    return pw.Table.fromTextArray(
+  static pw.Widget _buildJobsTable(List<Job> jobs) {
+    return pw.TableHelper.fromTextArray(
       headers: ["Tarih", "Yük", "Mesafe", "Ruta"],
       data: jobs.take(20).map((j) {
-        final d = j.data() as Map;
-        final date = (d["timestamps"]?["createdAt"] as Timestamp).toDate();
+        final date = j.timestamps.createdAt ?? DateTime.now();
         return [
           DateFormat('dd.MM.yy').format(date),
-          "${d["cargoType"] ?? "-"} (${d["cargoWeightKg"] ?? 0} kg)",
-          "${d["distanceKm"] ?? 0} km",
-          "${d["loadPort"] ?? "-"} -> ${d["unloadPort"] ?? "-"}",
+          "${j.cargoType} (${j.cargoWeightKg} kg)",
+          "${j.distanceKm} km",
+          "${j.loadPort} -> ${j.unloadPort}",
         ];
       }).toList(),
       headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
@@ -197,8 +196,8 @@ class ReportExporter {
   // ---------------------------------------------------------
   static Future<bool> exportToExcel({
     required BuildContext context,
-    required List<DocumentSnapshot> jobs,
-    required List<DocumentSnapshot> users,
+    required List<Job> jobs,
+    required List<AppUser> users,
   }) async {
     try {
       final workbook = Workbook();
@@ -220,22 +219,24 @@ class ReportExporter {
       sheet.getRangeByName('A1:G1').cellStyle = style;
 
       for (int i = 0; i < jobs.length; i++) {
-        final d = jobs[i].data() as Map;
+        final j = jobs[i];
         final row = i + 2;
-        final ts = d["timestamps"]?["createdAt"] as Timestamp?;
+        final ts = j.timestamps.createdAt;
         
         if (ts != null) {
-          sheet.getRangeByIndex(row, 1).setText(DateFormat('dd.MM.yyyy').format(ts.toDate()));
+          sheet.getRangeByIndex(row, 1).setText(DateFormat('dd.MM.yyyy').format(ts));
         }
-        sheet.getRangeByIndex(row, 2).setText(d["driverId"] ?? "-");
-        sheet.getRangeByIndex(row, 3).setText(d["cargoType"] ?? "-");
-        sheet.getRangeByIndex(row, 4).setNumber((d["cargoWeightKg"] ?? 0).toDouble());
-        sheet.getRangeByIndex(row, 5).setNumber((d["distanceKm"] ?? 0).toDouble());
-        sheet.getRangeByIndex(row, 6).setText(d["loadPort"] ?? "-");
-        sheet.getRangeByIndex(row, 7).setText(d["unloadPort"] ?? "-");
+        sheet.getRangeByIndex(row, 2).setText(j.driverId);
+        sheet.getRangeByIndex(row, 3).setText(j.cargoType);
+        sheet.getRangeByIndex(row, 4).setNumber(j.cargoWeightKg);
+        sheet.getRangeByIndex(row, 5).setNumber(j.distanceKm);
+        sheet.getRangeByIndex(row, 6).setText(j.loadPort);
+        sheet.getRangeByIndex(row, 7).setText(j.unloadPort);
       }
 
-      for (int i = 1; i <= 7; i++) sheet.autoFitColumn(i);
+      for (int i = 1; i <= 7; i++) {
+        sheet.autoFitColumn(i);
+      }
 
       final List<int> bytes = workbook.saveAsStream();
       workbook.dispose();
@@ -251,33 +252,27 @@ class ReportExporter {
       await File(path).writeAsBytes(bytes);
       return true;
     } catch (e) {
-      print("Excel Export Error: $e");
+      debugPrint("Excel Export Error: $e");
       return false;
     }
   }
+
   // =========================================================
-  // DRIVER SPECIFIC EXPORT (Map<String, dynamic> support)
+  // DRIVER SPECIFIC EXPORT
   // =========================================================
   
   static Future<bool> exportDriverJobsToPdf({
     required BuildContext context,
-    required List<Map<String, dynamic>> jobs,
+    required List<Job> jobs,
   }) async {
-    print("Starting PDF export for ${jobs.length} jobs...");
     try {
-      print("Loading fonts...");
       final font = await _fontRegular();
       final bold = await _fontBold();
-      print("Fonts loaded.");
       
       Uint8List? logoBytes;
       try {
-        print("Loading logo...");
         logoBytes = (await rootBundle.load("assets/logo.png")).buffer.asUint8List();
-        print("Logo loaded.");
-      } catch (e) {
-        print("Logo load failed (ignoring): $e");
-      }
+      } catch (_) {}
 
       final pdf = pw.Document(theme: pw.ThemeData.withFont(base: font, bold: bold));
 
@@ -289,37 +284,31 @@ class ReportExporter {
           footer: (context) => _buildFooter(context),
           build: (context) => [
              pw.SizedBox(height: 20),
-            _buildJobsTableFromMaps(jobs),
+            _buildJobsTable(jobs),
           ],
         ),
       );
-      print("PDF Document created.");
 
-      print("Opening FilePicker...");
       final path = await FilePicker.platform.saveFile(
         dialogTitle: "PDF Kaydet",
         fileName: "is_gecmisi_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf",
         allowedExtensions: ["pdf"],
         type: FileType.custom,
       );
-      print("FilePicker result: $path");
 
       if (path == null) return false;
       final file = File(path);
-      print("Writing file...");
       await file.writeAsBytes(await pdf.save());
-      print("File written successfully.");
       return true;
-    } catch (e, stack) {
-      print("Driver PDF Export Error: $e");
-      print(stack);
+    } catch (e) {
+      debugPrint("Driver PDF Export Error: $e");
       return false;
     }
   }
 
   static Future<bool> exportDriverJobsToExcel({
     required BuildContext context,
-    required List<Map<String, dynamic>> jobs,
+    required List<Job> jobs,
   }) async {
     try {
       final workbook = Workbook();
@@ -341,27 +330,22 @@ class ReportExporter {
         final j = jobs[i];
         final row = i + 2;
         
-        DateTime? date;
-        final ts = j["timestamps"];
-        if (ts is Map) {
-           final createdAt = ts['createdAt'];
-           if (createdAt is Timestamp) date = createdAt.toDate();
-        }
-
+        final date = j.timestamps.createdAt;
         if (date != null) {
           sheet.getRangeByIndex(row, 1).setText(DateFormat('dd.MM.yyyy').format(date));
         }
         
-        sheet.getRangeByIndex(row, 2).setText(j["cargoType"]?.toString() ?? "-");
-        sheet.getRangeByIndex(row, 3).setNumber(double.tryParse(j["cargoWeightKg"]?.toString() ?? "0") ?? 0);
-        sheet.getRangeByIndex(row, 4).setNumber(double.tryParse(j["distanceKm"]?.toString() ?? "0") ?? 0);
+        sheet.getRangeByIndex(row, 2).setText(j.cargoType);
+        sheet.getRangeByIndex(row, 3).setNumber(j.cargoWeightKg);
+        sheet.getRangeByIndex(row, 4).setNumber(j.distanceKm);
         
-        final route = j["route"] as Map? ?? {};
-        sheet.getRangeByIndex(row, 5).setText(route["loadPort"]?.toString() ?? j["loadPort"]?.toString() ?? "-");
-        sheet.getRangeByIndex(row, 6).setText(route["unloadPort"]?.toString() ?? j["unloadPort"]?.toString() ?? "-");
+        sheet.getRangeByIndex(row, 5).setText(j.loadPort);
+        sheet.getRangeByIndex(row, 6).setText(j.unloadPort);
       }
 
-      for (int i = 1; i <= 6; i++) sheet.autoFitColumn(i);
+      for (int i = 1; i <= 6; i++) {
+        sheet.autoFitColumn(i);
+      }
 
       final List<int> bytes = workbook.saveAsStream();
       workbook.dispose();
@@ -377,37 +361,8 @@ class ReportExporter {
       await File(path).writeAsBytes(bytes);
       return true;
     } catch (e) {
-      print("Driver Excel Export Error: $e");
+      debugPrint("Driver Excel Export Error: $e");
       return false;
     }
-  }
-
-  static pw.Widget _buildJobsTableFromMaps(List<Map<String, dynamic>> jobs) {
-    return pw.Table.fromTextArray(
-      headers: ["Tarih", "Yük", "Mesafe", "Ruta"],
-      data: jobs.map((d) {
-        DateTime date = DateTime.now();
-        final ts = d["timestamps"];
-        if (ts is Map) {
-           final created = ts['createdAt'];
-           if (created is Timestamp) date = created.toDate();
-        }
-        
-        final route = d["route"] as Map? ?? {};
-        final load = route["loadPort"]?.toString() ?? d["loadPort"]?.toString() ?? "-";
-        final unload = route["unloadPort"]?.toString() ?? d["unloadPort"]?.toString() ?? "-";
-
-        return [
-          DateFormat('dd.MM.yy').format(date),
-          "${d["cargoType"] ?? "-"} (${d["cargoWeightKg"] ?? 0} kg)",
-          "${d["distanceKm"] ?? 0} km",
-          "$load -> $unload",
-        ];
-      }).toList(),
-      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-      headerDecoration: const pw.BoxDecoration(color: PdfColors.blue800),
-      cellHeight: 20,
-      cellStyle: const pw.TextStyle(fontSize: 9),
-    );
   }
 }

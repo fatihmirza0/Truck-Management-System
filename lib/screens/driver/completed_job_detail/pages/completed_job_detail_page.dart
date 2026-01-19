@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-
+import '../../../../models/job_model.dart';
 import '../widgets/detail_card.dart';
 import '../widgets/detail_section_title.dart';
 import '../widgets/detail_info_row.dart';
@@ -8,47 +8,16 @@ import '../widgets/detail_date_row.dart';
 import '../widgets/documents_grid.dart';
 
 class CompletedJobDetailsPage extends StatelessWidget {
-  final Map<String, dynamic> job;
+  final Job job;
 
   const CompletedJobDetailsPage({super.key, required this.job});
 
   static const Color bg = Color(0xFFF8FAFC);
   static const Color textDark = Color(0xFF0F172A);
 
-  Map<String, dynamic> _map(dynamic v) =>
-      (v is Map) ? v.cast<String, dynamic>() : <String, dynamic>{};
-
-  DateTime? _ts(dynamic v) => v is Timestamp ? v.toDate() : null;
-
-  String _loadPort() {
-    final route = _map(job['route']);
-    return (route['loadPort'] ?? job['loadPort'] ?? "-").toString();
-  }
-
-  String _unloadPort() {
-    final route = _map(job['route']);
-    return (route['unloadPort'] ?? job['unloadPort'] ?? "-").toString();
-  }
-
-  String? _dispatchUid() {
-    final v = (job['createdBy'] ?? job['assignedByUid'] ?? '').toString();
-    return v.isEmpty ? null : v;
-  }
-
-  DateTime? _createdAt() {
-    final ts = _map(job['timestamps']);
-    return _ts(ts['createdAt']) ?? _ts(job['createdAt']);
-  }
-
-  DateTime? _approvedAt() {
-    final ts = _map(job['timestamps']);
-    return _ts(ts['reviewedAt']) ?? _ts(job['approvedAt']);
-  }
-
-  DateTime? _completedAt() {
-    final ts = _map(job['timestamps']);
-    return _ts(ts['completedAt']) ?? _ts(job['completedAt']);
-  }
+  DateTime? _createdAt() => job.timestamps.createdAt;
+  DateTime? _approvedAt() => job.timestamps.reviewedAt;
+  DateTime? _completedAt() => job.timestamps.completedAt;
 
   @override
   Widget build(BuildContext context) {
@@ -56,8 +25,7 @@ class CompletedJobDetailsPage extends StatelessWidget {
     final approvedAt = _approvedAt();
     final completedAt = _completedAt();
 
-    final distanceKm = job['distanceKm'];
-    final documents = job['documents'];
+    final distanceKm = job.distanceKm;
 
     String durationText = "-";
     if (createdAt != null && completedAt != null) {
@@ -88,15 +56,15 @@ class CompletedJobDetailsPage extends StatelessWidget {
                   DetailInfoRow(
                     icon: Icons.location_on_outlined,
                     label: "Yükleme",
-                    value: _loadPort(),
+                    value: job.loadPort,
                   ),
                   const Divider(height: 24),
                   DetailInfoRow(
                     icon: Icons.flag_outlined,
                     label: "Varış",
-                    value: _unloadPort(),
+                    value: job.unloadPort,
                   ),
-                  if (distanceKm != null) ...[
+                  if (distanceKm > 0) ...[
                     const Divider(height: 24),
                     DetailInfoRow(
                       icon: Icons.route_outlined,
@@ -109,7 +77,7 @@ class CompletedJobDetailsPage extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             const DetailSectionTitle(text: "Dispatch"),
-            _dispatchInfo(_dispatchUid()),
+            _dispatchInfo(job.createdBy),
             const SizedBox(height: 20),
             const DetailSectionTitle(text: "İşlem Tarihleri"),
             DetailCard(
@@ -136,9 +104,7 @@ class CompletedJobDetailsPage extends StatelessWidget {
             const SizedBox(height: 20),
             const DetailSectionTitle(text: "Yüklenen Evraklar"),
             DocumentsGrid(
-              documents: documents != null && documents is List
-                  ? List<String>.from(documents)
-                  : [],
+              documents: job.documents ?? [],
             ),
           ],
         ),
@@ -146,8 +112,8 @@ class CompletedJobDetailsPage extends StatelessWidget {
     );
   }
 
-  Widget _dispatchInfo(String? uid) {
-    if (uid == null || uid.isEmpty) {
+  Widget _dispatchInfo(String uid) {
+    if (uid.isEmpty) {
       return DetailCard(child: const Text("Bilgi bulunamadı"));
     }
 
@@ -184,6 +150,3 @@ class CompletedJobDetailsPage extends StatelessWidget {
     );
   }
 }
-
-
-

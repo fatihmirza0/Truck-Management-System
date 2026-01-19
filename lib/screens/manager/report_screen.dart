@@ -10,6 +10,8 @@ import 'package:lojistik/config/app_theme.dart';
 import 'package:lojistik/widgets/animated/animated_widgets.dart';
 import 'package:lojistik/utils/report_exporter.dart';
 import 'package:intl/intl.dart';
+import 'package:lojistik/models/job_model.dart';
+import 'package:lojistik/models/user_model.dart';
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
@@ -22,9 +24,9 @@ class _ReportScreenState extends State<ReportScreen> {
   bool loading = true;
   
   // Data Lists
-  List<DocumentSnapshot> allJobs = [];
-  List<DocumentSnapshot> filteredJobs = [];
-  List<DocumentSnapshot> allUsers = [];
+  List<Job> allJobs = [];
+  List<Job> filteredJobs = [];
+  List<AppUser> allUsers = [];
   Map<String, String> vehiclePlateCache = {};
 
   // Filtering
@@ -57,7 +59,7 @@ class _ReportScreenState extends State<ReportScreen> {
 
   void _setInitialDateRange() {
     final now = DateTime.now();
-    // Default to last 30 days
+    // Default to this month
     selectedDateRange = DateTimeRange(
       start: DateTime(now.year, now.month, 1),
       end: now,
@@ -80,8 +82,8 @@ class _ReportScreenState extends State<ReportScreen> {
             .get(),
       ]);
 
-      allJobs = results[0] as List<DocumentSnapshot>;
-      allUsers = results[1] as List<DocumentSnapshot>;
+      allJobs = results[0] as List<Job>;
+      allUsers = results[1] as List<AppUser>;
       final vehicleDocs = (results[2] as QuerySnapshot).docs;
 
       vehiclePlateCache = {
@@ -97,17 +99,14 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   void _applyFiltersAndCalculate() {
-    filteredJobs = allJobs.where((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      
+    filteredJobs = allJobs.where((job) {
       // Basic Filters
-      if (data["softDeleted"] == true) return false;
-      if (data["status"] != "completed") return false;
+      if (job.softDeleted) return false;
+      if (job.status != "completed") return false;
 
       // Date Range Filter
-      final ts = data["timestamps"]?["completedAt"] ?? data["timestamps"]?["createdAt"];
-      if (ts == null) return false;
-      final date = (ts as Timestamp).toDate();
+      final date = job.timestamps.completedAt ?? job.timestamps.createdAt;
+      if (date == null) return false;
       
       if (selectedDateRange != null) {
         if (date.isBefore(selectedDateRange!.start) || 
@@ -117,10 +116,10 @@ class _ReportScreenState extends State<ReportScreen> {
       }
 
       // Driver Filter
-      if (selectedDriverId != null && data["driverId"] != selectedDriverId) return false;
+      if (selectedDriverId != null && job.driverId != selectedDriverId) return false;
 
       // Cargo Type Filter
-      if (selectedCargoType != null && data["cargoType"] != selectedCargoType) return false;
+      if (selectedCargoType != null && job.cargoType != selectedCargoType) return false;
 
       return true;
     }).toList();
@@ -140,38 +139,36 @@ class _ReportScreenState extends State<ReportScreen> {
     monthlyDistribution.clear();
     Map<String, Map<String, dynamic>> driverStats = {};
 
-    for (var doc in filteredJobs) {
-      final d = doc.data() as Map<String, dynamic>;
-      
+    for (var job in filteredJobs) {
       // Summations
-      totalDistanceKm += (d["distanceKm"] ?? 0).toDouble();
-      totalWeightKg += (d["cargoWeightKg"] ?? 0).toDouble();
+      totalDistanceKm += job.distanceKm;
+      totalWeightKg += job.cargoWeightKg;
 
       // Completion Time (Hours)
-      final start = d["timestamps"]?["createdAt"] as Timestamp?;
-      final end = d["timestamps"]?["completedAt"] as Timestamp?;
+      final start = job.timestamps.createdAt;
+      final end = job.timestamps.completedAt;
       if (start != null && end != null) {
-        totalHours += end.toDate().difference(start.toDate()).inMinutes / 60;
+        totalHours += end.difference(start).inMinutes / 60;
       }
 
       // Cargo Type Dist
-      final cType = d["cargoType"] ?? "Diğer";
+      final cType = job.cargoType.isNotEmpty ? job.cargoType : "Diğer";
       cargoTypeDistribution[cType] = (cargoTypeDistribution[cType] ?? 0) + 1;
 
       // Port Activity
-      final port = d["loadPort"] ?? "Bilinmiyor";
+      final port = job.loadPort.isNotEmpty ? job.loadPort : "Bilinmiyor";
       portActivity[port] = (portActivity[port] ?? 0) + 1;
-      final uPort = d["unloadPort"] ?? "Bilinmiyor";
+      final uPort = job.unloadPort.isNotEmpty ? job.unloadPort : "Bilinmiyor";
       portActivity[uPort] = (portActivity[uPort] ?? 0) + 1;
 
       // Monthly Dist
-      final date = (d["timestamps"]?["createdAt"] as Timestamp).toDate();
+      final date = job.timestamps.createdAt ?? DateTime.now();
       final monthKey = DateFormat('MMMM', 'tr').format(date);
       monthlyDistribution[monthKey] = (monthlyDistribution[monthKey] ?? 0) + 1;
 
       // Driver Performance
-      final dId = d["driverId"];
-      if (dId != null) {
+      final dId = job.driverId;
+      if (dId.isNotEmpty) {
         if (!driverStats.containsKey(dId)) {
           driverStats[dId] = {
             "jobs": 0,
@@ -181,8 +178,8 @@ class _ReportScreenState extends State<ReportScreen> {
           };
         }
         driverStats[dId]!["jobs"]++;
-        driverStats[dId]!["km"] += (d["distanceKm"] ?? 0).toDouble();
-        driverStats[dId]!["weight"] += (d["cargoWeightKg"] ?? 0).toDouble();
+        driverStats[dId]!["km"] += job.distanceKm;
+        driverStats[dId]!["weight"] += job.cargoWeightKg;
       }
     }
 
@@ -195,8 +192,8 @@ class _ReportScreenState extends State<ReportScreen> {
 
   String _getDriverName(String id) {
     try {
-      final user = allUsers.firstWhere((u) => u.id == id);
-      return (user.data() as Map<String, dynamic>)["name"] ?? "Bilinmiyor";
+      final user = allUsers.firstWhere((u) => u.uid == id);
+      return user.name;
     } catch (_) {
       return "Bilinmiyor";
     }
@@ -368,10 +365,10 @@ class _ReportScreenState extends State<ReportScreen> {
           items: [
             const DropdownMenuItem(value: null, child: Text("Tüm Sürücüler")),
             ...allUsers
-                .where((u) => (u.data() as Map)["role"] == "driver")
+                .where((u) => u.role == "driver")
                 .map((u) => DropdownMenuItem(
-                      value: u.id,
-                      child: Text((u.data() as Map)["name"] ?? "Bilinmiyor"),
+                      value: u.uid,
+                      child: Text(u.name),
                     )),
           ],
           onChanged: (val) {
@@ -506,10 +503,10 @@ class _ReportScreenState extends State<ReportScreen> {
                         items: [
                           const DropdownMenuItem(value: null, child: Text("Tüm Sürücüler")),
                           ...allUsers
-                              .where((u) => (u.data() as Map)["role"] == "driver")
+                              .where((u) => u.role == "driver")
                               .map((u) => DropdownMenuItem(
-                                    value: u.id,
-                                    child: Text((u.data() as Map)["name"] ?? "Bilinmiyor"),
+                                    value: u.uid,
+                                    child: Text(u.name),
                                   )),
                         ],
                         onChanged: (val) {
@@ -709,9 +706,9 @@ class _ReportScreenState extends State<ReportScreen> {
 
   LineChartData _getTrendData() {
     final Map<int, int> dayStats = {};
-    for (var doc in filteredJobs) {
-      final date = (doc.data() as Map)["timestamps"]["createdAt"] as Timestamp;
-      final weekday = date.toDate().weekday;
+    for (var job in filteredJobs) {
+      final date = job.timestamps.createdAt ?? DateTime.now();
+      final weekday = date.weekday;
       dayStats[weekday] = (dayStats[weekday] ?? 0) + 1;
     }
 
@@ -945,8 +942,6 @@ class _ReportScreenState extends State<ReportScreen> {
   // --- ACTIONS ---
 
   Future<void> _exportPdf() async {
-    // Implement enhanced PDF logic in report_exporter.dart if needed
-    // For now call existing
     final success = await ReportExporter.exportToPdf(
       context: context,
       jobs: filteredJobs,

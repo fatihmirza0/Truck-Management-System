@@ -3,7 +3,7 @@
 // Desktop & Mobile Optimized
 // ============================================
 import 'package:flutter/material.dart';
-import '../../../../services/firestore_Service.dart';
+import '../../../../services/firestore_service.dart';
 
 import '../widgets/user_detail_info_card.dart';
 import '../widgets/user_detail_info_tile.dart';
