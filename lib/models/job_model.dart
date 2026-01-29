@@ -16,8 +16,16 @@ class Job {
   final String createdBy;
   final String companyId;
   final bool softDeleted;
+  final String driverName;
+  final String vehiclePlate;
+  final String? reviewedBy;
   final List<String>? documents;
   final JobTimestamps timestamps;
+  final double revenue;
+  final Map<String, double> expenses;
+
+  double get totalExpenses => expenses.values.fold(0, (sum, val) => sum + val);
+  double get netProfit => revenue - totalExpenses;
 
   Job({
     required this.id,
@@ -34,9 +42,14 @@ class Job {
     this.rejectionReason,
     required this.createdBy,
     required this.companyId,
+    required this.driverName,
+    required this.vehiclePlate,
+    this.reviewedBy,
     this.softDeleted = false,
     this.documents,
     required this.timestamps,
+    this.revenue = 0.0,
+    this.expenses = const {},
   });
 
   factory Job.fromFirestore(DocumentSnapshot doc) {
@@ -45,7 +58,6 @@ class Job {
   }
 
   factory Job.fromMap(Map<String, dynamic> data, String id) {
-    // Nested yapılar için fallback (bazı eski dökümanlar için)
     final route = data['route'] as Map<String, dynamic>?;
     final cargo = data['cargo'] as Map<String, dynamic>?;
 
@@ -54,14 +66,17 @@ class Job {
       referenceNo: data['referenceNo'] ?? '',
       driverId: data['driverId'] ?? '',
       vehicleId: data['vehicleId'] ?? '',
-      loadPort: data['loadPort'] ?? route?['loadPort'] ?? '',
-      unloadPort: data['unloadPort'] ?? route?['unloadPort'] ?? '',
-      cargoType: data['cargoType'] ?? cargo?['type'] ?? '',
-      cargoDescription: data['cargoDescription'] ?? cargo?['description'] ?? '',
-      cargoWeightKg: (data['cargoWeightKg'] as num?)?.toDouble() ?? 
-                     (cargo?['weightKg'] as num?)?.toDouble() ?? 0.0,
-      distanceKm: (data['distanceKm'] as num?)?.toDouble() ?? 
-                  (route?['distanceKm'] as num?)?.toDouble() ?? 0.0,
+      driverName: data['driverName'] ?? '',
+      vehiclePlate: data['vehiclePlate'] ?? '',
+      reviewedBy: data['reviewedBy'],
+      loadPort: route?['loadPort'] ?? data['loadPort'] ?? '',
+      unloadPort: route?['unloadPort'] ?? data['unloadPort'] ?? '',
+      cargoType: cargo?['type'] ?? data['cargoType'] ?? '',
+      cargoDescription: cargo?['description'] ?? data['cargoDescription'] ?? '',
+      cargoWeightKg: (cargo?['weightKg'] as num?)?.toDouble() ?? 
+                     (data['cargoWeightKg'] as num?)?.toDouble() ?? 0.0,
+      distanceKm: (route?['distanceKm'] as num?)?.toDouble() ?? 
+                  (data['distanceKm'] as num?)?.toDouble() ?? 0.0,
       status: data['status'] ?? 'pending',
       rejectionReason: data['rejectionReason'],
       createdBy: data['createdBy'] ?? '',
@@ -69,6 +84,11 @@ class Job {
       softDeleted: data['softDeleted'] ?? false,
       documents: (data['documents'] as List?)?.map((e) => e.toString()).toList(),
       timestamps: JobTimestamps.fromMap(data['timestamps'] ?? {}),
+      revenue: (data['revenue'] as num?)?.toDouble() ?? 0.0,
+      expenses: (data['expenses'] as Map<String, dynamic>?)?.map(
+            (k, v) => MapEntry(k, (v as num).toDouble()),
+          ) ??
+          {},
     );
   }
 
@@ -76,13 +96,20 @@ class Job {
     return {
       'referenceNo': referenceNo,
       'driverId': driverId,
+      'driverName': driverName,
       'vehicleId': vehicleId,
-      'loadPort': loadPort,
-      'unloadPort': unloadPort,
-      'cargoType': cargoType,
-      'cargoDescription': cargoDescription,
-      'cargoWeightKg': cargoWeightKg,
-      'distanceKm': distanceKm,
+      'vehiclePlate': vehiclePlate,
+      'reviewedBy': reviewedBy,
+      'cargo': {
+        'type': cargoType,
+        'description': cargoDescription,
+        'weightKg': cargoWeightKg,
+      },
+      'route': {
+        'loadPort': loadPort,
+        'unloadPort': unloadPort,
+        'distanceKm': distanceKm,
+      },
       'status': status,
       'rejectionReason': rejectionReason,
       'createdBy': createdBy,
@@ -90,9 +117,12 @@ class Job {
       'softDeleted': softDeleted,
       'documents': documents,
       'timestamps': timestamps.toMap(),
+      'revenue': revenue,
+      'expenses': expenses,
     };
   }
 }
+
 
 class JobTimestamps {
   final DateTime? createdAt;

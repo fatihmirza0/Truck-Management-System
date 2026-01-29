@@ -16,6 +16,8 @@ setGlobalOptions({
 // Export subscription functions
 export { createSubscription, syncExchangeRates } from './subscriptions/subscription.controller';
 export { webhookHandler } from './webhooks/webhook.handler';
+export { getPublicJobStatus } from './legacy/general';
+export { getEstimatedJobCosts } from './legacy/general';
 
 // Legacy exports (restored)
 export * from './legacy/general';

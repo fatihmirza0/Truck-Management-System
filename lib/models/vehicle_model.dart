@@ -14,6 +14,9 @@ class Vehicle {
   final DateTime? lastMaintenanceDate;
   final double? lastMaintenanceKm;
   final double? currentKm;
+  final DateTime? insurancePolicyExpiry;
+  final double? maintenanceIntervalKm;
+  final double? nextMaintenanceKm;
 
   Vehicle({
     required this.id,
@@ -29,6 +32,9 @@ class Vehicle {
     this.lastMaintenanceDate,
     this.lastMaintenanceKm,
     this.currentKm,
+    this.insurancePolicyExpiry,
+    this.maintenanceIntervalKm,
+    this.nextMaintenanceKm,
   });
 
   factory Vehicle.fromFirestore(DocumentSnapshot doc) {
@@ -47,6 +53,9 @@ class Vehicle {
       lastMaintenanceDate: (data['lastMaintenanceDate'] as Timestamp?)?.toDate(),
       lastMaintenanceKm: (data['lastMaintenanceKm'] as num?)?.toDouble(),
       currentKm: (data['currentKm'] as num?)?.toDouble(),
+      insurancePolicyExpiry: (data['insurancePolicyExpiry'] as Timestamp?)?.toDate(),
+      maintenanceIntervalKm: (data['maintenanceIntervalKm'] as num?)?.toDouble(),
+      nextMaintenanceKm: (data['nextMaintenanceKm'] as num?)?.toDouble(),
     );
   }
 
@@ -64,6 +73,9 @@ class Vehicle {
       'lastMaintenanceDate': lastMaintenanceDate != null ? Timestamp.fromDate(lastMaintenanceDate!) : null,
       'lastMaintenanceKm': lastMaintenanceKm,
       'currentKm': currentKm,
+      'insurancePolicyExpiry': insurancePolicyExpiry != null ? Timestamp.fromDate(insurancePolicyExpiry!) : null,
+      'maintenanceIntervalKm': maintenanceIntervalKm,
+      'nextMaintenanceKm': nextMaintenanceKm,
     };
   }
 }

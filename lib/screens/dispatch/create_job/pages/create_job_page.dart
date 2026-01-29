@@ -146,7 +146,9 @@ class _CreateJobPageState extends State<CreateJobPage>
 
       await FirestoreService.createJob(
         driverId: _selectedDriver!.uid,
+        driverName: _selectedDriver!.name,
         vehicleId: _selectedVehicle!.id,
+        vehiclePlate: _selectedVehicle!.plate,
         loadPort: loadPort,
         unloadPort: unloadPort,
         cargoType: cargoType,

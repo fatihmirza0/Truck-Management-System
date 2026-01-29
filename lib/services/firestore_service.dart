@@ -498,7 +498,9 @@ class FirestoreService {
   /// Create a new job (HTTP)
   static Future<String> createJob({
     required String driverId,
+    required String driverName,
     required String vehicleId,
+    required String vehiclePlate,
     required String loadPort,
     required String unloadPort,
     required String cargoType,
@@ -511,7 +513,9 @@ class FirestoreService {
       headers: await _headers(),
       body: jsonEncode({
         "driverId": driverId,
+        "driverName": driverName,
         "vehicleId": vehicleId,
+        "vehiclePlate": vehiclePlate,
         "loadPort": loadPort,
         "unloadPort": unloadPort,
         "cargoType": cargoType,

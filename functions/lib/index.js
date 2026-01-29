@@ -36,7 +36,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.webhookHandler = exports.syncExchangeRates = exports.createSubscription = void 0;
+exports.getEstimatedJobCosts = exports.getPublicJobStatus = exports.webhookHandler = exports.syncExchangeRates = exports.createSubscription = void 0;
 const admin = __importStar(require("firebase-admin"));
 const v2_1 = require("firebase-functions/v2");
 // Initialize Firebase Admin before anything else
@@ -54,6 +54,10 @@ Object.defineProperty(exports, "createSubscription", { enumerable: true, get: fu
 Object.defineProperty(exports, "syncExchangeRates", { enumerable: true, get: function () { return subscription_controller_1.syncExchangeRates; } });
 var webhook_handler_1 = require("./webhooks/webhook.handler");
 Object.defineProperty(exports, "webhookHandler", { enumerable: true, get: function () { return webhook_handler_1.webhookHandler; } });
+var general_1 = require("./legacy/general");
+Object.defineProperty(exports, "getPublicJobStatus", { enumerable: true, get: function () { return general_1.getPublicJobStatus; } });
+var general_2 = require("./legacy/general");
+Object.defineProperty(exports, "getEstimatedJobCosts", { enumerable: true, get: function () { return general_2.getEstimatedJobCosts; } });
 // Legacy exports (restored)
 __exportStar(require("./legacy/general"), exports);
 __exportStar(require("./legacy/developer"), exports);

@@ -535,7 +535,7 @@ export const createJobHttp = onRequest((req, res) => {
             const caller = await getUser(decoded.uid);
             requireRole(caller, ["admin", "manager", "dispatch"]);
 
-            const { driverId, vehicleId, loadPort, unloadPort, cargoType, cargoDescription, cargoWeightKg } = req.body;
+            const { driverId, vehicleId, loadPort, unloadPort, cargoType, cargoDescription, cargoWeightKg, revenue, expenses } = req.body;
             if (!driverId || !vehicleId || !loadPort || !unloadPort) throw new Error("Missing required fields");
 
             const companyId = caller.companyId;
@@ -602,7 +602,9 @@ export const createJobHttp = onRequest((req, res) => {
                 },
                 softDeleted: false,
                 driverName: driverData.name,
-                vehiclePlate: vehicleSnap.data()?.plate
+                vehiclePlate: vehicleSnap.data()?.plate,
+                revenue: Number(revenue) || 0,
+                expenses: expenses || {}
             });
 
             batch.set(jobRef.collection("logs").doc(), {
@@ -632,20 +634,98 @@ export const getManagerDashboardData = onRequest((req, res) => {
             if (!companyId) throw new Error("No company linked");
 
             const today = new Date(); today.setHours(0, 0, 0, 0);
+            const monthStart = new Date();
+            monthStart.setDate(1);
+            monthStart.setHours(0, 0, 0, 0);
 
-            const [companySnap, vehiclesCount, jobsCountToday, activeJobsCount] = await Promise.all([
+            const [
+                companySnap,
+                vehiclesCount,
+                jobsCountToday,
+                activeJobsCount,
+                recentJobsSnap,
+                totalDriversCount,
+                activeDriversCount,
+                jobsCountMonth,
+                pendingJobsCount,
+                approvedJobsCount,
+                completedJobsTotalCount,
+                completedJobsMonthSnap,
+                maintenanceSnap
+            ] = await Promise.all([
                 db.collection("companies").doc(companyId).get(),
                 db.collection("vehicles").where("companyId", "==", companyId).where("isActive", "==", true).count().get(),
-                db.collection("jobs").where("companyId", "==", companyId).where("timestamps.completedAt", ">=", admin.firestore.Timestamp.fromDate(today)).count().get(),
-                db.collection("jobs").where("companyId", "==", companyId).where("status", "in", ["pending", "approved", "started"]).count().get()
+                db.collection("jobs").where("companyId", "==", companyId).where("status", "==", "completed").where("timestamps.completedAt", ">=", admin.firestore.Timestamp.fromDate(today)).count().get(),
+                db.collection("jobs").where("companyId", "==", companyId).where("status", "in", ["pending", "approved", "started"]).count().get(),
+                db.collection("jobs").where("companyId", "==", companyId).orderBy("timestamps.createdAt", "desc").limit(10).get(),
+                db.collection("users").where("companyId", "==", companyId).where("role", "==", "driver").count().get(),
+                db.collection("users").where("companyId", "==", companyId).where("role", "==", "driver").where("isActive", "==", true).count().get(),
+                db.collection("jobs").where("companyId", "==", companyId).where("timestamps.completedAt", ">=", admin.firestore.Timestamp.fromDate(monthStart)).count().get(),
+                db.collection("jobs").where("companyId", "==", companyId).where("status", "==", "pending").count().get(),
+                db.collection("jobs").where("companyId", "==", companyId).where("status", "==", "approved").count().get(),
+                db.collection("jobs").where("companyId", "==", companyId).where("status", "==", "completed").count().get(),
+                db.collection("jobs")
+                    .where("companyId", "==", companyId)
+                    .where("status", "==", "completed")
+                    .where("timestamps.completedAt", ">=", admin.firestore.Timestamp.fromDate(monthStart))
+                    .get(),
+                db.collection("vehicles")
+                    .where("companyId", "==", companyId)
+                    .where("isActive", "==", true)
+                    .get()
             ]);
+
+            const completedJobsMonthDocs = (completedJobsMonthSnap as admin.firestore.QuerySnapshot).docs;
+            let totalRevenueMonth = 0;
+            let totalProfitMonth = 0;
+
+            completedJobsMonthDocs.forEach(doc => {
+                const job = doc.data() as any;
+                const revenue = job.revenue || 0;
+                const expensesMap = job.expenses || {};
+                const totalExpenses = Object.values(expensesMap).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+                totalRevenueMonth += revenue;
+                totalProfitMonth += (revenue - totalExpenses);
+            });
+
+            const recentJobs = recentJobsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
             res.json({
                 success: true,
-                stats: { totalVehicles: vehiclesCount.data().count, completedJobsToday: jobsCountToday.data().count, activeJobs: activeJobsCount.data().count },
-                goals: companySnap.data()?.goals || {}
+                stats: {
+                    totalVehicles: vehiclesCount.data().count,
+                    completedJobsToday: jobsCountToday.data().count,
+                    completedJobsMonth: jobsCountMonth.data().count,
+                    activeJobs: activeJobsCount.data().count,
+                    totalDrivers: totalDriversCount.data().count,
+                    activeDrivers: activeDriversCount.data().count,
+                    distribution: {
+                        pending: pendingJobsCount.data().count,
+                        approved: approvedJobsCount.data().count,
+                        completed: completedJobsTotalCount.data().count
+                    },
+                    totalRevenueMonth,
+                    totalProfitMonth,
+                    maintenanceRequiredCount: (maintenanceSnap as admin.firestore.QuerySnapshot).docs.filter(doc => {
+                        const v = doc.data();
+                        return v.nextMaintenanceKm && v.currentKm && (v.nextMaintenanceKm - v.currentKm <= 1000);
+                    }).length,
+                    insuranceExpiringCount: (maintenanceSnap as admin.firestore.QuerySnapshot).docs.filter(doc => {
+                        const v = doc.data();
+                        if (!v.insurancePolicyExpiry) return false;
+                        const expiry = v.insurancePolicyExpiry.toDate();
+                        const weekFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+                        return expiry <= weekFromNow;
+                    }).length
+                },
+                goals: companySnap.data()?.goals || companySnap.data()?.settings || { monthlyJobTarget: 0, monthlyRevenueTarget: 0 },
+                settings: companySnap.data()?.settings || companySnap.data()?.goals || { monthlyJobTarget: 0 },
+                recentJobs
             });
-        } catch (e: any) { res.status(400).json({ error: e.message }); }
+        } catch (e: any) {
+            console.error("getManagerDashboardData error:", e);
+            res.status(400).json({ error: e.message });
+        }
     });
 });
 
@@ -691,7 +771,10 @@ export const updateCompanyGoals = onRequest((req, res) => {
             const user = await getUser(decoded.uid);
             requireRole(user, ["manager", "admin"]);
             await db.collection("companies").doc(user.companyId).update({
-                goals: { ...req.body, updatedAt: admin.firestore.FieldValue.serverTimestamp() }
+                settings: {
+                    ...req.body,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                }
             });
             res.json({ success: true });
         } catch (e: any) { res.status(400).json({ error: e.message }); }
@@ -708,4 +791,138 @@ export const onCompanyStatusChange = onDocumentUpdated("companies/{companyId}", 
     const batch = db.batch();
     usersSnap.docs.forEach(doc => batch.update(doc.ref, { companyStatus: after.status }));
     await batch.commit();
+});
+
+export const getPublicJobStatus = onRequest((req, res) => {
+    cors(req, res, async () => {
+        try {
+            const { referenceNo } = req.query;
+            if (!referenceNo) throw new Error("Reference number required");
+
+            const jobsSnap = await db.collection("jobs")
+                .where("referenceNo", "==", referenceNo)
+                .where("softDeleted", "==", false)
+                .limit(1)
+                .get();
+
+            if (jobsSnap.empty) {
+                res.status(404).json({ error: "İş bulunamadı" });
+                return;
+            }
+
+            const jobData = jobsSnap.docs[0].data();
+            const jobId = jobsSnap.docs[0].id;
+
+            // Fetch logs for stepper
+            const logsSnap = await db.collection("jobs").doc(jobId).collection("logs")
+                .orderBy("performedAt", "asc")
+                .get();
+
+            const events = logsSnap.docs.map(doc => ({
+                action: doc.data().action,
+                time: doc.data().performedAt?.toDate(),
+                note: doc.data().note
+            }));
+
+            // Fetch current location from RTDB if available
+            let currentLocation = null;
+            if (jobData.driverId) {
+                const locSnap = await admin.database().ref(`locations/${jobData.driverId}`).once("value");
+                const locData = locSnap.val();
+                if (locData && locData.currentJobId === jobId) {
+                    currentLocation = {
+                        lat: locData.lat,
+                        lng: locData.lng,
+                        lastPing: locData.lastPing
+                    };
+                }
+            }
+
+            // FILTER SENSITIVE DATA
+            const publicData = {
+                referenceNo: jobData.referenceNo,
+                status: jobData.status,
+                loadPort: jobData.loadPort,
+                unloadPort: jobData.unloadPort,
+                cargoType: jobData.cargoType,
+                distanceKm: jobData.distanceKm,
+                timestamps: {
+                    createdAt: jobData.timestamps?.createdAt?.toDate(),
+                    startedAt: jobData.timestamps?.startedAt?.toDate(),
+                    completedAt: jobData.timestamps?.completedAt?.toDate()
+                },
+                events,
+                currentLocation
+            };
+
+            res.json({ success: true, data: publicData });
+
+        } catch (e: any) {
+            res.status(400).json({ error: e.message });
+        }
+    });
+});
+
+export const getEstimatedJobCosts = onRequest((req, res) => {
+    cors(req, res, async () => {
+        try {
+            const decoded = await verifyAuth(req);
+            const caller = await getUser(decoded.uid);
+            const { loadPort, unloadPort, distanceKm } = req.query;
+            const companyId = caller.companyId;
+
+            if (!companyId) throw new Error("No company linked");
+
+            // 1. Get Company Settings
+            const companySnap = await db.collection("companies").doc(companyId).get();
+            const settings = companySnap.data()?.settings || {};
+
+            const fuelPrice = Number(settings.fuelPrice) || 45; // Default 45 TL
+            const consumption = Number(settings.avgFuelConsumption) || 30; // Default 30L/100km
+
+            // 2. Base Fuel Calculation
+            const dist = Number(distanceKm) || 0;
+            const estimatedFuel = (dist / 100) * consumption * fuelPrice;
+
+            // 3. Historical Data Analysis
+            const historySnap = await db.collection("jobs")
+                .where("companyId", "==", companyId)
+                .where("loadPort", "==", loadPort)
+                .where("unloadPort", "==", unloadPort)
+                .where("status", "==", "completed")
+                .limit(5)
+                .get();
+
+            let totalToll = 0;
+            let totalAllowance = 0;
+            let totalOther = 0;
+            let count = 0;
+
+            historySnap.forEach(doc => {
+                const expenses = doc.data().expenses || {};
+                totalToll += (Number(expenses.toll) || 0);
+                totalAllowance += (Number(expenses.allowance) || 0);
+                totalOther += (Number(expenses.other) || 0);
+                count++;
+            });
+
+            const avgToll = count > 0 ? totalToll / count : 0;
+            const avgAllowance = count > 0 ? totalAllowance / count : 0;
+            const avgOther = count > 0 ? totalOther / count : 0;
+
+            res.json({
+                success: true,
+                estimates: {
+                    fuel: Math.round(estimatedFuel),
+                    toll: Math.round(avgToll),
+                    allowance: Math.round(avgAllowance),
+                    other: Math.round(avgOther),
+                    source: count > 0 ? 'historical' : 'calculated'
+                }
+            });
+
+        } catch (e: any) {
+            res.status(400).json({ error: e.message });
+        }
+    });
 });
