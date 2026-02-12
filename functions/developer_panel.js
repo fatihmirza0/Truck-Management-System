@@ -84,70 +84,67 @@ async function verifyDeveloperSession(req) {
 }
 
 // Developer Login Endpoint
-exports.developerLogin = onRequest((req, res) => {
-    cors(req, res, async () => {
-        try {
-            if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+exports.developerLogin = onRequest({ cors: true }, async (req, res) => {
+    try {
+        if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-            // Get client IP for rate limiting
-            const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown';
+        // Get client IP for rate limiting
+        const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown';
 
-            // Check rate limit
-            if (!checkRateLimit(clientIp)) {
-                return res.status(429).json({ error: "Too many login attempts. Please try again later." });
-            }
-
-            const { masterKey } = req.body;
-
-            if (!masterKey) {
-                return res.status(400).json({ error: "Master key required" });
-            }
-
-            // Verify master key
-            const MASTER_KEY = process.env.DEVELOPER_MASTER_KEY || process.env.DEVELOPER_KEY || "s3cr3t_k3y_v1";
-
-            if (masterKey !== MASTER_KEY) {
-                return res.status(401).json({ error: "Invalid master key" });
-            }
-
-            // Generate session token (256-bit random)
-            const token = crypto.randomBytes(32).toString('hex');
-
-            // Hash the token for storage
-            const tokenHash = hashToken(token);
-
-            // Calculate expiry (24 hours from now)
-            const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 86400000); // 24 hours
-
-            // Get user agent
-            const userAgent = req.headers['user-agent'] || 'unknown';
-
-            // Store session in Firestore
-            await db.collection("developer_sessions").add({
-                tokenHash,
-                expiresAt,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                ip: clientIp,
-                userAgent
-            });
-
-            // Return plain token to client (only time it's ever sent)
-            res.json({
-                success: true,
-                token,
-                expiresAt: expiresAt.toMillis()
-            });
-
-        } catch (e) {
-            console.error("developerLogin error:", e);
-            res.status(500).json({ error: e.message });
+        // Check rate limit
+        if (!checkRateLimit(clientIp)) {
+            return res.status(429).json({ error: "Too many login attempts. Please try again later." });
         }
-    });
+
+        const { masterKey } = req.body;
+
+        if (!masterKey) {
+            return res.status(400).json({ error: "Master key required" });
+        }
+
+        // Verify master key
+        const MASTER_KEY = process.env.DEVELOPER_MASTER_KEY || process.env.DEVELOPER_KEY || "s3cr3t_k3y_v1";
+
+        if (masterKey !== MASTER_KEY) {
+            return res.status(401).json({ error: "Invalid master key" });
+        }
+
+        // Generate session token (256-bit random)
+        const token = crypto.randomBytes(32).toString('hex');
+
+        // Hash the token for storage
+        const tokenHash = hashToken(token);
+
+        // Calculate expiry (24 hours from now)
+        const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 86400000); // 24 hours
+
+        // Get user agent
+        const userAgent = req.headers['user-agent'] || 'unknown';
+
+        // Store session in Firestore
+        await db.collection("developer_sessions").add({
+            tokenHash,
+            expiresAt,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            ip: clientIp,
+            userAgent
+        });
+
+        // Return plain token to client (only time it's ever sent)
+        res.json({
+            success: true,
+            token,
+            expiresAt: expiresAt.toMillis()
+        });
+
+    } catch (e) {
+        console.error("developerLogin error:", e);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // Developer Logout Endpoint
-exports.developerLogout = onRequest((req, res) => {
-    cors(req, res, async () => {
+exports.developerLogout = onRequest({ cors: true }, async async (req, res) => {
         try {
             if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
@@ -177,7 +174,6 @@ exports.developerLogout = onRequest((req, res) => {
             res.status(500).json({ error: e.message });
         }
     });
-});
 
 // Scheduled function to clean expired sessions (runs every 6 hours)
 exports.cleanExpiredSessions = onSchedule("every 6 hours", async (event) => {
@@ -227,8 +223,7 @@ function verifyDevKey(req) {
     }
 }
 
-exports.verifyDeveloperKey = onRequest((req, res) => {
-    cors(req, res, () => {
+exports.verifyDeveloperKey = onRequest({ cors: true }, async (req, res) => {
         try {
             verifyDevKey(req);
             res.json({ success: true });
@@ -236,10 +231,8 @@ exports.verifyDeveloperKey = onRequest((req, res) => {
             res.status(401).json({ error: e.message });
         }
     });
-});
 
-exports.createCompanyHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
+exports.createCompanyHttp = onRequest({ cors: true }, async async (req, res) => {
         try {
             if (req.method !== "POST") return res.status(405).end();
             await verifyDeveloperSession(req);
@@ -286,14 +279,12 @@ exports.createCompanyHttp = onRequest((req, res) => {
             res.status(400).json({ error: e.message });
         }
     });
-});
 
 /* =========================================================
    NEW: SYSTEM LOGS AUDIT
    - Aggregates recent critical events (Job Creation, User Creation, Company Creation)
  ========================================================= */
-exports.getSystemLogsHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
+exports.getSystemLogsHttp = onRequest({ cors: true }, async async (req, res) => {
         try {
             await verifyDeveloperSession(req);
 
@@ -373,10 +364,8 @@ exports.getSystemLogsHttp = onRequest((req, res) => {
             res.status(400).json({ error: e.message });
         }
     });
-});
 
-exports.getCompaniesHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
+exports.getCompaniesHttp = onRequest({ cors: true }, async async (req, res) => {
         try {
             await verifyDeveloperSession(req);
 
@@ -388,10 +377,8 @@ exports.getCompaniesHttp = onRequest((req, res) => {
             res.status(400).json({ error: e.message });
         }
     });
-});
 
-exports.getCompanyUsersHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
+exports.getCompanyUsersHttp = onRequest({ cors: true }, async async (req, res) => {
         try {
             await verifyDeveloperSession(req);
             const { companyId } = req.query;
@@ -410,10 +397,8 @@ exports.getCompanyUsersHttp = onRequest((req, res) => {
             res.status(400).json({ error: e.message });
         }
     });
-});
 
-exports.updateUserPermissionsHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
+exports.updateUserPermissionsHttp = onRequest({ cors: true }, async async (req, res) => {
         try {
             if (req.method !== "POST") return res.status(405).end();
             await verifyDeveloperSession(req);
@@ -432,7 +417,6 @@ exports.updateUserPermissionsHttp = onRequest((req, res) => {
             res.status(400).json({ error: e.message });
         }
     });
-});
 
 /* =========================================================
    NEW: DASHBOARD STATS (GOD MODE)
@@ -441,8 +425,7 @@ exports.updateUserPermissionsHttp = onRequest((req, res) => {
    - Jobs Created (Last 24h)
    - Active Vehicles
  ========================================================= */
-exports.getDashboardStatsHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
+exports.getDashboardStatsHttp = onRequest({ cors: true }, async async (req, res) => {
         try {
             await verifyDeveloperSession(req);
 
@@ -469,14 +452,12 @@ exports.getDashboardStatsHttp = onRequest((req, res) => {
             res.status(400).json({ error: e.message });
         }
     });
-});
 
 /* =========================================================
    NEW: COMPANY FULL DETAILS (GOD MODE)
    - Metadata, Users, Recent Jobs, Log Summary
  ========================================================= */
-exports.getCompanyFullDetailsHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
+exports.getCompanyFullDetailsHttp = onRequest({ cors: true }, async async (req, res) => {
         try {
             await verifyDeveloperSession(req);
             const { companyId } = req.query;
@@ -532,15 +513,13 @@ exports.getCompanyFullDetailsHttp = onRequest((req, res) => {
             res.status(400).json({ error: e.message });
         }
     });
-});
 
 /* =========================================================
    NEW: UPDATE COMPANY PLAN & LIMITS
    - Updates 'plan' string
    - Updates 'limits' map { vehicleCount, dispatchCount, managerCount }
  ========================================================= */
-exports.updateCompanyPlanHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
+exports.updateCompanyPlanHttp = onRequest({ cors: true }, async async (req, res) => {
         try {
             if (req.method !== "POST") return res.status(405).end();
             await verifyDeveloperSession(req);
@@ -559,10 +538,8 @@ exports.updateCompanyPlanHttp = onRequest((req, res) => {
             res.status(400).json({ error: e.message });
         }
     });
-});
 
-exports.toggleCompanyStatusHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
+exports.toggleCompanyStatusHttp = onRequest({ cors: true }, async async (req, res) => {
         try {
             if (req.method !== "POST") return res.status(405).end();
             await verifyDeveloperSession(req);
@@ -584,6 +561,60 @@ exports.toggleCompanyStatusHttp = onRequest((req, res) => {
             res.status(400).json({ error: e.message });
         }
     });
+
+
+
+exports.saveBlogPostHttp = onRequest({ cors: true }, async (req, res) => {
+    try {
+        if (req.method !== "POST") return res.status(405).end();
+        await verifyDeveloperSession(req);
+
+        const { id, title, slug, excerpt, content, coverImage, category, published } = req.body;
+        if (!title || !slug) throw new Error("Missing title or slug");
+
+        const postData = {
+            title,
+            slug,
+            excerpt,
+            content,
+            coverImage,
+            category,
+            published,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        if (id) {
+            await db.collection("blogs").doc(id).update(postData);
+            res.json({ success: true, id });
+        } else {
+            postData.views = 0;
+            postData.createdAt = admin.firestore.FieldValue.serverTimestamp();
+            const docRef = await db.collection("blogs").add(postData);
+            res.json({ success: true, id: docRef.id });
+        }
+    } catch (e) {
+        res.status(400).json({ error: e.message });
+    }
 });
 
+exports.submitInquiryHttp = onRequest({ cors: true }, async (req, res) => {
+    try {
+        if (req.method !== "POST") return res.status(405).end();
+        const { firstName, lastName, email, phone, companyName } = req.body;
 
+        // Note: Encryption can happen here if we move the key to backend
+        // For now, we follow the user's "hash/encrypted" request
+        await db.collection("inquiries").add({
+            firstName, // Already encrypted from frontend or encrypt here
+            lastName,
+            email,
+            phone,
+            companyName,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        res.json({ success: true });
+    } catch (e) {
+        res.status(400).json({ error: e.message });
+    }
+});

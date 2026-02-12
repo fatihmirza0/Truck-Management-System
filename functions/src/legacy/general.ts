@@ -5,8 +5,8 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { setGlobalOptions } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import axios from "axios";
-import { corsOptions } from "../config/cors.config";
-const cors = require("cors")(corsOptions);
+// import { corsOptions } from "../config/cors.config"; // No longer needed
+// const cors = require("cors")(corsOptions);
 
 // Init Admin if needed
 if (!admin.apps.length) {
@@ -78,236 +78,226 @@ async function ensureJobBelongsToCompany(callerId: string, jobId: string) {
  ========================================================= */
 
 // CREATE DRIVER
-export const createDriverHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
-        try {
-            if (req.method !== "POST") { res.status(405).end(); return; }
-            const decoded = await verifyAuth(req);
-            const caller = await getUser(decoded.uid);
-            requireRole(caller, ["dispatch", "admin", "manager"]);
+export const createDriverHttp = onRequest({ cors: true }, async (req, res) => {
+    try {
+        if (req.method !== "POST") { res.status(405).end(); return; }
+        const decoded = await verifyAuth(req);
+        const caller = await getUser(decoded.uid);
+        requireRole(caller, ["dispatch", "admin", "manager"]);
 
-            const { name, email, password, phone, plate } = req.body;
-            if (!name || !email || !password || !phone || !plate) throw new Error("Missing fields");
+        const { name, email, password, phone, plate } = req.body;
+        if (!name || !email || !password || !phone || !plate) throw new Error("Missing fields");
 
-            const companyId = caller.companyId;
-            if (!companyId) throw new Error("Caller has no companyId");
+        const companyId = caller.companyId;
+        if (!companyId) throw new Error("Caller has no companyId");
 
-            // LIMIT CHECK: Vehicle Count
-            const companyDoc = await db.collection("companies").doc(companyId).get();
-            const companyData: any = companyDoc.data();
-            const vehicleLimit = companyData.limits?.vehicleCount || 10;
+        // LIMIT CHECK: Vehicle Count
+        const companyDoc = await db.collection("companies").doc(companyId).get();
+        const companyData: any = companyDoc.data();
+        const vehicleLimit = companyData.limits?.vehicleCount || 10;
 
-            const currentVehicles = await db.collection("vehicles")
-                .where("companyId", "==", companyId)
-                .where("isActive", "==", true).count().get();
+        const currentVehicles = await db.collection("vehicles")
+            .where("companyId", "==", companyId)
+            .where("isActive", "==", true).count().get();
 
-            if (currentVehicles.data().count >= vehicleLimit) {
-                throw new Error(`Vehicle limit reached (${vehicleLimit}). Upgrade plan.`);
-            }
+        if (currentVehicles.data().count >= vehicleLimit) {
+            throw new Error(`Vehicle limit reached (${vehicleLimit}). Upgrade plan.`);
+        }
 
-            const userRecord = await admin.auth().createUser({ email, password, displayName: name });
-            const batch = db.batch();
+        const userRecord = await admin.auth().createUser({ email, password, displayName: name });
+        const batch = db.batch();
 
-            batch.set(db.collection("users").doc(userRecord.uid), {
-                name, email, phone, role: "driver", companyId, isActive: true, softDeleted: false,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                lastLoginAt: null, activePlate: plate ?? null, jobStatus: "available",
-            });
+        batch.set(db.collection("users").doc(userRecord.uid), {
+            name, email, phone, role: "driver", companyId, isActive: true, softDeleted: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastLoginAt: null, activePlate: plate ?? null, jobStatus: "available",
+        });
 
+        batch.set(db.collection("vehicles").doc(), {
+            plate: plate.toUpperCase(), assignedDriverId: userRecord.uid, companyId,
+            ownership: "driver", type: "truck", isActive: true,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        await batch.commit();
+        res.json({ success: true, uid: userRecord.uid });
+    } catch (e: any) {
+        res.status(400).json({ error: e.message });
+    }
+});
+
+// CREATE USER (ADMIN / MANAGER)
+export const createUserHttp = onRequest({ cors: true }, async (req, res) => {
+    try {
+        if (req.method !== "POST") { res.status(405).end(); return; }
+        const decoded = await verifyAuth(req);
+        const caller = await getUser(decoded.uid);
+        requireRole(caller, ["admin", "manager"]);
+
+        const { name, email, password, phone, role, plate } = req.body;
+        if (!name || !email || !password || !phone || !role) throw new Error("Missing fields");
+
+        const companyId = caller.companyId;
+        if (!companyId) throw new Error("Caller has no companyId");
+
+        const companyDoc = await db.collection("companies").doc(companyId).get();
+        const companyData: any = companyDoc.data();
+
+        // LIMIT CHECKS
+        if (role === 'manager') {
+            const limit = companyData.limits?.managerCount || 1;
+            const current = await db.collection("users").where("companyId", "==", companyId).where("role", "==", "manager").where("softDeleted", "==", false).count().get();
+            if (current.data().count >= limit) throw new Error(`Manager limit reached (${limit}). Upgrade plan.`);
+        }
+        if (role === 'dispatch') {
+            const limit = companyData.limits?.dispatchCount || 3;
+            const current = await db.collection("users").where("companyId", "==", companyId).where("role", "==", "dispatch").where("softDeleted", "==", false).count().get();
+            if (current.data().count >= limit) throw new Error(`Dispatch limit reached (${limit}). Upgrade plan.`);
+        }
+
+        const userRecord = await admin.auth().createUser({ email, password, displayName: name });
+        const batch = db.batch();
+
+        batch.set(db.collection("users").doc(userRecord.uid), {
+            name, email, phone, role, companyId, isActive: true, softDeleted: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(), lastLoginAt: null,
+        });
+
+        if (role === "driver" && plate) {
             batch.set(db.collection("vehicles").doc(), {
                 plate: plate.toUpperCase(), assignedDriverId: userRecord.uid, companyId,
                 ownership: "driver", type: "truck", isActive: true,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             });
-
-            await batch.commit();
-            res.json({ success: true, uid: userRecord.uid });
-        } catch (e: any) {
-            res.status(400).json({ error: e.message });
-        }
-    });
-});
-
-// CREATE USER (ADMIN / MANAGER)
-export const createUserHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
-        try {
-            if (req.method !== "POST") { res.status(405).end(); return; }
-            const decoded = await verifyAuth(req);
-            const caller = await getUser(decoded.uid);
-            requireRole(caller, ["admin", "manager"]);
-
-            const { name, email, password, phone, role, plate } = req.body;
-            if (!name || !email || !password || !phone || !role) throw new Error("Missing fields");
-
-            const companyId = caller.companyId;
-            if (!companyId) throw new Error("Caller has no companyId");
-
-            const companyDoc = await db.collection("companies").doc(companyId).get();
-            const companyData: any = companyDoc.data();
-
-            // LIMIT CHECKS
-            if (role === 'manager') {
-                const limit = companyData.limits?.managerCount || 1;
-                const current = await db.collection("users").where("companyId", "==", companyId).where("role", "==", "manager").where("softDeleted", "==", false).count().get();
-                if (current.data().count >= limit) throw new Error(`Manager limit reached (${limit}). Upgrade plan.`);
-            }
-            if (role === 'dispatch') {
-                const limit = companyData.limits?.dispatchCount || 3;
-                const current = await db.collection("users").where("companyId", "==", companyId).where("role", "==", "dispatch").where("softDeleted", "==", false).count().get();
-                if (current.data().count >= limit) throw new Error(`Dispatch limit reached (${limit}). Upgrade plan.`);
-            }
-
-            const userRecord = await admin.auth().createUser({ email, password, displayName: name });
-            const batch = db.batch();
-
-            batch.set(db.collection("users").doc(userRecord.uid), {
-                name, email, phone, role, companyId, isActive: true, softDeleted: false,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(), lastLoginAt: null,
+            batch.update(db.collection("users").doc(userRecord.uid), {
+                jobStatus: "available", activePlate: plate ?? null,
             });
-
-            if (role === "driver" && plate) {
-                batch.set(db.collection("vehicles").doc(), {
-                    plate: plate.toUpperCase(), assignedDriverId: userRecord.uid, companyId,
-                    ownership: "driver", type: "truck", isActive: true,
-                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                });
-                batch.update(db.collection("users").doc(userRecord.uid), {
-                    jobStatus: "available", activePlate: plate ?? null,
-                });
-            }
-
-            await batch.commit();
-            res.json({ success: true, uid: userRecord.uid });
-        } catch (e: any) {
-            res.status(400).json({ error: e.message });
         }
-    });
+
+        await batch.commit();
+        res.json({ success: true, uid: userRecord.uid });
+    } catch (e: any) {
+        res.status(400).json({ error: e.message });
+    }
 });
 
 // UPDATE USER
-export const updateUserHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
-        try {
-            if (req.method !== "POST") { res.status(405).end(); return; }
-            const decoded = await verifyAuth(req);
-            const caller = await getUser(decoded.uid);
-            requireRole(caller, ["admin", "manager"]);
+export const updateUserHttp = onRequest({ cors: true }, async (req, res) => {
+    try {
+        if (req.method !== "POST") { res.status(405).end(); return; }
+        const decoded = await verifyAuth(req);
+        const caller = await getUser(decoded.uid);
+        requireRole(caller, ["admin", "manager"]);
 
-            const { uid, name, email, phone, role, plate } = req.body;
-            if (!uid || !name || !email || !phone || !role) throw new Error("Missing fields");
+        const { uid, name, email, phone, role, plate } = req.body;
+        if (!uid || !name || !email || !phone || !role) throw new Error("Missing fields");
 
-            await ensureSameCompany(decoded.uid, uid);
-            const batch = db.batch();
+        await ensureSameCompany(decoded.uid, uid);
+        const batch = db.batch();
 
-            batch.update(db.collection("users").doc(uid), { name, email, phone, role });
+        batch.update(db.collection("users").doc(uid), { name, email, phone, role });
 
-            if (role === "driver" && plate) {
-                const vehicleSnap = await db.collection("vehicles").where("assignedDriverId", "==", uid).limit(1).get();
-                const companyId = caller.companyId;
+        if (role === "driver" && plate) {
+            const vehicleSnap = await db.collection("vehicles").where("assignedDriverId", "==", uid).limit(1).get();
+            const companyId = caller.companyId;
 
-                if (!vehicleSnap.empty) {
-                    batch.update(vehicleSnap.docs[0].ref, { plate: plate.toUpperCase() });
-                } else {
-                    batch.set(db.collection("vehicles").doc(), {
-                        plate: plate.toUpperCase(), assignedDriverId: uid, companyId,
-                        ownership: "driver", type: "truck", isActive: true,
-                        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                    });
-                }
+            if (!vehicleSnap.empty) {
+                batch.update(vehicleSnap.docs[0].ref, { plate: plate.toUpperCase() });
+            } else {
+                batch.set(db.collection("vehicles").doc(), {
+                    plate: plate.toUpperCase(), assignedDriverId: uid, companyId,
+                    ownership: "driver", type: "truck", isActive: true,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
             }
-            await batch.commit();
-            res.json({ success: true });
-        } catch (e: any) {
-            res.status(400).json({ error: e.message });
         }
-    });
+        await batch.commit();
+        res.json({ success: true });
+    } catch (e: any) {
+        res.status(400).json({ error: e.message });
+    }
 });
 
 // SOFT DELETE USER
-export const softDeleteUserHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
-        try {
-            if (req.method !== "POST") { res.status(405).end(); return; }
-            const decoded = await verifyAuth(req);
-            const caller = await getUser(decoded.uid);
-            requireRole(caller, ["admin", "manager"]);
+export const softDeleteUserHttp = onRequest({ cors: true }, async (req, res) => {
+    try {
+        if (req.method !== "POST") { res.status(405).end(); return; }
+        const decoded = await verifyAuth(req);
+        const caller = await getUser(decoded.uid);
+        requireRole(caller, ["admin", "manager"]);
 
-            const { userId } = req.body;
-            if (!userId) throw new Error("userId required");
+        const { userId } = req.body;
+        if (!userId) throw new Error("userId required");
 
-            await ensureSameCompany(decoded.uid, userId);
-            await db.collection("users").doc(userId).update({ softDeleted: true, isActive: false });
-            res.json({ success: true });
-        } catch (e: any) {
-            res.status(400).json({ error: e.message });
-        }
-    });
+        await ensureSameCompany(decoded.uid, userId);
+        await db.collection("users").doc(userId).update({ softDeleted: true, isActive: false });
+        res.json({ success: true });
+    } catch (e: any) {
+        res.status(400).json({ error: e.message });
+    }
 });
 
 // JOB ACTIONS
-export const jobAction = onRequest((req, res) => {
-    cors(req, res, async () => {
-        try {
-            if (req.method !== "POST") { res.status(405).end(); return; }
-            const decoded = await verifyAuth(req);
-            const { jobId, action, reason } = req.body;
-            if (!jobId || !action) throw new Error("jobId & action required");
+export const jobAction = onRequest({ cors: true }, async (req, res) => {
+    try {
+        if (req.method !== "POST") { res.status(405).end(); return; }
+        const decoded = await verifyAuth(req);
+        const { jobId, action, reason } = req.body;
+        if (!jobId || !action) throw new Error("jobId & action required");
 
-            const { caller, job } = await ensureJobBelongsToCompany(decoded.uid, jobId);
-            requireRole(caller, ["admin", "manager", "dispatch", "driver"]);
+        const { caller, job } = await ensureJobBelongsToCompany(decoded.uid, jobId);
+        requireRole(caller, ["admin", "manager", "dispatch", "driver"]);
 
-            const jobRef = db.collection("jobs").doc(jobId);
-            const now = admin.firestore.FieldValue.serverTimestamp();
-            const batch = db.batch();
+        const jobRef = db.collection("jobs").doc(jobId);
+        const now = admin.firestore.FieldValue.serverTimestamp();
+        const batch = db.batch();
 
-            if (action === "approve") {
-                batch.update(jobRef, { status: "approved", "timestamps.reviewedAt": now, reviewedBy: decoded.uid });
-                if (job.driverId) {
-                    batch.update(db.collection("users").doc(job.driverId), { jobStatus: "busy", currentJobId: jobId });
-                    try {
-                        await admin.database().ref(`locations/${job.driverId}`).update({
-                            currentJobId: jobId, timestamp: admin.database.ServerValue.TIMESTAMP, lastPing: admin.database.ServerValue.TIMESTAMP, offlineNotified: false
-                        });
-                    } catch (rtdbError) { console.error("RTDB error", rtdbError); }
-                }
-            } else if (action === "reject") {
-                if (!reason) throw new Error("Rejection reason required");
-                batch.update(jobRef, { status: "rejected", rejectionReason: reason, "timestamps.reviewedAt": now, reviewedBy: decoded.uid });
-                if (job.driverId) {
-                    batch.update(db.collection("users").doc(job.driverId), { jobStatus: "available", currentJobId: null });
-                    try {
-                        await admin.database().ref(`locations/${job.driverId}`).update({
-                            currentJobId: null, timestamp: admin.database.ServerValue.TIMESTAMP, lastPing: admin.database.ServerValue.TIMESTAMP, offlineNotified: false
-                        });
-                    } catch (rtdbError) { console.error("RTDB error", rtdbError); }
-                }
-            } else if (action === "complete") {
-                if (caller.role === "driver" && job.driverId !== decoded.uid) throw new Error("Unauthorized");
-                batch.update(jobRef, { status: "completed", "timestamps.completedAt": now });
-                if (job.driverId) {
-                    batch.update(db.collection("users").doc(job.driverId), { jobStatus: "available", currentJobId: null });
-                    try {
-                        await admin.database().ref(`locations/${job.driverId}`).update({
-                            currentJobId: null, timestamp: admin.database.ServerValue.TIMESTAMP, lastPing: admin.database.ServerValue.TIMESTAMP, offlineNotified: false
-                        });
-                    } catch (rtdbError) { console.error("RTDB error", rtdbError); }
-                }
-            } else {
-                throw new Error("Invalid action");
+        if (action === "approve") {
+            batch.update(jobRef, { status: "approved", "timestamps.reviewedAt": now, reviewedBy: decoded.uid });
+            if (job.driverId) {
+                batch.update(db.collection("users").doc(job.driverId), { jobStatus: "busy", currentJobId: jobId });
+                try {
+                    await admin.database().ref(`locations/${job.driverId}`).update({
+                        currentJobId: jobId, timestamp: admin.database.ServerValue.TIMESTAMP, lastPing: admin.database.ServerValue.TIMESTAMP, offlineNotified: false
+                    });
+                } catch (rtdbError) { console.error("RTDB error", rtdbError); }
             }
-
-            batch.set(jobRef.collection("logs").doc(), { action, performedBy: decoded.uid, performedAt: now, note: reason || null });
-            await batch.commit();
-            res.json({ success: true });
-        } catch (e: any) {
-            res.status(400).json({ error: e.message });
+        } else if (action === "reject") {
+            if (!reason) throw new Error("Rejection reason required");
+            batch.update(jobRef, { status: "rejected", rejectionReason: reason, "timestamps.reviewedAt": now, reviewedBy: decoded.uid });
+            if (job.driverId) {
+                batch.update(db.collection("users").doc(job.driverId), { jobStatus: "available", currentJobId: null });
+                try {
+                    await admin.database().ref(`locations/${job.driverId}`).update({
+                        currentJobId: null, timestamp: admin.database.ServerValue.TIMESTAMP, lastPing: admin.database.ServerValue.TIMESTAMP, offlineNotified: false
+                    });
+                } catch (rtdbError) { console.error("RTDB error", rtdbError); }
+            }
+        } else if (action === "complete") {
+            if (caller.role === "driver" && job.driverId !== decoded.uid) throw new Error("Unauthorized");
+            batch.update(jobRef, { status: "completed", "timestamps.completedAt": now });
+            if (job.driverId) {
+                batch.update(db.collection("users").doc(job.driverId), { jobStatus: "available", currentJobId: null });
+                try {
+                    await admin.database().ref(`locations/${job.driverId}`).update({
+                        currentJobId: null, timestamp: admin.database.ServerValue.TIMESTAMP, lastPing: admin.database.ServerValue.TIMESTAMP, offlineNotified: false
+                    });
+                } catch (rtdbError) { console.error("RTDB error", rtdbError); }
+            }
+        } else {
+            throw new Error("Invalid action");
         }
-    });
+
+        batch.set(jobRef.collection("logs").doc(), { action, performedBy: decoded.uid, performedAt: now, note: reason || null });
+        await batch.commit();
+        res.json({ success: true });
+    } catch (e: any) {
+        res.status(400).json({ error: e.message });
+    }
 });
 
 // SYNC ACTIVE PLATE
-export const syncActivePlateFromVehicles = onRequest(async (req, res) => {
+export const syncActivePlateFromVehicles = onRequest({ cors: true }, async (req, res) => {
     try {
         const decoded = await verifyAuth(req);
         const caller = await getUser(decoded.uid);
@@ -406,78 +396,72 @@ export const notifyOnJobStatusChange = onDocumentUpdated("jobs/{jobId}", async (
     } catch (e) { console.error(e); }
 });
 
-export const updateLastLoginHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
-        try {
-            if (req.method !== "POST") { res.status(405).end(); return; }
-            const decoded = await verifyAuth(req);
-            const user = await getUser(decoded.uid);
+export const updateLastLoginHttp = onRequest({ cors: true }, async (req, res) => {
+    try {
+        if (req.method !== "POST") { res.status(405).end(); return; }
+        const decoded = await verifyAuth(req);
+        const user = await getUser(decoded.uid);
 
-            const batch = db.batch();
+        const batch = db.batch();
 
-            // Update user's last login timestamp
-            batch.update(db.collection("users").doc(decoded.uid), {
-                lastLoginAt: admin.firestore.FieldValue.serverTimestamp()
+        // Update user's last login timestamp
+        batch.update(db.collection("users").doc(decoded.uid), {
+            lastLoginAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        // Create a login activity log
+        if (user.companyId) {
+            const logRef = db.collection("logs").doc();
+            batch.set(logRef, {
+                action: "LOGIN_ACTIVITY",
+                message: `${user.name || user.email} sisteme giriş yaptı`,
+                actorId: decoded.uid,
+                companyId: user.companyId,
+                type: "LOGIN_ACTIVITY", // Helper for filtering
+                createdAt: admin.firestore.FieldValue.serverTimestamp()
             });
+        }
 
-            // Create a login activity log
-            if (user.companyId) {
-                const logRef = db.collection("logs").doc();
-                batch.set(logRef, {
-                    action: "LOGIN_ACTIVITY",
-                    message: `${user.name || user.email} sisteme giriş yaptı`,
-                    actorId: decoded.uid,
-                    companyId: user.companyId,
-                    type: "LOGIN_ACTIVITY", // Helper for filtering
-                    createdAt: admin.firestore.FieldValue.serverTimestamp()
-                });
-            }
-
-            await batch.commit();
-            res.json({ success: true });
-        } catch (e: any) { res.status(401).json({ error: e.message }); }
-    });
+        await batch.commit();
+        res.json({ success: true });
+    } catch (e: any) { res.status(401).json({ error: e.message }); }
 });
 
-export const clearFcmTokenHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
-        try {
-            const decoded = await verifyAuth(req);
-            await db.collection("users").doc(decoded.uid).update({ fcmToken: admin.firestore.FieldValue.delete() });
-            res.json({ success: true });
-        } catch (e: any) { res.status(400).json({ error: e.message }); }
-    });
+export const clearFcmTokenHttp = onRequest({ cors: true }, async (req, res) => {
+    try {
+        const decoded = await verifyAuth(req);
+        await db.collection("users").doc(decoded.uid).update({ fcmToken: admin.firestore.FieldValue.delete() });
+        res.json({ success: true });
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
 });
 
-export const getLiveDriverLocations = onRequest(async (req, res) => {
-    cors(req, res, async () => {
-        try {
-            const authHeader = req.headers.authorization || "";
-            if (!authHeader.startsWith("Bearer ")) { res.status(401).json({ error: "Unauthorized" }); return; }
+export const getLiveDriverLocations = onRequest({ cors: true }, async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization || "";
+        if (!authHeader.startsWith("Bearer ")) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-            const token = authHeader.replace("Bearer ", "");
-            const decoded = await admin.auth().verifyIdToken(token);
+        const token = authHeader.replace("Bearer ", "");
+        const decoded = await admin.auth().verifyIdToken(token);
 
-            const userSnap = await db.collection("users").doc(decoded.uid).get();
-            if (!userSnap.exists) { res.status(403).json({ error: "User not found" }); return; }
+        const userSnap = await db.collection("users").doc(decoded.uid).get();
+        if (!userSnap.exists) { res.status(403).json({ error: "User not found" }); return; }
 
-            const user: any = userSnap.data();
-            if (!["manager", "dispatch"].includes(user.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+        const user: any = userSnap.data();
+        if (!["manager", "dispatch"].includes(user.role)) { res.status(403).json({ error: "Forbidden" }); return; }
 
-            const rtdb = admin.database();
-            const locationsSnap = await rtdb.ref("locations").get();
-            const allLocations = locationsSnap.exists() ? locationsSnap.val() : {};
-            const locations: any = {};
+        const rtdb = admin.database();
+        const locationsSnap = await rtdb.ref("locations").get();
+        const allLocations = locationsSnap.exists() ? locationsSnap.val() : {};
+        const locations: any = {};
 
-            for (const [driverId, data] of Object.entries(allLocations)) {
-                const d = data as any;
-                if (d.companyId && d.companyId === user.companyId) {
-                    locations[driverId] = d;
-                }
+        for (const [driverId, data] of Object.entries(allLocations)) {
+            const d = data as any;
+            if (d.companyId && d.companyId === user.companyId) {
+                locations[driverId] = d;
             }
-            res.status(200).json({ success: true, locations, history: {} });
-        } catch (e: any) { res.status(500).json({ error: e.message }); }
-    });
+        }
+        res.status(200).json({ success: true, locations, history: {} });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
 export const checkDriverOffline = onSchedule({ schedule: "every 2 minutes", timeZone: "Europe/Istanbul", region: "us-central1" }, async () => {
@@ -527,258 +511,262 @@ export const checkDriverOffline = onSchedule({ schedule: "every 2 minutes", time
     }
 });
 
-export const createJobHttp = onRequest((req, res) => {
-    cors(req, res, async () => {
+export const createJobHttp = onRequest({ cors: true }, async (req, res) => {
+    try {
+        if (req.method !== "POST") { res.status(405).end(); return; }
+        const decoded = await verifyAuth(req);
+        const caller = await getUser(decoded.uid);
+        requireRole(caller, ["admin", "manager", "dispatch"]);
+
+        const { driverId, vehicleId, loadPort, unloadPort, cargoType, cargoDescription, cargoWeightKg, revenue, expenses } = req.body;
+        if (!driverId || !vehicleId || !loadPort || !unloadPort) throw new Error("Missing required fields");
+
+        const companyId = caller.companyId;
+        if (!companyId) throw new Error("Caller has no companyId");
+
+        const driverSnap = await db.collection("users").doc(driverId).get();
+        const driverData: any = driverSnap.data();
+        if (driverData.companyId !== companyId) throw new Error("Driver belongs to different company");
+        if (driverData.jobStatus === 'busy') throw new Error("Driver is currently busy");
+
+        const vehicleSnap = await db.collection("vehicles").doc(vehicleId).get();
+        if (vehicleSnap.data()?.companyId !== companyId) throw new Error("Vehicle belongs to different company");
+
+        // 🔥 SERVER-SIDE GEOCODING & DISTANCE (CORS FIX)
+        const apiKey = "AIzaSyBW9ivbOndjriQ50cwHN6d3VUiWmQJ9VdE";
+        let distanceKm = req.body.distanceKm || 0;
+        let loadLatLng = null;
+        let unloadLatLng = null;
+
         try {
-            if (req.method !== "POST") { res.status(405).end(); return; }
-            const decoded = await verifyAuth(req);
-            const caller = await getUser(decoded.uid);
-            requireRole(caller, ["admin", "manager", "dispatch"]);
+            // Geocode loadPort
+            const loadRes = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(loadPort)}&key=${apiKey}`);
+            const unloadRes = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(unloadPort)}&key=${apiKey}`);
 
-            const { driverId, vehicleId, loadPort, unloadPort, cargoType, cargoDescription, cargoWeightKg, revenue, expenses } = req.body;
-            if (!driverId || !vehicleId || !loadPort || !unloadPort) throw new Error("Missing required fields");
+            if (loadRes.data.status === "OK" && unloadRes.data.status === "OK") {
+                const origin = loadRes.data.results[0].geometry.location;
+                const dest = unloadRes.data.results[0].geometry.location;
 
-            const companyId = caller.companyId;
-            if (!companyId) throw new Error("Caller has no companyId");
+                loadLatLng = origin;
+                unloadLatLng = dest;
 
-            const driverSnap = await db.collection("users").doc(driverId).get();
-            const driverData: any = driverSnap.data();
-            if (driverData.companyId !== companyId) throw new Error("Driver belongs to different company");
-            if (driverData.jobStatus === 'busy') throw new Error("Driver is currently busy");
+                // Get distance
+                const distRes = await axios.get(`https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${dest.lat},${dest.lng}&key=${apiKey}`);
 
-            const vehicleSnap = await db.collection("vehicles").doc(vehicleId).get();
-            if (vehicleSnap.data()?.companyId !== companyId) throw new Error("Vehicle belongs to different company");
-
-            // 🔥 SERVER-SIDE GEOCODING & DISTANCE (CORS FIX)
-            const apiKey = "AIzaSyBW9ivbOndjriQ50cwHN6d3VUiWmQJ9VdE";
-            let distanceKm = req.body.distanceKm || 0;
-
-            try {
-                // Geocode loadPort
-                const loadRes = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(loadPort)}&key=${apiKey}`);
-                const unloadRes = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(unloadPort)}&key=${apiKey}`);
-
-                if (loadRes.data.status === "OK" && unloadRes.data.status === "OK") {
-                    const origin = loadRes.data.results[0].geometry.location;
-                    const dest = unloadRes.data.results[0].geometry.location;
-
-                    // Get distance
-                    const distRes = await axios.get(`https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${dest.lat},${dest.lng}&key=${apiKey}`);
-
-                    if (distRes.data.status === "OK") {
-                        const route = distRes.data.routes[0];
-                        if (route && route.legs && route.legs[0]) {
-                            distanceKm = route.legs[0].distance.value / 1000; // meters to km
-                        }
+                if (distRes.data.status === "OK") {
+                    const route = distRes.data.routes[0];
+                    if (route && route.legs && route.legs[0]) {
+                        distanceKm = route.legs[0].distance.value / 1000; // meters to km
                     }
                 }
-            } catch (geoError) {
-                console.error("Geocoding failed in Cloud Function:", geoError);
-                // Fallback to 0 if distance wasn't provided, or keep what was provided
             }
+        } catch (geoError) {
+            console.error("Geocoding failed in Cloud Function:", geoError);
+        }
 
-            const batch = db.batch();
-            const jobRef = db.collection("jobs").doc();
-            const referenceNo = `JOB-${Date.now()}`;
+        const batch = db.batch();
+        const jobRef = db.collection("jobs").doc();
+        const referenceNo = `JOB-${Date.now()}`;
 
-            // 🔥 FLATTENED DATA STRUCTURE (FIXES "-" IN UI)
-            batch.set(jobRef, {
-                referenceNo,
-                companyId,
-                driverId,
-                vehicleId,
-                createdBy: decoded.uid,
-                status: "pending",
-                rejectionReason: null,
+        // 🔥 ENRICHED DATA STRUCTURE (Coordinates & Restrictions)
+        batch.set(jobRef, {
+            referenceNo,
+            companyId,
+            driverId,
+            vehicleId,
+            createdBy: decoded.uid,
+            status: "pending",
+            rejectionReason: null,
+            loadPort,
+            unloadPort,
+            cargoType,
+            cargoDescription,
+            cargoWeightKg: Number(cargoWeightKg),
+            distanceKm: Number(distanceKm),
+            isCityRestricted: !!req.body.isCityRestricted,
+            route: {
                 loadPort,
                 unloadPort,
-                cargoType,
-                cargoDescription,
-                cargoWeightKg: Number(cargoWeightKg),
                 distanceKm: Number(distanceKm),
-                timestamps: {
-                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                    reviewedAt: null
-                },
-                softDeleted: false,
-                driverName: driverData.name,
-                vehiclePlate: vehicleSnap.data()?.plate,
-                revenue: Number(revenue) || 0,
-                expenses: expenses || {}
-            });
+                loadLatLng,
+                unloadLatLng
+            },
+            timestamps: {
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                reviewedAt: null
+            },
+            softDeleted: false,
+            driverName: driverData.name,
+            vehiclePlate: vehicleSnap.data()?.plate,
+            revenue: Number(revenue) || 0,
+            expenses: expenses || {}
+        });
 
-            batch.set(jobRef.collection("logs").doc(), {
-                action: "created",
-                performedBy: decoded.uid,
-                performedAt: admin.firestore.FieldValue.serverTimestamp()
-            });
+        batch.set(jobRef.collection("logs").doc(), {
+            action: "created",
+            performedBy: decoded.uid,
+            performedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
 
-            batch.update(db.collection("users").doc(driverId), {
-                jobStatus: "busy",
-                currentJobId: jobRef.id
-            });
+        batch.update(db.collection("users").doc(driverId), {
+            jobStatus: "busy",
+            currentJobId: jobRef.id
+        });
 
-            await batch.commit();
-            res.json({ success: true, jobId: jobRef.id });
-        } catch (e: any) { res.status(400).json({ error: e.message }); }
-    });
+        await batch.commit();
+        res.json({ success: true, jobId: jobRef.id });
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
 });
 
-export const getManagerDashboardData = onRequest((req, res) => {
-    cors(req, res, async () => {
-        try {
-            const decoded = await verifyAuth(req);
-            const user = await getUser(decoded.uid);
-            requireRole(user, ["manager", "admin"]);
-            const companyId = user.companyId;
-            if (!companyId) throw new Error("No company linked");
+export const getManagerDashboardData = onRequest({ cors: true }, async (req, res) => {
+    try {
+        const decoded = await verifyAuth(req);
+        const user = await getUser(decoded.uid);
+        requireRole(user, ["manager", "admin"]);
+        const companyId = user.companyId;
+        if (!companyId) throw new Error("No company linked");
 
-            const today = new Date(); today.setHours(0, 0, 0, 0);
-            const monthStart = new Date();
-            monthStart.setDate(1);
-            monthStart.setHours(0, 0, 0, 0);
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
 
-            const [
-                companySnap,
-                vehiclesCount,
-                jobsCountToday,
-                activeJobsCount,
-                recentJobsSnap,
-                totalDriversCount,
-                activeDriversCount,
-                jobsCountMonth,
-                pendingJobsCount,
-                approvedJobsCount,
-                completedJobsTotalCount,
-                completedJobsMonthSnap,
-                maintenanceSnap
-            ] = await Promise.all([
-                db.collection("companies").doc(companyId).get(),
-                db.collection("vehicles").where("companyId", "==", companyId).where("isActive", "==", true).count().get(),
-                db.collection("jobs").where("companyId", "==", companyId).where("status", "==", "completed").where("timestamps.completedAt", ">=", admin.firestore.Timestamp.fromDate(today)).count().get(),
-                db.collection("jobs").where("companyId", "==", companyId).where("status", "in", ["pending", "approved", "started"]).count().get(),
-                db.collection("jobs").where("companyId", "==", companyId).orderBy("timestamps.createdAt", "desc").limit(10).get(),
-                db.collection("users").where("companyId", "==", companyId).where("role", "==", "driver").count().get(),
-                db.collection("users").where("companyId", "==", companyId).where("role", "==", "driver").where("isActive", "==", true).count().get(),
-                db.collection("jobs").where("companyId", "==", companyId).where("timestamps.completedAt", ">=", admin.firestore.Timestamp.fromDate(monthStart)).count().get(),
-                db.collection("jobs").where("companyId", "==", companyId).where("status", "==", "pending").count().get(),
-                db.collection("jobs").where("companyId", "==", companyId).where("status", "==", "approved").count().get(),
-                db.collection("jobs").where("companyId", "==", companyId).where("status", "==", "completed").count().get(),
-                db.collection("jobs")
-                    .where("companyId", "==", companyId)
-                    .where("status", "==", "completed")
-                    .where("timestamps.completedAt", ">=", admin.firestore.Timestamp.fromDate(monthStart))
-                    .get(),
-                db.collection("vehicles")
-                    .where("companyId", "==", companyId)
-                    .where("isActive", "==", true)
-                    .get()
-            ]);
-
-            const completedJobsMonthDocs = (completedJobsMonthSnap as admin.firestore.QuerySnapshot).docs;
-            let totalRevenueMonth = 0;
-            let totalProfitMonth = 0;
-
-            completedJobsMonthDocs.forEach(doc => {
-                const job = doc.data() as any;
-                const revenue = job.revenue || 0;
-                const expensesMap = job.expenses || {};
-                const totalExpenses = Object.values(expensesMap).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
-                totalRevenueMonth += revenue;
-                totalProfitMonth += (revenue - totalExpenses);
-            });
-
-            const recentJobs = recentJobsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            res.json({
-                success: true,
-                stats: {
-                    totalVehicles: vehiclesCount.data().count,
-                    completedJobsToday: jobsCountToday.data().count,
-                    completedJobsMonth: jobsCountMonth.data().count,
-                    activeJobs: activeJobsCount.data().count,
-                    totalDrivers: totalDriversCount.data().count,
-                    activeDrivers: activeDriversCount.data().count,
-                    distribution: {
-                        pending: pendingJobsCount.data().count,
-                        approved: approvedJobsCount.data().count,
-                        completed: completedJobsTotalCount.data().count
-                    },
-                    totalRevenueMonth,
-                    totalProfitMonth,
-                    maintenanceRequiredCount: (maintenanceSnap as admin.firestore.QuerySnapshot).docs.filter(doc => {
-                        const v = doc.data();
-                        return v.nextMaintenanceKm && v.currentKm && (v.nextMaintenanceKm - v.currentKm <= 1000);
-                    }).length,
-                    insuranceExpiringCount: (maintenanceSnap as admin.firestore.QuerySnapshot).docs.filter(doc => {
-                        const v = doc.data();
-                        if (!v.insurancePolicyExpiry) return false;
-                        const expiry = v.insurancePolicyExpiry.toDate();
-                        const weekFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-                        return expiry <= weekFromNow;
-                    }).length
-                },
-                goals: companySnap.data()?.goals || companySnap.data()?.settings || { monthlyJobTarget: 0, monthlyRevenueTarget: 0 },
-                settings: companySnap.data()?.settings || companySnap.data()?.goals || { monthlyJobTarget: 0 },
-                recentJobs
-            });
-        } catch (e: any) {
-            console.error("getManagerDashboardData error:", e);
-            res.status(400).json({ error: e.message });
-        }
-    });
-});
-
-export const getManagerLogs = onRequest((req, res) => {
-    cors(req, res, async () => {
-        try {
-            const decoded = await verifyAuth(req);
-            const user = await getUser(decoded.uid);
-            requireRole(user, ["manager", "admin"]);
-            const companyId = user.companyId;
-            if (!companyId) throw new Error("No company linked");
-
-            // Query the dedicated 'logs' collection instead of 'jobs'
-            const logsSnap = await db.collection("logs")
+        const [
+            companySnap,
+            vehiclesCount,
+            jobsCountToday,
+            activeJobsCount,
+            recentJobsSnap,
+            totalDriversCount,
+            activeDriversCount,
+            jobsCountMonth,
+            pendingJobsCount,
+            approvedJobsCount,
+            completedJobsTotalCount,
+            completedJobsMonthSnap,
+            maintenanceSnap
+        ] = await Promise.all([
+            db.collection("companies").doc(companyId).get(),
+            db.collection("vehicles").where("companyId", "==", companyId).where("isActive", "==", true).count().get(),
+            db.collection("jobs").where("companyId", "==", companyId).where("status", "==", "completed").where("timestamps.completedAt", ">=", admin.firestore.Timestamp.fromDate(today)).count().get(),
+            db.collection("jobs").where("companyId", "==", companyId).where("status", "in", ["pending", "approved", "started"]).count().get(),
+            db.collection("jobs").where("companyId", "==", companyId).orderBy("timestamps.createdAt", "desc").limit(10).get(),
+            db.collection("users").where("companyId", "==", companyId).where("role", "==", "driver").count().get(),
+            db.collection("users").where("companyId", "==", companyId).where("role", "==", "driver").where("isActive", "==", true).count().get(),
+            db.collection("jobs").where("companyId", "==", companyId).where("timestamps.completedAt", ">=", admin.firestore.Timestamp.fromDate(monthStart)).count().get(),
+            db.collection("jobs").where("companyId", "==", companyId).where("status", "==", "pending").count().get(),
+            db.collection("jobs").where("companyId", "==", companyId).where("status", "==", "approved").count().get(),
+            db.collection("jobs").where("companyId", "==", companyId).where("status", "==", "completed").count().get(),
+            db.collection("jobs")
                 .where("companyId", "==", companyId)
-                .orderBy("createdAt", "desc")
-                .limit(40)
-                .get();
+                .where("status", "==", "completed")
+                .where("timestamps.completedAt", ">=", admin.firestore.Timestamp.fromDate(monthStart))
+                .get(),
+            db.collection("vehicles")
+                .where("companyId", "==", companyId)
+                .where("isActive", "==", true)
+                .get()
+        ]);
 
-            const logs: any[] = [];
-            logsSnap.forEach(doc => {
-                const data = doc.data();
-                logs.push({
-                    id: doc.id,
-                    type: data.type || 'ACTIVITY',
-                    action: data.action,
-                    message: data.message || `${data.action} eylemi gerçekleştirildi`,
-                    timestamp: data.createdAt?.toDate(),
-                    actorId: data.actorId || data.performedBy,
-                    details: data
-                });
-            });
-            res.json({ success: true, logs });
-        } catch (e: any) { res.status(400).json({ error: e.message }); }
-    });
+        const completedJobsMonthDocs = (completedJobsMonthSnap as admin.firestore.QuerySnapshot).docs;
+        let totalRevenueMonth = 0;
+        let totalProfitMonth = 0;
+
+        completedJobsMonthDocs.forEach(doc => {
+            const job = doc.data() as any;
+            const revenue = job.revenue || 0;
+            const expensesMap = job.expenses || {};
+            const totalExpenses = Object.values(expensesMap).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+            totalRevenueMonth += revenue;
+            totalProfitMonth += (revenue - totalExpenses);
+        });
+
+        const recentJobs = recentJobsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        res.json({
+            success: true,
+            stats: {
+                totalVehicles: vehiclesCount.data().count,
+                completedJobsToday: jobsCountToday.data().count,
+                completedJobsMonth: jobsCountMonth.data().count,
+                activeJobs: activeJobsCount.data().count,
+                totalDrivers: totalDriversCount.data().count,
+                activeDrivers: activeDriversCount.data().count,
+                distribution: {
+                    pending: pendingJobsCount.data().count,
+                    approved: approvedJobsCount.data().count,
+                    completed: completedJobsTotalCount.data().count
+                },
+                totalRevenueMonth,
+                totalProfitMonth,
+                maintenanceRequiredCount: (maintenanceSnap as admin.firestore.QuerySnapshot).docs.filter(doc => {
+                    const v = doc.data();
+                    return v.nextMaintenanceKm && v.currentKm && (v.nextMaintenanceKm - v.currentKm <= 1000);
+                }).length,
+                insuranceExpiringCount: (maintenanceSnap as admin.firestore.QuerySnapshot).docs.filter(doc => {
+                    const v = doc.data();
+                    if (!v.insurancePolicyExpiry) return false;
+                    const expiry = v.insurancePolicyExpiry.toDate();
+                    const weekFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+                    return expiry <= weekFromNow;
+                }).length
+            },
+            goals: companySnap.data()?.goals || companySnap.data()?.settings || { monthlyJobTarget: 0, monthlyRevenueTarget: 0 },
+            settings: companySnap.data()?.settings || companySnap.data()?.goals || { monthlyJobTarget: 0 },
+            recentJobs
+        });
+    } catch (e: any) {
+        console.error("getManagerDashboardData error:", e);
+        res.status(400).json({ error: e.message });
+    }
 });
 
-export const updateCompanyGoals = onRequest((req, res) => {
-    cors(req, res, async () => {
-        try {
-            if (req.method !== "POST") { res.status(405).end(); return; }
-            const decoded = await verifyAuth(req);
-            const user = await getUser(decoded.uid);
-            requireRole(user, ["manager", "admin"]);
-            await db.collection("companies").doc(user.companyId).update({
-                settings: {
-                    ...req.body,
-                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
-                }
+export const getManagerLogs = onRequest({ cors: true }, async (req, res) => {
+    try {
+        const decoded = await verifyAuth(req);
+        const user = await getUser(decoded.uid);
+        requireRole(user, ["manager", "admin"]);
+        const companyId = user.companyId;
+        if (!companyId) throw new Error("No company linked");
+
+        // Query the dedicated 'logs' collection instead of 'jobs'
+        const logsSnap = await db.collection("logs")
+            .where("companyId", "==", companyId)
+            .orderBy("createdAt", "desc")
+            .limit(40)
+            .get();
+
+        const logs: any[] = [];
+        logsSnap.forEach(doc => {
+            const data = doc.data();
+            logs.push({
+                id: doc.id,
+                type: data.type || 'ACTIVITY',
+                action: data.action,
+                message: data.message || `${data.action} eylemi gerçekleştirildi`,
+                timestamp: data.createdAt?.toDate(),
+                actorId: data.actorId || data.performedBy,
+                details: data
             });
-            res.json({ success: true });
-        } catch (e: any) { res.status(400).json({ error: e.message }); }
-    });
+        });
+        res.json({ success: true, logs });
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+});
+
+export const updateCompanyGoals = onRequest({ cors: true }, async (req, res) => {
+    try {
+        if (req.method !== "POST") { res.status(405).end(); return; }
+        const decoded = await verifyAuth(req);
+        const user = await getUser(decoded.uid);
+        requireRole(user, ["manager", "admin"]);
+        await db.collection("companies").doc(user.companyId).update({
+            settings: {
+                ...req.body,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }
+        });
+        res.json({ success: true });
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
 });
 
 export const onCompanyStatusChange = onDocumentUpdated("companies/{companyId}", async (event) => {
@@ -793,136 +781,168 @@ export const onCompanyStatusChange = onDocumentUpdated("companies/{companyId}", 
     await batch.commit();
 });
 
-export const getPublicJobStatus = onRequest((req, res) => {
-    cors(req, res, async () => {
-        try {
-            const { referenceNo } = req.query;
-            if (!referenceNo) throw new Error("Reference number required");
+export const getPublicJobStatus = onRequest({ cors: true }, async (req, res) => {
+    try {
+        const { referenceNo } = req.query;
+        if (!referenceNo) throw new Error("Reference number required");
 
-            const jobsSnap = await db.collection("jobs")
-                .where("referenceNo", "==", referenceNo)
-                .where("softDeleted", "==", false)
-                .limit(1)
-                .get();
+        const jobsSnap = await db.collection("jobs")
+            .where("referenceNo", "==", referenceNo)
+            .where("softDeleted", "==", false)
+            .limit(1)
+            .get();
 
-            if (jobsSnap.empty) {
-                res.status(404).json({ error: "İş bulunamadı" });
-                return;
-            }
-
-            const jobData = jobsSnap.docs[0].data();
-            const jobId = jobsSnap.docs[0].id;
-
-            // Fetch logs for stepper
-            const logsSnap = await db.collection("jobs").doc(jobId).collection("logs")
-                .orderBy("performedAt", "asc")
-                .get();
-
-            const events = logsSnap.docs.map(doc => ({
-                action: doc.data().action,
-                time: doc.data().performedAt?.toDate(),
-                note: doc.data().note
-            }));
-
-            // Fetch current location from RTDB if available
-            let currentLocation = null;
-            if (jobData.driverId) {
-                const locSnap = await admin.database().ref(`locations/${jobData.driverId}`).once("value");
-                const locData = locSnap.val();
-                if (locData && locData.currentJobId === jobId) {
-                    currentLocation = {
-                        lat: locData.lat,
-                        lng: locData.lng,
-                        lastPing: locData.lastPing
-                    };
-                }
-            }
-
-            // FILTER SENSITIVE DATA
-            const publicData = {
-                referenceNo: jobData.referenceNo,
-                status: jobData.status,
-                loadPort: jobData.loadPort,
-                unloadPort: jobData.unloadPort,
-                cargoType: jobData.cargoType,
-                distanceKm: jobData.distanceKm,
-                timestamps: {
-                    createdAt: jobData.timestamps?.createdAt?.toDate(),
-                    startedAt: jobData.timestamps?.startedAt?.toDate(),
-                    completedAt: jobData.timestamps?.completedAt?.toDate()
-                },
-                events,
-                currentLocation
-            };
-
-            res.json({ success: true, data: publicData });
-
-        } catch (e: any) {
-            res.status(400).json({ error: e.message });
+        if (jobsSnap.empty) {
+            res.status(404).json({ error: "İş bulunamadı" });
+            return;
         }
-    });
+
+        const jobData = jobsSnap.docs[0].data();
+        const jobId = jobsSnap.docs[0].id;
+
+        // Fetch logs for stepper
+        const logsSnap = await db.collection("jobs").doc(jobId).collection("logs")
+            .orderBy("performedAt", "asc")
+            .get();
+
+        const events = logsSnap.docs.map(doc => ({
+            action: doc.data().action,
+            time: doc.data().performedAt?.toDate(),
+            note: doc.data().note
+        }));
+
+        // Fetch current location from RTDB if available
+        let currentLocation = null;
+        if (jobData.driverId) {
+            const locSnap = await admin.database().ref(`locations/${jobData.driverId}`).once("value");
+            const locData = locSnap.val();
+            if (locData && locData.currentJobId === jobId) {
+                currentLocation = {
+                    lat: locData.lat,
+                    lng: locData.lng,
+                    lastPing: locData.lastPing
+                };
+            }
+        }
+
+        // SMART DATA EXTRACTION (Handles both flat and nested structures)
+        const publicData = {
+            referenceNo: jobData.referenceNo,
+            status: jobData.status,
+            loadPort: jobData.loadPort || jobData.route?.loadPort || null,
+            unloadPort: jobData.unloadPort || jobData.route?.unloadPort || null,
+            cargoType: jobData.cargoType || jobData.cargo?.type || null,
+            distanceKm: jobData.distanceKm || jobData.route?.distanceKm || 0,
+            timestamps: {
+                createdAt: (jobData.timestamps?.createdAt)?.toDate ? jobData.timestamps.createdAt.toDate() : (jobData.timestamps?.createdAt || null),
+                startedAt: (jobData.timestamps?.startedAt)?.toDate ? jobData.timestamps.startedAt.toDate() : (jobData.timestamps?.startedAt || null),
+                completedAt: (jobData.timestamps?.completedAt)?.toDate ? jobData.timestamps.completedAt.toDate() : (jobData.timestamps?.completedAt || null)
+            },
+            events,
+            currentLocation
+        };
+
+        res.json({ success: true, data: publicData });
+
+    } catch (e: any) {
+        res.status(400).json({ error: e.message });
+    }
 });
 
-export const getEstimatedJobCosts = onRequest((req, res) => {
-    cors(req, res, async () => {
+export const getEstimatedJobCosts = onRequest({ cors: true }, async (req, res) => {
+    try {
+        const decoded = await verifyAuth(req);
+        const caller = await getUser(decoded.uid);
+        const { loadPort, unloadPort, distanceKm } = req.query;
+        const companyId = caller.companyId;
+
+        if (!companyId) throw new Error("No company linked");
+
+        // 1. Get Company Settings
+        const companySnap = await db.collection("companies").doc(companyId).get();
+        const settings = companySnap.data()?.settings || {};
+
+        const fuelPrice = Number(settings.fuelPrice) || 45; // Default 45 TL
+        const consumption = Number(settings.avgFuelConsumption) || 30; // Default 30L/100km
+        const trafficFuelPenaltyPerMin = 0.05; // Extra liters per minute in heavy traffic (adjustable)
+
+        // 2. Traffic Analysis via Google Maps Directions API
+        const apiKey = "AIzaSyBW9ivbOndjriQ50cwHN6d3VUiWmQJ9VdE";
+        let trafficDelayMinutes = 0;
+        let optimizedDistanceKm = Number(distanceKm) || 0;
+
         try {
-            const decoded = await verifyAuth(req);
-            const caller = await getUser(decoded.uid);
-            const { loadPort, unloadPort, distanceKm } = req.query;
-            const companyId = caller.companyId;
-
-            if (!companyId) throw new Error("No company linked");
-
-            // 1. Get Company Settings
-            const companySnap = await db.collection("companies").doc(companyId).get();
-            const settings = companySnap.data()?.settings || {};
-
-            const fuelPrice = Number(settings.fuelPrice) || 45; // Default 45 TL
-            const consumption = Number(settings.avgFuelConsumption) || 30; // Default 30L/100km
-
-            // 2. Base Fuel Calculation
-            const dist = Number(distanceKm) || 0;
-            const estimatedFuel = (dist / 100) * consumption * fuelPrice;
-
-            // 3. Historical Data Analysis
-            const historySnap = await db.collection("jobs")
-                .where("companyId", "==", companyId)
-                .where("loadPort", "==", loadPort)
-                .where("unloadPort", "==", unloadPort)
-                .where("status", "==", "completed")
-                .limit(5)
-                .get();
-
-            let totalToll = 0;
-            let totalAllowance = 0;
-            let totalOther = 0;
-            let count = 0;
-
-            historySnap.forEach(doc => {
-                const expenses = doc.data().expenses || {};
-                totalToll += (Number(expenses.toll) || 0);
-                totalAllowance += (Number(expenses.allowance) || 0);
-                totalOther += (Number(expenses.other) || 0);
-                count++;
-            });
-
-            const avgToll = count > 0 ? totalToll / count : 0;
-            const avgAllowance = count > 0 ? totalAllowance / count : 0;
-            const avgOther = count > 0 ? totalOther / count : 0;
-
-            res.json({
-                success: true,
-                estimates: {
-                    fuel: Math.round(estimatedFuel),
-                    toll: Math.round(avgToll),
-                    allowance: Math.round(avgAllowance),
-                    other: Math.round(avgOther),
-                    source: count > 0 ? 'historical' : 'calculated'
+            const directionsRes = await axios.get(`https://maps.googleapis.com/maps/api/directions/json`, {
+                params: {
+                    origin: loadPort,
+                    destination: unloadPort,
+                    departure_time: 'now',
+                    traffic_model: 'best_guess',
+                    key: apiKey
                 }
             });
 
-        } catch (e: any) {
-            res.status(400).json({ error: e.message });
+            if (directionsRes.data.status === "OK") {
+                const route = directionsRes.data.routes[0].legs[0];
+                const baseDuration = route.duration.value; // seconds without traffic
+                const trafficDuration = route.duration_in_traffic ? route.duration_in_traffic.value : baseDuration;
+
+                trafficDelayMinutes = Math.max(0, Math.round((trafficDuration - baseDuration) / 60));
+                optimizedDistanceKm = Number((route.distance.value / 1000).toFixed(1));
+            }
+        } catch (mapsError) {
+            console.error("Maps API error in getEstimatedJobCosts:", mapsError);
         }
-    });
+
+        // 3. Base Fuel Calculation
+        const dist = optimizedDistanceKm || Number(distanceKm) || 0;
+        const baseFuelCost = (dist / 100) * consumption * fuelPrice;
+
+        // 4. Traffic Fuel Surcharge
+        const trafficSurcharge = (trafficDelayMinutes * trafficFuelPenaltyPerMin) * fuelPrice;
+        const totalEstimatedFuel = baseFuelCost + trafficSurcharge;
+
+        // 5. Historical Data Analysis
+        const historySnap = await db.collection("jobs")
+            .where("companyId", "==", companyId)
+            .where("loadPort", "==", loadPort)
+            .where("unloadPort", "==", unloadPort)
+            .where("status", "==", "completed")
+            .limit(5)
+            .get();
+
+        let totalToll = 0;
+        let totalAllowance = 0;
+        let totalOther = 0;
+        let count = 0;
+
+        historySnap.forEach(doc => {
+            const expenses = doc.data().expenses || {};
+            totalToll += (Number(expenses.toll) || 0);
+            totalAllowance += (Number(expenses.allowance) || 0);
+            totalOther += (Number(expenses.other) || 0);
+            count++;
+        });
+
+        const avgToll = count > 0 ? totalToll / count : 0;
+        const avgAllowance = count > 0 ? totalAllowance / count : 0;
+        const avgOther = count > 0 ? totalOther / count : 0;
+
+        res.json({
+            success: true,
+            estimates: {
+                fuel: Math.round(totalEstimatedFuel),
+                toll: Math.round(avgToll),
+                allowance: Math.round(avgAllowance),
+                other: Math.round(avgOther),
+                trafficDelayMinutes,
+                optimizedDistanceKm,
+                trafficImpactCost: Math.round(trafficSurcharge),
+                source: count > 0 ? 'historical' : 'calculated'
+            }
+        });
+
+    } catch (e: any) {
+        res.status(400).json({ error: e.message });
+    }
 });

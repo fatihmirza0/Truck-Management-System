@@ -22,4 +22,8 @@ export { getEstimatedJobCosts } from './legacy/general';
 // Legacy exports (restored)
 export * from './legacy/general';
 export * from './legacy/developer';
+export { saveMarketingContentHttp } from './legacy/developer';
 
+
+// Export integration functions
+export * from './integrations/integration.controller';
