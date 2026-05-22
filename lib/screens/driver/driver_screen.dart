@@ -6,10 +6,14 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/services.dart';
 
 import 'active_jobs/pages/active_jobs_page.dart';
+import 'active_jobs/widgets/mission_overlay.dart';
 import 'completed_jobs/pages/completed_jobs_page.dart';
 import '../commons/login/pages/login_screen.dart';
 import '../commons/profile/pages/profile_screen.dart';
+import 'package:lojistik/models/mission_model.dart';
 import 'package:lojistik/services/driver_location_service.dart';
+import 'package:lojistik/services/firestore_service.dart';
+import 'package:lojistik/services/mission_service.dart';
 
 class DriverScreen extends StatefulWidget {
   final String uid;
@@ -37,6 +41,10 @@ class _DriverScreenState extends State<DriverScreen>
 
   StreamSubscription<DocumentSnapshot>? _jobStatusListener;
   StreamSubscription<DatabaseEvent>? _rtdbStatusListener;
+  StreamSubscription<List<MissionModel>>? _missionListener;
+
+  MissionModel? _pendingMission;
+  MissionModel? _activeMission;
 
   // ✅ FINAL STATUS
   String get _finalStatus {
@@ -71,6 +79,7 @@ class _DriverScreenState extends State<DriverScreen>
     WidgetsBinding.instance.removeObserver(this);
     _jobStatusListener?.cancel();
     _rtdbStatusListener?.cancel();
+    _missionListener?.cancel();
     _locationService.dispose();
     _stopForegroundService();
 
@@ -139,9 +148,26 @@ class _DriverScreenState extends State<DriverScreen>
       });
 
       await _startLocationTracking();
+      await _subscribeMissions();
     } catch (e) {
       debugPrint('❌ Init error: $e');
     }
+  }
+
+  Future<void> _subscribeMissions() async {
+    final companyId = await FirestoreService.getCompanyId();
+    if (companyId == null || !mounted) return;
+
+    _missionListener = MissionService.watchDriverMissions(
+      driverId: widget.uid,
+      companyId: companyId,
+    ).listen((missions) {
+      if (!mounted) return;
+      setState(() {
+        _pendingMission = missions.where((m) => m.isPending).firstOrNull;
+        _activeMission = missions.where((m) => m.isInProgress).firstOrNull;
+      });
+    });
   }
 
   // ---------------------------------------------------
@@ -198,9 +224,23 @@ class _DriverScreenState extends State<DriverScreen>
     return Scaffold(
       backgroundColor: DriverScreen.bg,
       appBar: _buildAppBar(),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        child: _pages[_index],
+      body: Stack(
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: _pages[_index],
+          ),
+          if (_pendingMission != null || _activeMission != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: MissionOverlay(
+                key: ValueKey(_pendingMission?.id ?? _activeMission?.id),
+                mission: (_pendingMission ?? _activeMission)!,
+              ),
+            ),
+        ],
       ),
       bottomNavigationBar: _buildBottomBar(),
     );

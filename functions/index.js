@@ -255,7 +255,7 @@ exports.createUserHttp = onRequest({ cors: true }, async (req, res) => {
 /* =========================================================
    UPDATE USER
 ========================================================= */
-exports.updateUserHttp = onRequest({ cors: true }, async async (req, res) => {
+exports.updateUserHttp = onRequest({ cors: true }, async (req, res) => {
     try {
       if (req.method !== "POST") return res.status(405).end();
 
@@ -319,7 +319,7 @@ exports.updateUserHttp = onRequest({ cors: true }, async async (req, res) => {
 /* =========================================================
    SOFT DELETE USER
 ========================================================= */
-exports.softDeleteUserHttp = onRequest({ cors: true }, async async (req, res) => {
+exports.softDeleteUserHttp = onRequest({ cors: true }, async (req, res) => {
     try {
       if (req.method !== "POST") return res.status(405).end();
 
@@ -789,7 +789,7 @@ exports.notifyOnJobStatusChange = onDocumentUpdated(
   },
 );
 
-exports.updateLastLoginHttp = onRequest({ cors: true }, async async (req, res) => {
+exports.updateLastLoginHttp = onRequest({ cors: true }, async (req, res) => {
     try {
       if (req.method !== "POST") {
         return res.status(405).json({ error: "Method not allowed" });
@@ -809,7 +809,7 @@ exports.updateLastLoginHttp = onRequest({ cors: true }, async async (req, res) =
   });
 
 
-exports.clearFcmTokenHttp = onRequest({ cors: true }, async async (req, res) => {
+exports.clearFcmTokenHttp = onRequest({ cors: true }, async (req, res) => {
     try {
       const decoded = await verifyAuth(req);
       await db.collection("users").doc(decoded.uid).update({

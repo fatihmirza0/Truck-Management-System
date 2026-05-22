@@ -27,3 +27,6 @@ export { saveMarketingContentHttp } from './legacy/developer';
 
 // Export integration functions
 export * from './integrations/integration.controller';
+
+// Export routing functions
+export { calculateSmartRoute } from './routes/calculateSmartRoute';

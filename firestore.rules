@@ -40,6 +40,15 @@ service cloud.firestore {
       );
     }
 
+    // 6. Multi-Tenancy check for snake_case keys (company_id)
+    function isSameCompanySnake(resourceData) {
+      let myCompanyId = getUserDataSafe().companyId;
+      return isSignedIn() && (
+        getUserRole() == 'super_admin' || 
+        (myCompanyId != null && resourceData.company_id == myCompanyId)
+      );
+    }
+
     // =========================================================
     // COLLECTIONS
     // =========================================================
@@ -88,6 +97,36 @@ service cloud.firestore {
     match /vehicles/{vehicleId} {
       allow read: if isSignedIn() && isSameCompany(resource.data);
       allow write: if isSignedIn() && getUserRole() in ['manager', 'admin', 'dispatch', 'super_admin'];
+    }
+
+    // --- ACTIVE MISSIONS ---
+    match /active_missions/{missionId} {
+      allow read: if isSignedIn() && isSameCompany(resource.data) && (
+        getUserRole() in ['manager', 'admin', 'dispatch', 'super_admin'] ||
+        request.auth.uid == resource.data.driverId
+      );
+      allow create: if isSignedIn() && isSameCompany(request.resource.data) && (
+        getUserRole() in ['manager', 'admin', 'dispatch', 'super_admin']
+      );
+      allow update: if isSignedIn() && isSameCompany(resource.data) && (
+        getUserRole() in ['manager', 'admin', 'dispatch', 'super_admin'] ||
+        (request.auth.uid == resource.data.driverId && 
+         request.resource.data.companyId == resource.data.companyId &&
+         request.resource.data.driverId == resource.data.driverId)
+      );
+      allow delete: if isSignedIn() && getUserRole() == 'super_admin';
+    }
+
+    // --- JOBS DOCUMENT ---
+    match /jobs_document/{docId} {
+      allow read: if isSignedIn() && isSameCompanySnake(resource.data);
+      allow create: if isSignedIn() && isSameCompanySnake(request.resource.data) && (
+        getUserRole() in ['manager', 'admin', 'dispatch', 'driver', 'super_admin']
+      );
+      allow update: if isSignedIn() && isSameCompanySnake(resource.data) && (
+        getUserRole() in ['manager', 'admin', 'dispatch', 'super_admin']
+      );
+      allow delete: if isSignedIn() && getUserRole() == 'super_admin';
     }
 
     // --- SUBSCRIPTION & PAYMENT (READ-ONLY FOR USERS) ---

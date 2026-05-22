@@ -7,6 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+// EventChannel ismi MainActivity.kt ile aynı olmalı
+const _kLocationEventChannel = 'location_service/stream';
+
 class DriverLocationService {
   final String driverId;
 
@@ -14,9 +17,12 @@ class DriverLocationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   static const _channel = MethodChannel('location_service');
+  // Kotlin arka plan GPS servisinden gelen EventChannel stream
+  static const _eventChannel = EventChannel(_kLocationEventChannel);
 
   StreamSubscription<Position>? _positionSub;
   StreamSubscription<DocumentSnapshot>? _jobSub;
+  StreamSubscription<dynamic>? _backgroundLocationSub; // 🔥 YENİ: Arka plan EventChannel
   Timer? _updateTimer;
   Timer? _permissionCheckTimer;
   Timer? _historyCleanupTimer;
@@ -102,7 +108,48 @@ class DriverLocationService {
       },
       cancelOnError: false,
     );
-    
+
+    // 🔥 YENİ: Kotlin arka plan servisinden gelen konumları dinle
+    // Uygulama arka plana geçtikten sonra Geolocator stream Android tarafından
+    // kesilebilir, ama Foreground Service her zaman çalışır ve EventChannel'dan
+    // pozisyonu Dart'a iletir. İkisi de aynı _onLocation -> throttle pipeline'ına girer.
+    _backgroundLocationSub = _eventChannel.receiveBroadcastStream().listen(
+      (dynamic event) {
+        if (!_isTracking) return;
+        if (event is! Map) return;
+
+        final lat      = (event['lat'] as num?)?.toDouble();
+        final lng      = (event['lng'] as num?)?.toDouble();
+        final accuracy = (event['accuracy'] as num?)?.toDouble() ?? 999;
+        final speed    = (event['speed'] as num?)?.toDouble() ?? 0.0;
+        final heading  = (event['heading'] as num?)?.toDouble() ?? 0.0;
+        final time     = (event['time'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
+
+        if (lat == null || lng == null) return;
+
+        // Geolocator Position nesnesi gibi davranabilmek için Position oluşturuyoruz
+        final pos = Position(
+          latitude:             lat,
+          longitude:            lng,
+          accuracy:             accuracy,
+          speed:                speed,
+          heading:              heading,
+          altitude:             0,
+          altitudeAccuracy:     0,
+          headingAccuracy:      0,
+          speedAccuracy:        0,
+          timestamp:            DateTime.fromMillisecondsSinceEpoch(time),
+        );
+
+        debugPrint("📡 Background location received via EventChannel: $lat, $lng");
+        _onLocation(pos);
+      },
+      onError: (error) {
+        debugPrint("⚠️ EventChannel location error: $error");
+      },
+      cancelOnError: false,
+    );
+
     _startUpdateTimer(_activeInterval); // Başlangıçta aktif mod
 
     _permissionCheckTimer = Timer.periodic(
@@ -173,6 +220,7 @@ class DriverLocationService {
     // 🔥 Stream'leri önce iptal et
     await _positionSub?.cancel();
     await _jobSub?.cancel();
+    await _backgroundLocationSub?.cancel(); // 🔥 YENİ: EventChannel stream temizle
 
     // 🔥 Timer'ları iptal et
     _updateTimer?.cancel();
@@ -192,6 +240,7 @@ class DriverLocationService {
     // 🔥 Referansları null'la
     _positionSub = null;
     _jobSub = null;
+    _backgroundLocationSub = null; // 🔥 YENİ
     _updateTimer = null;
     _permissionCheckTimer = null;
     _historyCleanupTimer = null;
@@ -647,6 +696,7 @@ class DriverLocationService {
     // Stream'leri iptal et
     _positionSub?.cancel();
     _jobSub?.cancel();
+    _backgroundLocationSub?.cancel(); // 🔥 YENİ
 
     // Timer'ları iptal et
     _updateTimer?.cancel();

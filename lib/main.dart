@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart'; // 🔥 Persistence için
+import 'package:cloud_firestore/cloud_firestore.dart';    // 🔥 Persistence için
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
@@ -16,6 +18,21 @@ void main() async {
   // Initialize Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // 🔥 DARBOĞAZ 3 FIX: Firebase Native Offline Persistence
+  // RTDB: İnternet yokken yazılan veriler diske kaydedilir,
+  //       bağlantı gelince otomatik RTDB'ye gönderilir.
+  // NOT: Yalnızca mobil hedefler için etkinleştirilmeli (web desteklemez).
+  if (!kIsWeb) {
+    FirebaseDatabase.instance.setPersistenceEnabled(true);
+    FirebaseDatabase.instance.setPersistenceCacheSizeBytes(10 * 1024 * 1024); // 10 MB
+  }
+
+  // Firestore: Çevrimdışı okuma/yazma önbelleği
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
   
   // 🛡️ Initialize App Check (reCAPTCHA Enterprise for Web)

@@ -56,7 +56,7 @@ class ActiveJobCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.between,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               InfoRow(label: "Referans No", value: referenceNo),
               if (isCityRestricted)

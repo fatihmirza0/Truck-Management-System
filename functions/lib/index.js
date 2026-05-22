@@ -36,7 +36,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.saveMarketingContentHttp = exports.getEstimatedJobCosts = exports.getPublicJobStatus = exports.webhookHandler = exports.syncExchangeRates = exports.createSubscription = void 0;
+exports.calculateSmartRoute = exports.saveMarketingContentHttp = exports.getEstimatedJobCosts = exports.getPublicJobStatus = exports.webhookHandler = exports.syncExchangeRates = exports.createSubscription = void 0;
 const admin = __importStar(require("firebase-admin"));
 const v2_1 = require("firebase-functions/v2");
 // Initialize Firebase Admin before anything else
@@ -65,4 +65,7 @@ var developer_1 = require("./legacy/developer");
 Object.defineProperty(exports, "saveMarketingContentHttp", { enumerable: true, get: function () { return developer_1.saveMarketingContentHttp; } });
 // Export integration functions
 __exportStar(require("./integrations/integration.controller"), exports);
+// Export routing functions
+var calculateSmartRoute_1 = require("./routes/calculateSmartRoute");
+Object.defineProperty(exports, "calculateSmartRoute", { enumerable: true, get: function () { return calculateSmartRoute_1.calculateSmartRoute; } });
 //# sourceMappingURL=index.js.map

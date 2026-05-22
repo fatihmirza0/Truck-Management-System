@@ -17,6 +17,17 @@ class Vehicle {
   final DateTime? insurancePolicyExpiry;
   final double? maintenanceIntervalKm;
   final double? nextMaintenanceKm;
+  final String? brandModel;
+  final double? modelYear;
+  final DateTime? insuranceStartDate;
+  final DateTime? mtvPaymentExpiryDate;
+  final DateTime? inspectionExpiryDate;
+  final DateTime? exhaustEmissionExpiryDate;
+  final DateTime? nextMaintenanceDate;
+  final DateTime? lastTireChangeDate;
+  final double? lastTireChangeKm;
+  final double? tireChangeIntervalKm;
+  final double? nextTireChangeKm;
 
   Vehicle({
     required this.id,
@@ -35,6 +46,17 @@ class Vehicle {
     this.insurancePolicyExpiry,
     this.maintenanceIntervalKm,
     this.nextMaintenanceKm,
+    this.brandModel,
+    this.modelYear,
+    this.insuranceStartDate,
+    this.mtvPaymentExpiryDate,
+    this.inspectionExpiryDate,
+    this.exhaustEmissionExpiryDate,
+    this.nextMaintenanceDate,
+    this.lastTireChangeDate,
+    this.lastTireChangeKm,
+    this.tireChangeIntervalKm,
+    this.nextTireChangeKm,
   });
 
   factory Vehicle.fromFirestore(DocumentSnapshot doc) {
@@ -56,6 +78,17 @@ class Vehicle {
       insurancePolicyExpiry: (data['insurancePolicyExpiry'] as Timestamp?)?.toDate(),
       maintenanceIntervalKm: (data['maintenanceIntervalKm'] as num?)?.toDouble(),
       nextMaintenanceKm: (data['nextMaintenanceKm'] as num?)?.toDouble(),
+      brandModel: data['brandModel'],
+      modelYear: (data['modelYear'] as num?)?.toDouble(),
+      insuranceStartDate: (data['insuranceStartDate'] as Timestamp?)?.toDate(),
+      mtvPaymentExpiryDate: (data['mtvPaymentExpiryDate'] as Timestamp?)?.toDate(),
+      inspectionExpiryDate: (data['inspectionExpiryDate'] as Timestamp?)?.toDate(),
+      exhaustEmissionExpiryDate: (data['exhaustEmissionExpiryDate'] as Timestamp?)?.toDate(),
+      nextMaintenanceDate: (data['nextMaintenanceDate'] as Timestamp?)?.toDate(),
+      lastTireChangeDate: (data['lastTireChangeDate'] as Timestamp?)?.toDate(),
+      lastTireChangeKm: (data['lastTireChangeKm'] as num?)?.toDouble(),
+      tireChangeIntervalKm: (data['tireChangeIntervalKm'] as num?)?.toDouble(),
+      nextTireChangeKm: (data['nextTireChangeKm'] as num?)?.toDouble(),
     );
   }
 
@@ -76,6 +109,17 @@ class Vehicle {
       'insurancePolicyExpiry': insurancePolicyExpiry != null ? Timestamp.fromDate(insurancePolicyExpiry!) : null,
       'maintenanceIntervalKm': maintenanceIntervalKm,
       'nextMaintenanceKm': nextMaintenanceKm,
+      'brandModel': brandModel,
+      'modelYear': modelYear,
+      'insuranceStartDate': insuranceStartDate != null ? Timestamp.fromDate(insuranceStartDate!) : null,
+      'mtvPaymentExpiryDate': mtvPaymentExpiryDate != null ? Timestamp.fromDate(mtvPaymentExpiryDate!) : null,
+      'inspectionExpiryDate': inspectionExpiryDate != null ? Timestamp.fromDate(inspectionExpiryDate!) : null,
+      'exhaustEmissionExpiryDate': exhaustEmissionExpiryDate != null ? Timestamp.fromDate(exhaustEmissionExpiryDate!) : null,
+      'nextMaintenanceDate': nextMaintenanceDate != null ? Timestamp.fromDate(nextMaintenanceDate!) : null,
+      'lastTireChangeDate': lastTireChangeDate != null ? Timestamp.fromDate(lastTireChangeDate!) : null,
+      'lastTireChangeKm': lastTireChangeKm,
+      'tireChangeIntervalKm': tireChangeIntervalKm,
+      'nextTireChangeKm': nextTireChangeKm,
     };
   }
 }
