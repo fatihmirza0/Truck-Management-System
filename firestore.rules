@@ -162,6 +162,12 @@ service cloud.firestore {
       allow write: if isSignedIn() && getUserRole() in ['manager', 'admin', 'super_admin'];
     }
 
+    // --- BLOG POSTS ---
+    match /blogs/{docId} {
+      allow read: if true;
+      allow write: if isSignedIn() && getUserRole() in ['manager', 'admin', 'super_admin'];
+    }
+
     // Prevent unauthorized access to other collections
     match /{path=**} {
       allow read, write: if isSignedIn() && getUserRole() == 'super_admin';
