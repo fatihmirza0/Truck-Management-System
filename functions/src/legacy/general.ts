@@ -186,15 +186,29 @@ export const updateUserHttp = onRequest({ cors: true }, async (req, res) => {
     try {
         if (req.method !== "POST") { res.status(405).end(); return; }
         const decoded = await verifyAuth(req);
-        const caller = await getUser(decoded.uid);
-        requireRole(caller, ["admin", "manager"]);
-
         const { uid, name, email, phone, role, plate } = req.body;
         if (!uid || !name || !email || !phone || !role) throw new Error("Missing fields");
 
-        await ensureSameCompany(decoded.uid, uid);
-        const batch = db.batch();
+        const { caller, target } = await ensureSameCompany(decoded.uid, uid);
+        requireRole(caller, ["admin", "manager"]);
 
+        // Prevent self-role modification
+        if (uid === decoded.uid && role !== caller.role) {
+            throw new Error("Kendi rolünüzü değiştiremezsiniz.");
+        }
+
+        // Whitelist roles
+        const allowedRoles = ["driver", "dispatch", "manager", "admin"];
+        if (!allowedRoles.includes(role)) {
+            throw new Error("Geçersiz rol ataması.");
+        }
+
+        // Protect developer and super_admin from external mutation
+        if (target.role === "developer" || target.role === "super_admin") {
+            throw new Error("Bu kullanıcının bilgileri değiştirilemez.");
+        }
+
+        const batch = db.batch();
         batch.update(db.collection("users").doc(uid), { name, email, phone, role });
 
         if (role === "driver" && plate) {
@@ -946,3 +960,35 @@ export const getEstimatedJobCosts = onRequest({ cors: true }, async (req, res) =
         res.status(400).json({ error: e.message });
     }
 });
+
+/**
+ * Scheduled function to sync diesel prices from Opet API daily at 04:00 AM Europe/Istanbul.
+ */
+export const syncFuelPricesScheduled = onSchedule({
+    schedule: "0 4 * * *",
+    timeZone: "Europe/Istanbul",
+    region: "us-central1"
+}, async () => {
+    const { FuelService } = await import('../services/FuelService');
+    await FuelService.syncFuelPrices();
+});
+
+/**
+ * HTTPS request function to manually trigger diesel price synchronization.
+ * Restricted to authenticated managers and admins.
+ */
+export const syncFuelPricesHttp = onRequest({ cors: true }, async (req, res) => {
+    try {
+        const decoded = await verifyAuth(req);
+        const user = await getUser(decoded.uid);
+        requireRole(user, ["manager", "admin"]);
+
+        const { FuelService } = await import('../services/FuelService');
+        const average = await FuelService.syncFuelPrices();
+        res.json({ success: true, averageDieselPrice: average });
+    } catch (e: any) {
+        console.error("syncFuelPricesHttp error:", e);
+        res.status(400).json({ error: e.message });
+    }
+});
+

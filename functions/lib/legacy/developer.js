@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.saveMarketingContentHttp = exports.getBlogPostBySlugHttp = exports.getPublicBlogsHttp = exports.getBlogPostsHttp = exports.getInquiriesHttp = exports.submitInquiryHttp = exports.saveBlogPostHttp = exports.toggleCompanyStatusHttp = exports.updateCompanyPlanHttp = exports.getCompanyFullDetailsHttp = exports.getDashboardStatsHttp = exports.updateUserPermissionsHttp = exports.getCompanyUsersHttp = exports.getCompaniesHttp = exports.getSystemLogsHttp = exports.createCompanyHttp = exports.verifyDeveloperKey = exports.cleanExpiredSessions = exports.developerLogout = exports.developerLogin = void 0;
+exports.saveMarketingContentHttp = exports.getBlogPostBySlugHttp = exports.getPublicBlogsHttp = exports.getBlogPostsHttp = exports.getInquiriesHttp = exports.submitInquiryHttp = exports.saveBlogPostHttp = exports.toggleCompanyStatusHttp = exports.updateCompanyPlanHttp = exports.getCompanyFullDetailsHttp = exports.getDashboardStatsHttp = exports.updateUserPermissionsHttp = exports.getCompanyUsersHttp = exports.getCompaniesHttp = exports.getSystemLogsHttp = exports.createCompanyHttp = exports.cleanExpiredSessions = exports.developerLogout = exports.developerLogin = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
@@ -44,17 +44,36 @@ const db = admin.firestore();
 /* =========================================================
    SESSION-BASED AUTHENTICATION SYSTEM
  ========================================================= */
-const loginAttempts = new Map(); // IP -> [timestamps]
-function checkRateLimit(ip) {
+async function checkRateLimitFirestore(ip, action, maxAttempts = 5, windowMs = 60000) {
     const now = Date.now();
-    const attempts = loginAttempts.get(ip) || [];
-    const recentAttempts = attempts.filter(t => now - t < 60000);
-    if (recentAttempts.length >= 5) {
-        return false;
+    const cleanIp = ip.replace(/[^a-zA-Z0-9]/g, '_');
+    const docRef = db.collection("rate_limits").doc(`${cleanIp}_${action}`);
+    try {
+        const snap = await docRef.get();
+        if (!snap.exists) {
+            await docRef.set({
+                attempts: [now],
+                expiresAt: admin.firestore.Timestamp.fromMillis(now + windowMs)
+            });
+            return true;
+        }
+        const data = snap.data();
+        const attempts = data.attempts || [];
+        const recentAttempts = attempts.filter(t => now - t < windowMs);
+        if (recentAttempts.length >= maxAttempts) {
+            return false;
+        }
+        recentAttempts.push(now);
+        await docRef.set({
+            attempts: recentAttempts,
+            expiresAt: admin.firestore.Timestamp.fromMillis(now + windowMs)
+        });
+        return true;
     }
-    recentAttempts.push(now);
-    loginAttempts.set(ip, recentAttempts);
-    return true;
+    catch (err) {
+        console.error("Rate limit check error:", err);
+        return true; // Fallback to allow requests if DB is unavailable
+    }
 }
 function hashToken(token) {
     return crypto.createHash('sha256').update(token).digest('hex');
@@ -80,14 +99,6 @@ async function verifyDeveloperSession(req) {
     }
     return { valid: true, sessionId: sessionDoc.id };
 }
-// Support legacy key check
-function verifyDevKey(req) {
-    const key = req.headers['x-developer-key'];
-    // @ts-ignore
-    const SECRET = process.env.DEVELOPER_KEY || "s3cr3t_k3y_v1";
-    if (key !== SECRET)
-        throw new Error("Invalid Developer Key");
-}
 /* =========================================================
    EXPORTS
  ========================================================= */
@@ -99,7 +110,8 @@ exports.developerLogin = (0, https_1.onRequest)({ cors: true }, async (req, res)
         }
         // @ts-ignore
         const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown';
-        if (!checkRateLimit(clientIp)) {
+        const isAllowed = await checkRateLimitFirestore(clientIp, "dev_login", 5, 60000);
+        if (!isAllowed) {
             res.status(429).json({ error: "Too many login attempts. Please try again later." });
             return;
         }
@@ -110,8 +122,8 @@ exports.developerLogin = (0, https_1.onRequest)({ cors: true }, async (req, res)
         }
         // @ts-ignore
         const MASTER_KEY = process.env.DEVELOPER_MASTER_KEY;
-        if (!MASTER_KEY) {
-            console.error("CRITICAL: DEVELOPER_MASTER_KEY is not set.");
+        if (!MASTER_KEY || MASTER_KEY === "s3cr3t_k3y_v1") {
+            console.error("CRITICAL: DEVELOPER_MASTER_KEY is not set or using insecure default key.");
             res.status(500).json({ error: "Server configuration error" });
             return;
         }
@@ -167,25 +179,24 @@ exports.cleanExpiredSessions = (0, scheduler_1.onSchedule)("every 6 hours", asyn
         const now = admin.firestore.Timestamp.now();
         const expiredSnap = await db.collection("developer_sessions")
             .where("expiresAt", "<", now).get();
-        if (expiredSnap.empty)
-            return;
-        const batch = db.batch();
-        expiredSnap.docs.forEach(doc => batch.delete(doc.ref));
-        await batch.commit();
-        console.log(`Cleaned ${expiredSnap.size} expired sessions`);
+        if (!expiredSnap.empty) {
+            const batch = db.batch();
+            expiredSnap.docs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+            console.log(`Cleaned ${expiredSnap.size} expired sessions`);
+        }
+        // Clean expired rate limits
+        const expiredLimitsSnap = await db.collection("rate_limits")
+            .where("expiresAt", "<", now).get();
+        if (!expiredLimitsSnap.empty) {
+            const batch = db.batch();
+            expiredLimitsSnap.docs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+            console.log(`Cleaned ${expiredLimitsSnap.size} expired rate limits`);
+        }
     }
     catch (e) {
         console.error("cleanExpiredSessions error:", e);
-    }
-});
-exports.verifyDeveloperKey = (0, https_1.onRequest)({ cors: true }, async (req, res) => {
-    try {
-        // @ts-ignore
-        verifyDevKey(req);
-        res.json({ success: true });
-    }
-    catch (e) {
-        res.status(401).json({ error: e.message });
     }
 });
 exports.createCompanyHttp = (0, https_1.onRequest)({ cors: true }, async (req, res) => {
@@ -491,6 +502,13 @@ exports.submitInquiryHttp = (0, https_1.onRequest)({ cors: true }, async (req, r
     try {
         if (req.method !== "POST") {
             res.status(405).end();
+            return;
+        }
+        // @ts-ignore
+        const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown';
+        const isAllowed = await checkRateLimitFirestore(clientIp, "submit_inquiry", 5, 600000); // Max 5 inquiries per 10 mins
+        if (!isAllowed) {
+            res.status(429).json({ error: "Too many requests. Please try again later." });
             return;
         }
         const { firstName, lastName, email, phone, companyName } = req.body;

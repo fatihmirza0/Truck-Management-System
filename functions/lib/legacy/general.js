@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getEstimatedJobCosts = exports.getPublicJobStatus = exports.onCompanyStatusChange = exports.updateCompanyGoals = exports.getManagerLogs = exports.getManagerDashboardData = exports.createJobHttp = exports.checkDriverOffline = exports.getLiveDriverLocations = exports.clearFcmTokenHttp = exports.updateLastLoginHttp = exports.notifyOnJobStatusChange = exports.notifyManagersOnJobCreated = exports.syncActivePlateFromVehicles = exports.jobAction = exports.softDeleteUserHttp = exports.updateUserHttp = exports.createUserHttp = exports.createDriverHttp = void 0;
+exports.syncFuelPricesHttp = exports.syncFuelPricesScheduled = exports.getEstimatedJobCosts = exports.getPublicJobStatus = exports.onCompanyStatusChange = exports.updateCompanyGoals = exports.getManagerLogs = exports.getManagerDashboardData = exports.createJobHttp = exports.checkDriverOffline = exports.getLiveDriverLocations = exports.clearFcmTokenHttp = exports.updateLastLoginHttp = exports.notifyOnJobStatusChange = exports.notifyManagersOnJobCreated = exports.syncActivePlateFromVehicles = exports.jobAction = exports.softDeleteUserHttp = exports.updateUserHttp = exports.createUserHttp = exports.createDriverHttp = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -220,12 +220,24 @@ exports.updateUserHttp = (0, https_1.onRequest)({ cors: true }, async (req, res)
             return;
         }
         const decoded = await verifyAuth(req);
-        const caller = await getUser(decoded.uid);
-        requireRole(caller, ["admin", "manager"]);
         const { uid, name, email, phone, role, plate } = req.body;
         if (!uid || !name || !email || !phone || !role)
             throw new Error("Missing fields");
-        await ensureSameCompany(decoded.uid, uid);
+        const { caller, target } = await ensureSameCompany(decoded.uid, uid);
+        requireRole(caller, ["admin", "manager"]);
+        // Prevent self-role modification
+        if (uid === decoded.uid && role !== caller.role) {
+            throw new Error("Kendi rolünüzü değiştiremezsiniz.");
+        }
+        // Whitelist roles
+        const allowedRoles = ["driver", "dispatch", "manager", "admin"];
+        if (!allowedRoles.includes(role)) {
+            throw new Error("Geçersiz rol ataması.");
+        }
+        // Protect developer and super_admin from external mutation
+        if (target.role === "developer" || target.role === "super_admin") {
+            throw new Error("Bu kullanıcının bilgileri değiştirilemez.");
+        }
         const batch = db.batch();
         batch.update(db.collection("users").doc(uid), { name, email, phone, role });
         if (role === "driver" && plate) {
@@ -973,6 +985,35 @@ exports.getEstimatedJobCosts = (0, https_1.onRequest)({ cors: true }, async (req
         });
     }
     catch (e) {
+        res.status(400).json({ error: e.message });
+    }
+});
+/**
+ * Scheduled function to sync diesel prices from Opet API daily at 04:00 AM Europe/Istanbul.
+ */
+exports.syncFuelPricesScheduled = (0, scheduler_1.onSchedule)({
+    schedule: "0 4 * * *",
+    timeZone: "Europe/Istanbul",
+    region: "us-central1"
+}, async () => {
+    const { FuelService } = await Promise.resolve().then(() => __importStar(require('../services/FuelService')));
+    await FuelService.syncFuelPrices();
+});
+/**
+ * HTTPS request function to manually trigger diesel price synchronization.
+ * Restricted to authenticated managers and admins.
+ */
+exports.syncFuelPricesHttp = (0, https_1.onRequest)({ cors: true }, async (req, res) => {
+    try {
+        const decoded = await verifyAuth(req);
+        const user = await getUser(decoded.uid);
+        requireRole(user, ["manager", "admin"]);
+        const { FuelService } = await Promise.resolve().then(() => __importStar(require('../services/FuelService')));
+        const average = await FuelService.syncFuelPrices();
+        res.json({ success: true, averageDieselPrice: average });
+    }
+    catch (e) {
+        console.error("syncFuelPricesHttp error:", e);
         res.status(400).json({ error: e.message });
     }
 });

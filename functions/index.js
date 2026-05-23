@@ -1149,7 +1149,12 @@ exports.createJobHttp = onRequest({ cors: true }, async (req, res) => {
       cargoType,
       cargoDescription,
       cargoWeightKg,
-      distanceKm
+      distanceKm,
+      revenue,
+      expenses,
+      isCityRestricted,
+      trafficDelayMinutes,
+      trafficImpactCost
     } = req.body;
 
     if (!driverId || !vehicleId || !loadPort || !unloadPort) {
@@ -1208,6 +1213,11 @@ exports.createJobHttp = onRequest({ cors: true }, async (req, res) => {
         weightKg: Number(cargoWeightKg) || 0,
       },
       distanceKm: Number(distanceKm) || 0,
+      revenue: Number(revenue) || 0,
+      expenses: expenses || { fuel: 0, toll: 0, allowance: 0, other: 0 },
+      isCityRestricted: !!isCityRestricted,
+      trafficDelayMinutes: Number(trafficDelayMinutes) || 0,
+      trafficImpactCost: Number(trafficImpactCost) || 0,
       timestamps: {
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         reviewedAt: null,

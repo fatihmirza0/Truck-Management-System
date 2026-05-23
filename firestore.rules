@@ -69,12 +69,20 @@ service cloud.firestore {
         isSameCompany(resource.data)
       );
       allow create: if isSignedIn() && (
-        request.auth.uid == userId ||
-        (getUserRole() in ['manager', 'admin', 'super_admin'])
+        getUserRole() == 'super_admin' ||
+        (request.auth.uid == userId && !request.resource.data.keys().hasAny(['role', 'companyId', 'permissions', 'companyStatus']))
       );
       allow update: if isSignedIn() && (
-        request.auth.uid == userId ||
-        (isSameCompany(resource.data) && getUserRole() in ['manager', 'admin', 'super_admin'])
+        getUserRole() == 'super_admin' ||
+        (
+          request.auth.uid == userId && 
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'companyId', 'permissions', 'isActive', 'softDeleted', 'companyStatus'])
+        ) ||
+        (
+          isSameCompany(resource.data) && 
+          getUserRole() in ['manager', 'admin'] &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'companyId', 'permissions', 'companyStatus'])
+        )
       );
       allow delete: if isSignedIn() && getUserRole() == 'super_admin';
     }
@@ -88,8 +96,7 @@ service cloud.firestore {
       );
 
       match /logs/{logId} {
-        allow read: if isSignedIn() && isSameCompany(get(/databases/$(database)/documents/jobs/$(jobId)).data);
-        allow create: if isSignedIn();
+        allow read, create: if isSignedIn() && isSameCompany(get(/databases/$(database)/documents/jobs/$(jobId)).data);
       }
     }
 
@@ -151,9 +158,8 @@ service cloud.firestore {
     match /metadata/{docId} {
       // Anyone can read public content
       allow read: if true;
-      // Only authenticated users can write (DevPanel uses custom session)
-      // In production, you may want to add custom claims check
-      allow write: if request.auth != null;
+      // Only super_admin can write client-side (DevPanel updates via Cloud Function admin SDK)
+      allow write: if isSignedIn() && getUserRole() == 'super_admin';
     }
 
     // --- SEO CONFIGS ---
